@@ -1,0 +1,45 @@
+# Adapted from home-assistant/core and jpawlowski/hacs.integration_blueprint (MIT).
+#
+# Lint configuration is NOT here: it lives in .ruff.toml, which came with the
+# scaffold. Keeping a single source for ruff avoids two configs disagreeing.
+
+[project]
+name = "elevenlabs_agent"
+version = "0.0.0"              # The real version is managed in manifest.json only
+requires-python = ">=3.14"
+
+[tool.setuptools]
+packages = ["custom_components.elevenlabs_agent"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [".git", "testing_config"]
+log_format = "%(asctime)s.%(msecs)03d %(levelname)-8s %(threadName)s %(name)s:%(filename)s:%(lineno)s %(message)s"
+log_date_format = "%Y-%m-%d %H:%M:%S"
+asyncio_debug = true
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-ra -q --strict-markers"
+filterwarnings = [
+    # Treat warnings as errors to catch issues early
+    "error",
+    # Home Assistant Core's own use of aiohttp at the version it pins. Raised from
+    # homeassistant/helpers/aiohttp_client.py and homeassistant/components/http/,
+    # never from this integration, so they would only mask Core's upstream work.
+    "ignore:Setting custom ClientSession\\..* attribute is discouraged:DeprecationWarning",
+    "ignore:Inheritance class .* from web\\.Application is discouraged:DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["custom_components/elevenlabs_agent"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "@overload",
+]

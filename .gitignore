@@ -1,0 +1,29 @@
+# artifacts
+__pycache__
+.pytest*
+*.egg-info
+*/build/*
+*/dist/*
+
+# misc
+.coverage
+.vscode
+coverage.xml
+.ruff_cache
+
+# Home Assistant configuration
+# Everything under config/ is runtime state and holds secrets in cleartext
+# (config/.storage/core.config_entries keeps the ElevenLabs API key and the
+# webhook shared secret). Only the hand-written config file is tracked.
+config/*
+!config/configuration.yaml
+
+# AI agent working files - local only, never committed.
+# Instructions, plans, session notes and generated design docs stay on the
+# development machine. Only project code and the user-facing README ship.
+.claude/
+.superpowers/
+.agents/
+docs/
+AGENTS.md
+CLAUDE.md
