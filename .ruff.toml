@@ -13,6 +13,8 @@ ignore = [
     "D212", # multi-line-summary-first-line (incompatible with formatter)
     "COM812", # incompatible with formatter
     "ISC001", # incompatible with formatter
+    "CPY001", # copyright notice per file; LICENSE covers it, and neither Home
+              # Assistant core nor this scaffold uses per-file headers
 ]
 
 [lint.flake8-pytest-style]
