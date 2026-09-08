@@ -1,4 +1,5 @@
 {
+  "_comment": "Renovate is not active. Rename this file to renovate.json to enable it, and rename dependabot.yml to _dependabot.yml to disable Dependabot. Use only one.",
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:best-practices"
@@ -6,12 +7,14 @@
   "minimumReleaseAge": "3 days",
   "osvVulnerabilityAlerts": true,
   "dependencyDashboardOSVVulnerabilitySummary": "all",
-  "timezone": "Europe/Berlin",
+  "timezone": "Europe/Madrid",
   "customManagers": [],
   "packageRules": [
     {
       "description": "Home Assistant should match the homeassistant key in hacs.json",
-      "matchPackageNames": ["homeassistant"],
+      "matchPackageNames": [
+        "homeassistant"
+      ],
       "enabled": false
     }
   ]

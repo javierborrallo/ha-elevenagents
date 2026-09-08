@@ -67,6 +67,15 @@ Assistant configuration changes.
 Not yet available. This section will describe HACS installation once there is
 something to install.
 
+## Dependency updates
+
+Dependabot is enabled and proposes updates for pip packages, GitHub Actions and
+devcontainer features. It does not touch `homeassistant`, whose version must match the
+`homeassistant` key in `hacs.json`.
+
+A Renovate configuration is kept alongside it as `.github/_renovate.json`, inactive. Use one
+or the other, never both.
+
 ## Credits
 
 Scaffolded from [ludeeus/integration_blueprint](https://github.com/ludeeus/integration_blueprint).
