@@ -12,14 +12,12 @@ logger:
     custom_components.elevenlabs_agent: debug
 
 # --- Development fixtures ---------------------------------------------------
-# Never develop against real devices. The demo integration provides fake
-# lights, switches, climate, covers, locks and alarm panels, so the permission
-# model can be exercised for real - including proving that sensitive domains
-# are denied - without actuating anything physical.
+# The demo integration provides fake lights, switches, climate, covers, locks
+# and alarm panels. It requires the numpy package.
 # https://www.home-assistant.io/integrations/demo/
 demo:
 
-# Hand-made targets for specific test cases.
+# Additional targets for specific test cases.
 input_boolean:
   living_room_lamp:
     name: Living room lamp
