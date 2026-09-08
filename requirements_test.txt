@@ -4,8 +4,7 @@
 # pytest-timeout, pytest-xdist, coverage, freezegun, requests-mock, respx) comes
 # from Home Assistant's own requirements_test.txt and is not repeated here.
 #
-# The pin below is not free to choose: each pytest-homeassistant-custom-component
-# release pins one exact Home Assistant version. 0.13.340 is the release that
-# pins homeassistant==2026.6.4, which is what requirements_dev.txt and hacs.json
-# target. Bump both together or the environment will not resolve.
-pytest-homeassistant-custom-component==0.13.340
+# Each pytest-homeassistant-custom-component release pins one exact Home
+# Assistant version. 0.13.364 pins homeassistant==2026.9.1, which matches
+# requirements_dev.txt. Change both files together.
+pytest-homeassistant-custom-component==0.13.364

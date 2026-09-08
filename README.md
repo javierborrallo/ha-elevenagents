@@ -67,6 +67,18 @@ Assistant configuration changes.
 Not yet available. This section will describe HACS installation once there is
 something to install.
 
+## Home Assistant versions
+
+Two versions appear in this repository and they mean different things.
+
+`hacs.json` declares **2026.6.4**, the minimum a user needs to install the integration.
+`requirements_dev.txt` pins the newest release, which is what development and CI run against.
+Developing against the newest release surfaces deprecations early; keeping the minimum lower
+avoids excluding users who have not updated yet.
+
+`pytest-homeassistant-custom-component` pins one exact Home Assistant version, so it moves with
+`requirements_dev.txt`. Dependabot ignores both.
+
 ## Dependency updates
 
 Dependabot is enabled and proposes updates for pip packages, GitHub Actions and

@@ -27,3 +27,6 @@ updates:
     ignore:
       # Dependabot should not update Home Assistant as that should match the homeassistant key in hacs.json
       - dependency-name: "homeassistant"
+      # This package pins one exact Home Assistant version, so updating it
+      # changes Home Assistant too. Update it together with requirements_dev.txt.
+      - dependency-name: "pytest-homeassistant-custom-component"
