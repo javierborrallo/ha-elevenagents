@@ -9,7 +9,7 @@ from elevenlabs.core import ApiError
 
 from custom_components.elevenlabs_agent.elevenlabs_client import (
     ElevenLabsAuthError,
-    ElevenLabsNotFound,
+    ElevenLabsNotFoundError,
     ElevenLabsScopeError,
     async_get_client,
     async_update_tool,
@@ -56,7 +56,7 @@ async def test_update_sends_a_real_request_model(hass):
     [
         (401, ElevenLabsAuthError),
         (403, ElevenLabsScopeError),
-        (404, ElevenLabsNotFound),
+        (404, ElevenLabsNotFoundError),
     ],
 )
 async def test_api_errors_are_translated(hass, status, expected):

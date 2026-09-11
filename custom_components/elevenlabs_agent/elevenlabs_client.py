@@ -32,7 +32,7 @@ class ElevenLabsScopeError(ElevenLabsError):
     """The API key lacks the required scope. Matches HTTP 403."""
 
 
-class ElevenLabsNotFound(ElevenLabsError):
+class ElevenLabsNotFoundError(ElevenLabsError):
     """The requested resource does not exist. Matches HTTP 404."""
 
 
@@ -43,7 +43,7 @@ def _translate(err: ApiError) -> ElevenLabsError:
     if err.status_code == 403:
         return ElevenLabsScopeError(str(err))
     if err.status_code == 404:
-        return ElevenLabsNotFound(str(err))
+        return ElevenLabsNotFoundError(str(err))
     return ElevenLabsError(str(err))
 
 

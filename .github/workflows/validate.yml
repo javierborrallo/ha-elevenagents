@@ -36,6 +36,8 @@ jobs:
     steps:
       - name: Run HACS validation
         uses: hacs/action@d556e736723344f83838d08488c983a15381059a # 22.5.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # the repository is private
         with:
           category: integration
           # Remove this 'ignore' key when you have added brand images for your integration
