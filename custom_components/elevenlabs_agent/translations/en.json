@@ -1,0 +1,65 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to ElevenLabs",
+        "description": "Enter an ElevenLabs API key. The key needs write access to Conversational AI. Nothing is saved until you choose an agent on the next screen.",
+        "data": {
+          "api_key": "API key"
+        },
+        "data_description": {
+          "api_key": "Create a key in the ElevenLabs dashboard, under your profile. Give it write access to ElevenAgents."
+        }
+      },
+      "agent": {
+        "title": "Choose an agent",
+        "description": "These are the agents this API key can reach. The chosen agent receives the tools that read and control the entities you select later.",
+        "data": {
+          "agent_id": "Agent"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Enter a new API key",
+        "description": "The stored API key no longer works. It may have been revoked, or its permissions may have changed. The agent and the webhook stay as they are.",
+        "data": {
+          "api_key": "API key"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "ElevenLabs rejected this key. Check that you copied it whole, and that it has not been revoked.",
+      "insufficient_scope": "This key works, but it may not reach Conversational AI. Open the key in the ElevenLabs dashboard and give it write access to ElevenAgents.",
+      "no_agents": "This key reaches no agents. Create an agent in the ElevenLabs dashboard first, then add this integration again.",
+      "agent_not_found": "This agent no longer exists in the workspace this key reaches.",
+      "cannot_connect": "Home Assistant could not reach ElevenLabs. Check this machine's internet connection and try again.",
+      "unknown": "Something unexpected went wrong. The Home Assistant log holds the detail."
+    },
+    "abort": {
+      "already_configured": "This agent is already set up.",
+      "reauth_successful": "The new API key works. The integration is connected again.",
+      "no_external_url": "Home Assistant has no external URL, so ElevenLabs cannot reach it. Set an external URL under Settings > System > Network, then add this integration again."
+    }
+  },
+  "issues": {
+    "agent_unprotected": {
+      "title": "Your ElevenLabs agent accepts anyone",
+      "description": "This agent has no authentication, so anyone who learns its identifier can talk to it, spend your ElevenLabs credit, and use the entities you exposed. Turning on authentication makes callers present a signed link.\n\nRead this before you fix it: if you also reach this agent from a web widget, that widget stops working until it presents a signed link of its own.",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Require authentication on this agent",
+            "description": "Home Assistant will turn on authentication for this agent. Your other settings are left alone.\n\nIf you use this agent from an embedded web widget, that widget stops working until it is changed to request a signed link."
+          }
+        }
+      }
+    },
+    "timeout_crossed": {
+      "title": "The two timeouts now cross",
+      "description": "The agent's timeout is lower than Home Assistant's, so it closes the connection before the answer arrives. Home Assistant waits up to {confirm_timeout} seconds for a device to confirm; the agent gives up after {agent_timeout}.\n\nFix it in either place: lower the confirmation timeout in this integration's options, or raise the tool's response timeout in the ElevenLabs dashboard. This notice clears itself once the first number is below the second."
+    },
+    "rotation_unsynced": {
+      "title": "The new value did not reach ElevenLabs",
+      "description": "The webhook credential was changed here, but ElevenLabs could not be updated, so the agent is still sending the old one. Run the synchronise action again, or open the integration's options and repeat the change. This notice clears itself once a synchronisation succeeds."
+    }
+  }
+}

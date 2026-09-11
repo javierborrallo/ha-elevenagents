@@ -1,0 +1,65 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Conectar con ElevenLabs",
+        "description": "Introduce una clave de API de ElevenLabs. La clave necesita permiso de escritura sobre Conversational AI. No se guarda nada hasta que elijas un agente en la pantalla siguiente.",
+        "data": {
+          "api_key": "Clave de API"
+        },
+        "data_description": {
+          "api_key": "Crea una clave en el panel de ElevenLabs, dentro de tu perfil. Dale permiso de escritura sobre ElevenAgents."
+        }
+      },
+      "agent": {
+        "title": "Elige un agente",
+        "description": "Estos son los agentes que alcanza esta clave. El agente elegido recibe las herramientas que leen y controlan las entidades que selecciones después.",
+        "data": {
+          "agent_id": "Agente"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Introduce una clave nueva",
+        "description": "La clave guardada ya no funciona. Puede que la hayas revocado, o que hayan cambiado sus permisos. El agente y el webhook se mantienen como están.",
+        "data": {
+          "api_key": "Clave de API"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "ElevenLabs ha rechazado esta clave. Comprueba que la copiaste entera y que no está revocada.",
+      "insufficient_scope": "La clave funciona, pero puede que no alcance Conversational AI. Ábrela en el panel de ElevenLabs y dale permiso de escritura sobre ElevenAgents.",
+      "no_agents": "Esta clave no alcanza ningún agente. Crea uno en el panel de ElevenLabs y vuelve a añadir la integración.",
+      "agent_not_found": "Ese agente ya no existe en el espacio de trabajo que alcanza esta clave.",
+      "cannot_connect": "Home Assistant no ha podido llegar a ElevenLabs. Revisa la conexión a internet de esta máquina e inténtalo otra vez.",
+      "unknown": "Ha ocurrido algo inesperado. El detalle está en el registro de Home Assistant."
+    },
+    "abort": {
+      "no_external_url": "Home Assistant no tiene URL externa, así que ElevenLabs no puede alcanzarlo. Configura una URL externa en Ajustes > Sistema > Red y vuelve a añadir la integración.",
+      "already_configured": "Este agente ya está configurado.",
+      "reauth_successful": "La clave nueva funciona. La integración vuelve a estar conectada."
+    }
+  },
+  "issues": {
+    "agent_unprotected": {
+      "title": "Tu agente de ElevenLabs acepta a cualquiera",
+      "description": "Este agente no tiene autenticación, así que cualquiera que conozca su identificador puede hablar con él, gastar tu crédito de ElevenLabs y usar las entidades que expusiste. Activar la autenticación obliga a quien llame a presentar un enlace firmado.\n\nLee esto antes de arreglarlo: si además usas este agente desde un widget web, ese widget dejará de funcionar hasta que presente su propio enlace firmado.",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Exigir autenticación en este agente",
+            "description": "Home Assistant activará la autenticación de este agente. El resto de sus ajustes se queda como está.\n\nSi usas este agente desde un widget web incrustado, ese widget dejará de funcionar hasta que se cambie para pedir un enlace firmado."
+          }
+        }
+      }
+    },
+    "timeout_crossed": {
+      "title": "Los dos tiempos de espera se cruzan",
+      "description": "El agente tiene un tiempo de espera inferior al de Home Assistant, así que corta la conexión antes de recibir la respuesta. Home Assistant espera hasta {confirm_timeout} segundos a que un dispositivo confirme; el agente se rinde a los {agent_timeout}.\n\nArréglalo en cualquiera de los dos sitios: baja el tiempo de confirmación en las opciones de esta integración, o sube el de respuesta de la herramienta en el panel de ElevenLabs. Este aviso desaparece solo cuando el primer número queda por debajo del segundo."
+    },
+    "rotation_unsynced": {
+      "title": "El valor nuevo no ha llegado a ElevenLabs",
+      "description": "La credencial del webhook se cambió aquí, pero no se pudo actualizar en ElevenLabs, así que el agente sigue enviando la anterior. Ejecuta otra vez la acción de sincronizar, o abre las opciones de la integración y repite el cambio. Este aviso desaparece solo cuando una sincronización funcione."
+    }
+  }
+}
