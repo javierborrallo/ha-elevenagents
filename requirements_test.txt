@@ -16,6 +16,7 @@ elevenlabs>=2.51.0
 # pymicro-vad and pyspeex-noise are omitted: assist_pipeline imports them
 # lazily, and they need a compiler the runner does not have.
 PyTurboJPEG==1.8.3
+ha-ffmpeg==3.2.2
 gazetteer-matcher==1.1.0
 hassil==3.12.0
 home-assistant-intents==2026.8.28
