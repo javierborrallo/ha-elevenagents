@@ -43,3 +43,29 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "@overload",
 ]
+
+[tool.mypy]
+python_version = "3.14"
+# custom_components is a namespace package with no __init__.py, which is
+# how Home Assistant loads custom integrations.
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = "."
+# The integration calls two typed libraries. Checking those call sites is
+# the reason this runs at all, so import following stays on.
+check_untyped_defs = true
+disallow_untyped_defs = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unused_ignores = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+# Test functions take fixtures whose types come from a plugin.
+module = "tests.*"
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+# The test helper library ships no py.typed marker.
+module = "pytest_homeassistant_custom_component.*"
+ignore_missing_imports = true
