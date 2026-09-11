@@ -188,9 +188,7 @@ async def test_unselected_entity_hides_even_an_ungranted_action(
     descriptions: dict[str, dict[str, Any]] = {
         "lock": {
             "open": {
-                "target": {
-                    "entity": [{"domain": ["lock"], "supported_features": [1]}]
-                }
+                "target": {"entity": [{"domain": ["lock"], "supported_features": [1]}]}
             }
         }
     }
