@@ -12,6 +12,7 @@ from custom_components.elevenlabs_agent.elevenlabs_client import (
     ElevenLabsNotFoundError,
     ElevenLabsScopeError,
     async_get_client,
+    async_list_agents,
     async_update_tool,
 )
 
@@ -69,3 +70,33 @@ async def test_api_errors_are_translated(hass, status, expected):
 
     with pytest.raises(expected):
         await async_update_tool(client, "tool_x", _TOOL_CONFIG)
+
+
+async def test_list_agents_calls_the_sdk_with_no_arguments(hass):
+    """The config flow lists the whole workspace, unfiltered."""
+    client = AsyncMock()
+    client.conversational_ai.agents.list.return_value = "sentinel"
+
+    result = await async_list_agents(client)
+
+    client.conversational_ai.agents.list.assert_awaited_once_with()
+    assert result == "sentinel"
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        (401, ElevenLabsAuthError),
+        (403, ElevenLabsScopeError),
+        (404, ElevenLabsNotFoundError),
+    ],
+)
+async def test_list_agents_translates_api_errors(hass, status, expected):
+    """Listing agents maps status codes the same way every other call does."""
+    client = AsyncMock()
+    client.conversational_ai.agents.list.side_effect = ApiError(
+        status_code=status, body={"detail": "no"}
+    )
+
+    with pytest.raises(expected):
+        await async_list_agents(client)

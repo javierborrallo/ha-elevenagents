@@ -22,8 +22,14 @@ def auto_enable_custom_integrations(enable_custom_integrations):
 
 
 @pytest.fixture
-def config_entry(hass) -> MockConfigEntry:
-    """Return a config entry already added to hass."""
+async def config_entry(hass) -> MockConfigEntry:
+    """
+    Return a config entry already added to hass.
+
+    An external URL is set because the config flow refuses to create an
+    entry without one, so no entry can exist without it in production.
+    """
+    await hass.config.async_update(external_url="https://home.example")
     entry = MockConfigEntry(
         domain=DOMAIN,
         unique_id="agent_test",
@@ -42,13 +48,7 @@ def config_entry(hass) -> MockConfigEntry:
 
 @pytest.fixture
 async def setup_entry(hass, config_entry) -> MockConfigEntry:
-    """Set up http, webhook, and the integration's own async_setup_entry."""
-    from homeassistant.setup import async_setup_component
-
-    from custom_components.elevenlabs_agent import async_setup_entry
-
-    assert await async_setup_component(hass, "http", {})
-    assert await async_setup_component(hass, "webhook", {})
-    assert await async_setup_entry(hass, config_entry)
+    """Set up the config entry through Home Assistant's own setup state machine."""
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     return config_entry

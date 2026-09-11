@@ -13,6 +13,7 @@ from elevenlabs import AsyncElevenLabs
 from elevenlabs.core import ApiError
 from elevenlabs.types import (
     GetAgentResponseModel,
+    GetAgentsPageResponseModel,
     ToolRequestModel,
     ToolResponseModel,
     ToolsResponseModel,
@@ -103,6 +104,15 @@ async def async_delete_tool(client: AsyncElevenLabs, tool_id: str) -> Any:
         return await client.conversational_ai.tools.delete(tool_id)
     except ApiError as err:
         raise _translate(err) from err
+
+
+async def async_list_agents(client: AsyncElevenLabs) -> GetAgentsPageResponseModel:
+    """List the agents in the user's workspace."""
+    try:
+        result = await client.conversational_ai.agents.list()
+    except ApiError as err:
+        raise _translate(err) from err
+    return cast("GetAgentsPageResponseModel", result)
 
 
 async def async_get_agent(
