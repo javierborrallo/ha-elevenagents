@@ -28,14 +28,16 @@ jobs:
       - name: Run hassfest validation
         uses: home-assistant/actions/hassfest@a7c616ce81ccda50150bf1595786c71b1883fabb # master
 
-  # KNOWN FAILURE while the repository is private. Six of the eight checks
-  # pass; hacsjson and integration_manifest both report "expected a
-  # dictionary. Got None" because they read file contents, which the action
-  # cannot fetch from a private repository. This has failed on every run
-  # since 8 September 2026, including on the unmodified scaffold. It resolves
-  # when the repository becomes public. Do not chase it before then.
+  # Skipped while the repository is private, and re-enabled by itself the
+  # moment it becomes public. The action reads file contents through the
+  # GitHub API and cannot fetch them from a private repository: six of its
+  # eight checks pass, while hacsjson and integration_manifest both report
+  # "expected a dictionary. Got None". That failed on every run from
+  # 8 September 2026, including on the unmodified scaffold, so a check that
+  # can only be red teaches everyone to ignore this workflow.
   hacs: # https://github.com/hacs/action
     name: HACS validation
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     permissions:
       contents: read # the action reads the repository through the GitHub API
