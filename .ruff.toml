@@ -25,3 +25,15 @@ keep-runtime-typing = true
 
 [lint.mccabe]
 max-complexity = 25
+
+[lint.per-file-ignores]
+# Tests assert, take fixtures they do not annotate or use, and compare
+# against literals. Home Assistant core exempts its own tests the same way.
+"tests/**" = [
+    "ANN001",   # missing type annotation for a fixture argument
+    "ANN201",   # missing return type on a test function
+    "ARG001",   # a fixture is requested for its side effect
+    "PLC0415",  # an import inside a test keeps the type local to one case
+    "PLR2004",  # a literal in an assertion is the assertion
+    "S101",     # assert is how a test states its expectation
+]

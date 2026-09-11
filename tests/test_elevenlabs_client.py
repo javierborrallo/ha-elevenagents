@@ -34,7 +34,8 @@ async def test_client_uses_the_shared_home_assistant_httpx_client(hass):
 
 
 async def test_update_sends_a_real_request_model(hass):
-    """The wrapper builds the type the SDK declares, not a bare dict.
+    """
+    The wrapper builds the type the SDK declares, not a bare dict.
 
     This is the test a mock cannot do. It asserts the object handed to the
     SDK is the type its signature requires, so a wrong keyword or a missing

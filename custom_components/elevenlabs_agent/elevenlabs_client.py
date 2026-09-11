@@ -1,11 +1,13 @@
-"""Client wrapper for the official ElevenLabs SDK.
+"""
+Client wrapper for the official ElevenLabs SDK.
 
 This is the only module that talks to the ElevenLabs API.
 """
 
 from __future__ import annotations
 
-from typing import Any, cast
+from http import HTTPStatus
+from typing import TYPE_CHECKING, Any, cast
 
 from elevenlabs import AsyncElevenLabs
 from elevenlabs.core import ApiError
@@ -15,9 +17,10 @@ from elevenlabs.types import (
     ToolResponseModel,
     ToolsResponseModel,
 )
-
-from homeassistant.core import HomeAssistant
 from homeassistant.helpers.httpx_client import get_async_client
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
 
 
 class ElevenLabsError(Exception):
@@ -38,11 +41,11 @@ class ElevenLabsNotFoundError(ElevenLabsError):
 
 def _translate(err: ApiError) -> ElevenLabsError:
     """Map an ApiError status code onto the matching exception class."""
-    if err.status_code == 401:
+    if err.status_code == HTTPStatus.UNAUTHORIZED:
         return ElevenLabsAuthError(str(err))
-    if err.status_code == 403:
+    if err.status_code == HTTPStatus.FORBIDDEN:
         return ElevenLabsScopeError(str(err))
-    if err.status_code == 404:
+    if err.status_code == HTTPStatus.NOT_FOUND:
         return ElevenLabsNotFoundError(str(err))
     return ElevenLabsError(str(err))
 
@@ -58,7 +61,7 @@ async def async_list_tools(client: AsyncElevenLabs) -> ToolsResponseModel:
         result = await client.conversational_ai.tools.list()
     except ApiError as err:
         raise _translate(err) from err
-    return cast(ToolsResponseModel, result)
+    return cast("ToolsResponseModel", result)
 
 
 async def async_get_tool(client: AsyncElevenLabs, tool_id: str) -> ToolResponseModel:
@@ -67,7 +70,7 @@ async def async_get_tool(client: AsyncElevenLabs, tool_id: str) -> ToolResponseM
         result = await client.conversational_ai.tools.get(tool_id)
     except ApiError as err:
         raise _translate(err) from err
-    return cast(ToolResponseModel, result)
+    return cast("ToolResponseModel", result)
 
 
 async def async_create_tool(
@@ -79,7 +82,7 @@ async def async_create_tool(
         result = await client.conversational_ai.tools.create(request=request)
     except ApiError as err:
         raise _translate(err) from err
-    return cast(ToolResponseModel, result)
+    return cast("ToolResponseModel", result)
 
 
 async def async_update_tool(
@@ -91,7 +94,7 @@ async def async_update_tool(
         result = await client.conversational_ai.tools.update(tool_id, request=request)
     except ApiError as err:
         raise _translate(err) from err
-    return cast(ToolResponseModel, result)
+    return cast("ToolResponseModel", result)
 
 
 async def async_delete_tool(client: AsyncElevenLabs, tool_id: str) -> Any:
@@ -110,7 +113,7 @@ async def async_get_agent(
         result = await client.conversational_ai.agents.get(agent_id)
     except ApiError as err:
         raise _translate(err) from err
-    return cast(GetAgentResponseModel, result)
+    return cast("GetAgentResponseModel", result)
 
 
 async def async_patch_agent(
@@ -121,4 +124,4 @@ async def async_patch_agent(
         result = await client.conversational_ai.agents.update(agent_id, **fields)
     except ApiError as err:
         raise _translate(err) from err
-    return cast(GetAgentResponseModel, result)
+    return cast("GetAgentResponseModel", result)

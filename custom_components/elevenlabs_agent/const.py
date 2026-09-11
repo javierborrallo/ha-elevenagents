@@ -11,7 +11,7 @@ DOMAIN: Final = "elevenlabs_agent"
 CONF_API_KEY: Final = "api_key"
 CONF_AGENT_ID: Final = "agent_id"
 CONF_WEBHOOK_ID: Final = "webhook_id"
-CONF_WEBHOOK_SECRET: Final = "webhook_secret"
+CONF_WEBHOOK_SECRET: Final = "webhook_secret"  # noqa: S105 - a key name, not a value
 CONF_TOOL_IDS: Final = "tool_ids"
 CONF_RESPONSE_TIMEOUT: Final = "response_timeout_secs"
 
@@ -31,7 +31,7 @@ AUTO_EXPOSE_DEBOUNCE: Final = 10
 
 # Transport limits. The handler returns 401, 413, 415 and 429.
 # Every other outcome is HTTP 200 with a structured body.
-SECRET_HEADER: Final = "X-Elevenlabs-Agent-Secret"
+SECRET_HEADER: Final = "X-Elevenlabs-Agent-Secret"  # noqa: S105 - a header name
 MAX_BODY_BYTES: Final = 64 * 1024
 RATE_LIMIT_BURST: Final = 10
 RATE_LIMIT_PER_SECOND: Final = 1.0
