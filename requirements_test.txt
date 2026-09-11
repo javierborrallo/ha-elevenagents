@@ -9,3 +9,14 @@
 # requirements_dev.txt. Change both files together.
 pytest-homeassistant-custom-component==0.13.364
 elevenlabs>=2.51.0
+
+# Home Assistant's _load_services_file resolves supported_features enum names
+# by importing every base component, and those pull in real dependencies.
+# A clean runner has none of them. Pins match homeassistant 2026.9.1.
+# pymicro-vad and pyspeex-noise are omitted: assist_pipeline imports them
+# lazily, and they need a compiler the runner does not have.
+PyTurboJPEG==1.8.3
+gazetteer-matcher==1.1.0
+hassil==3.12.0
+home-assistant-intents==2026.8.28
+mutagen==1.48.1
