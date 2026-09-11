@@ -80,3 +80,21 @@ def test_every_flow_step_has_a_title(language: str) -> None:
         assert documented[step].get("title"), (
             f"{language}.json step {step} has no title"
         )
+
+
+@pytest.mark.parametrize("language", ["en", "es"])
+def test_an_issue_is_fixable_or_informative_but_not_both(language: str) -> None:
+    """
+    Hassfest treats description and fix_flow as mutually exclusive.
+
+    MEASURED 12 September 2026: shipping both raised "two or more values in
+    the same group of exclusion 'fixable'". A fixable issue puts its text in
+    the fix flow's own step, where the user reads it before confirming.
+    """
+    for name, issue in _load(language).get("issues", {}).items():
+        assert not ("description" in issue and "fix_flow" in issue), (
+            f"{language}.json issue {name} carries both"
+        )
+        assert "description" in issue or "fix_flow" in issue, (
+            f"{language}.json issue {name} carries neither"
+        )

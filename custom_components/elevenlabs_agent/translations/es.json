@@ -43,12 +43,11 @@
   "issues": {
     "agent_unprotected": {
       "title": "Tu agente de ElevenLabs acepta a cualquiera",
-      "description": "Este agente no tiene autenticación, así que cualquiera que conozca su identificador puede hablar con él, gastar tu crédito de ElevenLabs y usar las entidades que expusiste. Activar la autenticación obliga a quien llame a presentar un enlace firmado.\n\nLee esto antes de arreglarlo: si además usas este agente desde un widget web, ese widget dejará de funcionar hasta que presente su propio enlace firmado.",
       "fix_flow": {
         "step": {
           "confirm": {
             "title": "Exigir autenticación en este agente",
-            "description": "Home Assistant activará la autenticación de este agente. El resto de sus ajustes se queda como está.\n\nSi usas este agente desde un widget web incrustado, ese widget dejará de funcionar hasta que se cambie para pedir un enlace firmado."
+            "description": "Este agente no tiene autenticación, así que cualquiera que conozca su identificador puede hablar con él, gastar tu crédito de ElevenLabs y usar las entidades que expusiste. Home Assistant exigirá un enlace firmado a quien llame. El resto de ajustes del agente se queda como está.\n\nLee esto antes: si además usas este agente desde un widget web incrustado, ese widget dejará de funcionar hasta que se cambie para pedir su propio enlace firmado."
           }
         }
       }

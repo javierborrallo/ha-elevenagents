@@ -43,12 +43,11 @@
   "issues": {
     "agent_unprotected": {
       "title": "Your ElevenLabs agent accepts anyone",
-      "description": "This agent has no authentication, so anyone who learns its identifier can talk to it, spend your ElevenLabs credit, and use the entities you exposed. Turning on authentication makes callers present a signed link.\n\nRead this before you fix it: if you also reach this agent from a web widget, that widget stops working until it presents a signed link of its own.",
       "fix_flow": {
         "step": {
           "confirm": {
             "title": "Require authentication on this agent",
-            "description": "Home Assistant will turn on authentication for this agent. Your other settings are left alone.\n\nIf you use this agent from an embedded web widget, that widget stops working until it is changed to request a signed link."
+            "description": "This agent has no authentication, so anyone who learns its identifier can talk to it, spend your ElevenLabs credit, and use the entities you exposed. Home Assistant will require a signed link from callers. Your other agent settings are left alone.\n\nRead this first: if you also reach this agent from an embedded web widget, that widget stops working until it is changed to request a signed link of its own."
           }
         }
       }
