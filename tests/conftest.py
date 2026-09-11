@@ -38,3 +38,17 @@ def config_entry(hass) -> MockConfigEntry:
     )
     entry.add_to_hass(hass)
     return entry
+
+
+@pytest.fixture
+async def setup_entry(hass, config_entry) -> MockConfigEntry:
+    """Set up http, webhook, and the integration's own async_setup_entry."""
+    from homeassistant.setup import async_setup_component
+
+    from custom_components.elevenlabs_agent import async_setup_entry
+
+    assert await async_setup_component(hass, "http", {})
+    assert await async_setup_component(hass, "webhook", {})
+    assert await async_setup_entry(hass, config_entry)
+    await hass.async_block_till_done()
+    return config_entry
