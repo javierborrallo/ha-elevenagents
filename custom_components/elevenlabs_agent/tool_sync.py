@@ -387,7 +387,9 @@ async def _sync(
     )
     secret = entry.data[CONF_WEBHOOK_SECRET]
     timeout = int(entry.data.get(CONF_RESPONSE_TIMEOUT, DEFAULT_RESPONSE_TIMEOUT))
-    url = webhook.async_generate_url(hass, entry.data[CONF_WEBHOOK_ID])
+    url = webhook.async_generate_url(
+        hass, entry.data[CONF_WEBHOOK_ID], allow_internal=False
+    )
 
     definitions = {
         TOOL_GET_STATE: build_get_state(hass, perms, url, secret, timeout),
