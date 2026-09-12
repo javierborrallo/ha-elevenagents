@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
@@ -69,8 +68,6 @@ _SELECTOR_TYPES: dict[str, str] = {
 
 # response_timeout_secs is excluded on purpose. The API may normalise it.
 COMPARED_FIELDS: tuple[str, ...] = ("name", "description", "api_schema")
-
-_SYNC_LOCKS: dict[str, asyncio.Lock] = {}
 
 
 class ToolSyncError(Exception):
@@ -308,11 +305,6 @@ def _controlled_domains(hass: HomeAssistant, perms: Permissions) -> set[str]:
     return domains
 
 
-def _sync_lock(entry: ElevenLabsAgentConfigEntry) -> asyncio.Lock:
-    """Return the lock that serialises sync runs for one config entry."""
-    return _SYNC_LOCKS.setdefault(entry.entry_id, asyncio.Lock())
-
-
 def _survives(sent: Any, got: Any, path: str = "") -> list[str]:
     """
     Return the paths where a sent value did not come back unchanged.
@@ -433,5 +425,5 @@ async def async_sync_tools(
     One sync runs at a time per entry, because saving options reloads the
     entry while a registry change may already be running one.
     """
-    async with _sync_lock(entry):
+    async with entry.runtime_data.sync_lock:
         await _sync(hass, entry, client)

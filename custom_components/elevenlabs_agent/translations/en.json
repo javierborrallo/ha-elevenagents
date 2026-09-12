@@ -60,5 +60,17 @@
       "title": "The new value did not reach ElevenLabs",
       "description": "The webhook credential was changed here, but ElevenLabs could not be updated, so the agent is still sending the old one. Run the synchronise action again, or open the integration's options and repeat the change. This notice clears itself once a synchronisation succeeds."
     }
+  },
+  "services": {
+    "sync_tools": {
+      "name": "Synchronise tools",
+      "description": "Write the tool definitions for the selected entities into the ElevenLabs workspace and attach them to the agent.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "The ElevenLabs Agent config entry to synchronise."
+        }
+      }
+    }
   }
 }

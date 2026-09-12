@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -48,7 +50,14 @@ async def config_entry(hass) -> MockConfigEntry:
 
 @pytest.fixture
 async def setup_entry(hass, config_entry) -> MockConfigEntry:
-    """Set up the config entry through Home Assistant's own setup state machine."""
-    assert await hass.config_entries.async_setup(config_entry.entry_id)
-    await hass.async_block_till_done()
+    """
+    Set up the config entry through Home Assistant's own setup state machine.
+
+    The initial sync is patched to a no-op, so this fixture never reaches
+    the network. A test that cares about the sync itself patches it again,
+    or calls tool_sync.async_sync_tools directly.
+    """
+    with patch("custom_components.elevenlabs_agent.async_sync_tools", AsyncMock()):
+        assert await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
     return config_entry

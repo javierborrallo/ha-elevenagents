@@ -60,5 +60,17 @@
       "title": "El valor nuevo no ha llegado a ElevenLabs",
       "description": "La credencial del webhook se cambió aquí, pero no se pudo actualizar en ElevenLabs, así que el agente sigue enviando la anterior. Ejecuta otra vez la acción de sincronizar, o abre las opciones de la integración y repite el cambio. Este aviso desaparece solo cuando una sincronización funcione."
     }
+  },
+  "services": {
+    "sync_tools": {
+      "name": "Sincronizar herramientas",
+      "description": "Escribe las definiciones de herramientas de las entidades seleccionadas en el espacio de trabajo de ElevenLabs y las adjunta al agente.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "La entrada de configuración de ElevenLabs Agent que se sincroniza."
+        }
+      }
+    }
   }
 }
