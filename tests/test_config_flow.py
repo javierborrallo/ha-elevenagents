@@ -45,11 +45,33 @@ AGENTS_RESPONSE = SimpleNamespace(
 )
 
 
+def _tool(tool_id: str, name: str) -> SimpleNamespace:
+    """Return a tool listing entry shaped like the SDK's."""
+    return SimpleNamespace(id=tool_id, tool_config=SimpleNamespace(name=name))
+
+
+def _agent_with(tool_ids: list[str]) -> SimpleNamespace:
+    """Return an agent whose prompt has these tools attached."""
+    return SimpleNamespace(
+        conversation_config=SimpleNamespace(
+            agent=SimpleNamespace(prompt=SimpleNamespace(tool_ids=tool_ids))
+        )
+    )
+
+
 @contextmanager
 def _patch_client_and_url(
-    agents: object = None, list_side_effect: Exception | None = None
+    agents: object = None,
+    list_side_effect: Exception | None = None,
+    attached: list[str] | None = None,
+    tools: list[object] | None = None,
 ) -> Iterator[None]:
-    """Patch the client construction, the agent listing and the URL check."""
+    """
+    Patch the client, the listings and the URL check.
+
+    attached and tools default to a workspace with no colliding name, so a
+    test that does not care about the collision step never meets it.
+    """
     with ExitStack() as stack:
         stack.enter_context(
             patch("custom_components.elevenlabs_agent.config_flow.async_get_client")
@@ -59,6 +81,18 @@ def _patch_client_and_url(
                 "custom_components.elevenlabs_agent.config_flow.async_list_agents",
                 return_value=agents,
                 side_effect=list_side_effect,
+            )
+        )
+        stack.enter_context(
+            patch(
+                "custom_components.elevenlabs_agent.config_flow.async_get_agent",
+                return_value=_agent_with(attached or []),
+            )
+        )
+        stack.enter_context(
+            patch(
+                "custom_components.elevenlabs_agent.config_flow.async_list_tools",
+                return_value=SimpleNamespace(tools=tools or []),
             )
         )
         stack.enter_context(
@@ -294,3 +328,135 @@ async def test_reauth_with_a_deleted_agent_reports_agent_not_found(hass, config_
 
     assert result["type"] is FlowResultType.FORM
     assert result["errors"]["base"] == "agent_not_found"
+
+
+async def test_no_collision_creates_the_entry_without_a_word(hass) -> None:
+    """A step that always appears is a step nobody reads."""
+    with _patch_client_and_url(
+        agents=AGENTS_RESPONSE,
+        attached=["tool_theirs"],
+        tools=[_tool("tool_theirs", "weather")],
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "user"}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], API_KEY_INPUT
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_AGENT_ID: "agent_a"}
+        )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+async def test_a_colliding_name_on_the_agent_stops_to_ask(hass) -> None:
+    """The harm is at the attachment, so that is what is checked."""
+    with _patch_client_and_url(
+        agents=AGENTS_RESPONSE,
+        attached=["tool_old"],
+        tools=[_tool("tool_old", "ha_call_service")],
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "user"}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], API_KEY_INPUT
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_AGENT_ID: "agent_a"}
+        )
+
+    assert result["type"] is FlowResultType.MENU
+    assert set(result["menu_options"]) == {"detach", "keep"}
+
+
+async def test_the_same_name_unattached_is_not_the_agents_problem(hass) -> None:
+    """
+    A duplicate sitting in the workspace is untidy, not harmful.
+
+    The agent carries an attachment here on purpose. With none at all the
+    check returns before it ever reads the workspace, so the test would
+    pass whether the comparison looked at the attachments or not.
+    """
+    with _patch_client_and_url(
+        agents=AGENTS_RESPONSE,
+        attached=["tool_theirs"],
+        tools=[
+            _tool("tool_theirs", "weather"),
+            _tool("tool_old", "ha_call_service"),
+        ],
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "user"}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], API_KEY_INPUT
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_AGENT_ID: "agent_a"}
+        )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+async def test_detach_removes_only_the_colliding_tools(hass) -> None:
+    """A tool the user attached for another purpose survives."""
+    with (
+        _patch_client_and_url(
+            agents=AGENTS_RESPONSE,
+            attached=["tool_old", "tool_theirs"],
+            tools=[
+                _tool("tool_old", "ha_call_service"),
+                _tool("tool_theirs", "weather"),
+            ],
+        ),
+        patch(
+            "custom_components.elevenlabs_agent.config_flow.async_patch_agent"
+        ) as patch_agent,
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "user"}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], API_KEY_INPUT
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_AGENT_ID: "agent_a"}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"next_step_id": "detach"}
+        )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    sent = patch_agent.call_args.kwargs["conversation_config"]
+    assert sent["agent"]["prompt"]["tool_ids"] == ["tool_theirs"]
+
+
+async def test_continuing_anyway_touches_nothing(hass) -> None:
+    """Their workspace, their call, now made knowingly."""
+    with (
+        _patch_client_and_url(
+            agents=AGENTS_RESPONSE,
+            attached=["tool_old"],
+            tools=[_tool("tool_old", "ha_call_service")],
+        ),
+        patch(
+            "custom_components.elevenlabs_agent.config_flow.async_patch_agent"
+        ) as patch_agent,
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "user"}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], API_KEY_INPUT
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_AGENT_ID: "agent_a"}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"next_step_id": "keep"}
+        )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert not patch_agent.called

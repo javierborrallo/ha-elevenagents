@@ -22,6 +22,8 @@ from .const import (
     CONF_WEBHOOK_ID,
     CONF_WEBHOOK_SECRET,
     DOMAIN,
+    TOOL_CALL_SERVICE,
+    TOOL_GET_STATE,
 )
 from .elevenlabs_client import (
     ElevenLabsAuthError,
@@ -31,6 +33,8 @@ from .elevenlabs_client import (
     async_get_agent,
     async_get_client,
     async_list_agents,
+    async_list_tools,
+    async_patch_agent,
 )
 
 if TYPE_CHECKING:
@@ -51,8 +55,10 @@ class ElevenLabsAgentConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         """Initialise the state carried between the key step and the agent step."""
-        self._api_key: str | None = None
+        self._api_key: str = ""
         self._agents: list[AgentSummaryResponseModel] = []
+        self._agent_id: str = ""
+        self._colliding: list[str] = []
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -95,18 +101,13 @@ class ElevenLabsAgentConfigFlow(ConfigFlow, domain=DOMAIN):
             agent_id = user_input[CONF_AGENT_ID]
             await self.async_set_unique_id(agent_id)
             self._abort_if_unique_id_configured()
+            self._agent_id = agent_id
 
-            return self.async_create_entry(
-                title=agent_id,
-                data={
-                    CONF_API_KEY: self._api_key,
-                    CONF_AGENT_ID: agent_id,
-                    CONF_WEBHOOK_ID: webhook.async_generate_id(),
-                    CONF_WEBHOOK_SECRET: secrets.token_urlsafe(32),
-                    CONF_TOOL_IDS: {},
-                },
-                options={},
-            )
+            self._colliding = await self._async_colliding_tools(agent_id)
+            if self._colliding:
+                return await self.async_step_duplicate()
+
+            return self._create_entry()
 
         options = sorted(
             (
@@ -124,9 +125,81 @@ class ElevenLabsAgentConfigFlow(ConfigFlow, domain=DOMAIN):
         )
         return self.async_show_form(step_id="agent", data_schema=schema)
 
+    async def _async_colliding_tools(self, agent_id: str) -> list[str]:
+        """
+        Return the agent's attached tool ids whose name is one of ours.
+
+        A duplicate name elsewhere in the workspace is harmless. The model
+        only sees two of them when both are attached to this agent.
+        """
+        client = async_get_client(self.hass, self._api_key)
+        agent = await async_get_agent(client, agent_id)
+        agent_config = agent.conversation_config.agent
+        prompt = None if agent_config is None else agent_config.prompt
+        attached = set() if prompt is None else set(prompt.tool_ids or [])
+        if not attached:
+            return []
+
+        ours = {TOOL_GET_STATE, TOOL_CALL_SERVICE}
+        page = await async_list_tools(client)
+        return [
+            tool.id
+            for tool in page.tools
+            if tool.id in attached and getattr(tool.tool_config, "name", None) in ours
+        ]
+
+    def _create_entry(self) -> ConfigFlowResult:
+        """Create the entry for the chosen agent."""
+        return self.async_create_entry(
+            title=self._agent_id,
+            data={
+                CONF_API_KEY: self._api_key,
+                CONF_AGENT_ID: self._agent_id,
+                CONF_WEBHOOK_ID: webhook.async_generate_id(),
+                CONF_WEBHOOK_SECRET: secrets.token_urlsafe(32),
+                CONF_TOOL_IDS: {},
+            },
+            options={},
+        )
+
+    async def async_step_duplicate(
+        self,
+        user_input: dict[str, Any] | None = None,  # noqa: ARG002 - a menu carries none
+    ) -> ConfigFlowResult:
+        """Report tools whose name collides, and offer two ways forward."""
+        return self.async_show_menu(
+            step_id="duplicate", menu_options=["detach", "keep"]
+        )
+
+    async def async_step_detach(
+        self,
+        user_input: dict[str, Any] | None = None,  # noqa: ARG002 - a menu carries none
+    ) -> ConfigFlowResult:
+        """Remove the colliding tools from the agent, then create the entry."""
+        client = async_get_client(self.hass, self._api_key)
+        agent = await async_get_agent(client, self._agent_id)
+        agent_config = agent.conversation_config.agent
+        prompt = None if agent_config is None else agent_config.prompt
+        attached = [] if prompt is None else list(prompt.tool_ids or [])
+        remaining = [tool_id for tool_id in attached if tool_id not in self._colliding]
+
+        await async_patch_agent(
+            client,
+            self._agent_id,
+            conversation_config={"agent": {"prompt": {"tool_ids": remaining}}},
+        )
+        return self._create_entry()
+
+    async def async_step_keep(
+        self,
+        user_input: dict[str, Any] | None = None,  # noqa: ARG002 - a menu carries none
+    ) -> ConfigFlowResult:
+        """Leave the agent alone and create the entry."""
+        return self._create_entry()
+
     async def async_step_reauth(
         self,
-        entry_data: Mapping[str, Any],  # noqa: ARG002 - required by the base signature
+        entry_data: Mapping[str, Any],  # noqa: ARG002 - the entry already holds it
     ) -> ConfigFlowResult:
         """Start reauthentication at the confirm step."""
         return await self.async_step_reauth_confirm()

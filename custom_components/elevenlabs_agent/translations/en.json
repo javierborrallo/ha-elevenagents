@@ -24,6 +24,14 @@
         "data": {
           "api_key": "API key"
         }
+      },
+      "duplicate": {
+        "title": "This agent already has tools with these names",
+        "description": "This agent already has a tool called ha_call_service or ha_get_state. Two tools with the same name make the agent choose unpredictably.\n\nThis integration did not create that one, so it is not touched without your say-so. Detaching leaves it in your ElevenLabs workspace, where you can attach it again at any time.",
+        "menu_options": {
+          "detach": "Detach them from this agent",
+          "keep": "Continue anyway"
+        }
       }
     },
     "error": {

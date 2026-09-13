@@ -24,6 +24,14 @@
         "data": {
           "api_key": "Clave de API"
         }
+      },
+      "duplicate": {
+        "title": "Este agente ya tiene herramientas con estos nombres",
+        "description": "Este agente ya tiene una herramienta llamada ha_call_service o ha_get_state. Dos herramientas con el mismo nombre hacen que el agente elija de forma impredecible.\n\nEsta integración no ha creado esa, así que no se toca sin que lo digas. Desengancharla la deja en tu espacio de trabajo de ElevenLabs, donde puedes volver a engancharla cuando quieras.",
+        "menu_options": {
+          "detach": "Desengancharlas de este agente",
+          "keep": "Continuar igualmente"
+        }
       }
     },
     "error": {
