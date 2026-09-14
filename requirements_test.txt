@@ -15,7 +15,7 @@ elevenlabs>=2.51.0
 # A clean runner has none of them. Pins match homeassistant 2026.9.1.
 # pymicro-vad and pyspeex-noise are built from source: they ship no wheel
 # for this Python, and the runner has the compiler.
-PyTurboJPEG==1.8.3
+PyTurboJPEG==2.5.0
 ha-ffmpeg==3.2.2
 gazetteer-matcher==1.1.0
 hassil==3.12.0
