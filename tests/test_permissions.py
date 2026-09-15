@@ -52,13 +52,66 @@ async def test_resolve_target_includes_entity_area_and_device_area(
     assert outside.id not in resolved
 
 
-async def test_resolve_target_skips_entities_with_no_registry_entry(hass):
-    """An entity that is not in the registry cannot be selected."""
+async def test_resolve_target_keys_an_unregistered_entity_by_entity_id(hass):
+    """An entity outside the registry is keyed by its entity_id."""
     hass.states.async_set("light.unregistered", "on")
 
     resolved = resolve_target(hass, {"entity_id": ["light.unregistered"]})
 
-    assert resolved == set()
+    assert resolved == {"light.unregistered"}
+
+
+async def test_an_unregistered_entity_can_be_read_and_controlled(hass):
+    """The two key forms reach the same authorisation path."""
+    hass.states.async_set("lock.yaml_lock", "locked")
+    descriptions = {"lock": {"lock": {"target": {"entity": [{"domain": ["lock"]}]}}}}
+    perms = Permissions(
+        read=frozenset(),
+        control=frozenset({"lock.yaml_lock"}),
+        exceptions={},
+    )
+
+    assert authorise_read(hass, perms, "lock.yaml_lock") is None
+    assert (
+        authorise_action(hass, perms, "lock.yaml_lock", "lock.lock", descriptions)
+        is None
+    )
+    assert granted_services(hass, perms, "lock.yaml_lock", descriptions) == {
+        "lock.lock"
+    }
+
+
+async def test_an_exception_applies_to_an_unregistered_entity(hass):
+    """Exceptions are keyed the same way as the grant."""
+    hass.states.async_set("lock.yaml_lock", "locked")
+    descriptions = {
+        "lock": {
+            "lock": {"target": {"entity": [{"domain": ["lock"]}]}},
+            "unlock": {"target": {"entity": [{"domain": ["lock"]}]}},
+        }
+    }
+    perms = Permissions(
+        read=frozenset(),
+        control=frozenset({"lock.yaml_lock"}),
+        exceptions={"lock.yaml_lock": frozenset({"lock.unlock"})},
+    )
+
+    assert granted_services(hass, perms, "lock.yaml_lock", descriptions) == {
+        "lock.lock"
+    }
+    assert (
+        authorise_action(hass, perms, "lock.yaml_lock", "lock.unlock", descriptions)
+        == ERROR_ACTION_NOT_ALLOWED
+    )
+
+
+async def test_an_entity_id_that_holds_no_state_is_not_found(hass):
+    """A name the caller invented is not a permission key."""
+    perms = Permissions(
+        read=frozenset({"light.ghost"}), control=frozenset(), exceptions={}
+    )
+
+    assert authorise_read(hass, perms, "light.ghost") == ERROR_NOT_FOUND
 
 
 @pytest.mark.parametrize(

@@ -95,6 +95,32 @@ async def test_entity_with_no_area_has_no_empty_parenthesis(hass, entity_registr
     assert "()" not in description
 
 
+async def test_catalogue_carries_an_unregistered_entity(hass, entity_registry):
+    """An entity keyed by entity_id reaches the agent like any other."""
+    entry = entity_registry.async_get_or_create("light", "demo", "registered")
+    hass.states.async_set(entry.entity_id, "on", {"friendly_name": "Registered"})
+    hass.states.async_set("lock.yaml_lock", "locked", {"friendly_name": "Yaml Lock"})
+
+    enum, description = entity_catalogue(hass, {entry.id, "lock.yaml_lock"})
+
+    assert enum == [entry.entity_id, "lock.yaml_lock"]
+    assert "lock.yaml_lock = Yaml Lock" in description
+
+
+async def test_catalogue_drops_a_key_whose_registry_entry_is_gone(
+    hass, entity_registry
+):
+    """A deleted entity leaves a key that must not reach the agent."""
+    entry = entity_registry.async_get_or_create("light", "demo", "doomed")
+    hass.states.async_set(entry.entity_id, "on")
+    entity_registry.async_remove(entry.entity_id)
+
+    enum, description = entity_catalogue(hass, {entry.id})
+
+    assert enum == []
+    assert entry.id not in description
+
+
 def test_service_data_carries_types_and_no_constraints():
     """No minimum, no maximum, no enum. Home Assistant validates values."""
     translations = {

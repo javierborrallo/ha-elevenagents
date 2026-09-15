@@ -32,7 +32,7 @@ from .elevenlabs_client import (
     async_patch_agent,
     async_update_tool,
 )
-from .permissions import from_options, granted_services
+from .permissions import entity_id_for, from_options, granted_services
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -89,44 +89,42 @@ def _flatten_fields(fields: Mapping[str, Any]) -> dict[str, Any]:
     return flat
 
 
-def entity_catalogue(
-    hass: HomeAssistant, registry_ids: Iterable[str]
-) -> tuple[list[str], str]:
+def entity_catalogue(hass: HomeAssistant, keys: Iterable[str]) -> tuple[list[str], str]:
     """
     Build the entity_id enum and its readable catalogue text.
 
     Each line maps one entity_id to its spoken name and area. An entity
-    with no area is written without a trailing empty bracket.
+    with no area is written without a trailing empty bracket. Only a
+    registry entry carries an area.
     """
     registry = er.async_get(hass)
-    entries = [
-        entry
-        for entry in (
-            registry.entities.get_entry(registry_id) for registry_id in registry_ids
-        )
-        if entry is not None
-    ]
-    entries.sort(key=lambda entry: entry.entity_id)
+    resolved: list[tuple[str, er.RegistryEntry | None]] = []
+    for key in keys:
+        entity_id = entity_id_for(hass, key)
+        if entity_id is not None:
+            resolved.append((entity_id, registry.entities.get_entry(key)))
+    resolved.sort(key=lambda pair: pair[0])
 
     lines: list[str] = []
-    for entry in entries:
-        state = hass.states.get(entry.entity_id)
-        name = entry.entity_id
+    for entity_id, entry in resolved:
+        state = hass.states.get(entity_id)
+        name = entity_id
         if state is not None:
-            name = state.attributes.get("friendly_name", entry.entity_id)
+            name = state.attributes.get("friendly_name", entity_id)
 
-        area_id = er.async_get_effective_area_id(hass, entry)
         area = None
-        if area_id is not None:
-            area_entry = ar.async_get(hass).async_get_area(area_id)
-            area = None if area_entry is None else area_entry.name
+        if entry is not None:
+            area_id = er.async_get_effective_area_id(hass, entry)
+            if area_id is not None:
+                area_entry = ar.async_get(hass).async_get_area(area_id)
+                area = None if area_entry is None else area_entry.name
 
-        line = f"{entry.entity_id} = {name}"
+        line = f"{entity_id} = {name}"
         if area is not None:
             line = f"{line} ({area})"
         lines.append(line)
 
-    return [entry.entity_id for entry in entries], "\n".join(lines)
+    return [entity_id for entity_id, _ in resolved], "\n".join(lines)
 
 
 def service_data_properties(
@@ -243,8 +241,8 @@ def build_call_service(  # noqa: PLR0913, PLR0917 - the plan fixes this exact si
     entity_description = catalogue or "No entity is exposed to this tool."
 
     actions: set[str] = set()
-    for registry_id in perms.control:
-        actions |= granted_services(hass, perms, registry_id, descriptions)
+    for key in perms.control:
+        actions |= granted_services(hass, perms, key, descriptions)
     properties = service_data_properties(descriptions, actions, translations)
 
     return {
@@ -296,12 +294,11 @@ def _as_dict(value: Any) -> dict[str, Any]:
 
 def _controlled_domains(hass: HomeAssistant, perms: Permissions) -> set[str]:
     """Return the domains of every entity the user may control."""
-    registry = er.async_get(hass)
     domains: set[str] = set()
-    for registry_id in perms.control:
-        entry = registry.entities.get_entry(registry_id)
-        if entry is not None:
-            domains.add(entry.entity_id.partition(".")[0])
+    for key in perms.control:
+        entity_id = entity_id_for(hass, key)
+        if entity_id is not None:
+            domains.add(entity_id.partition(".")[0])
     return domains
 
 

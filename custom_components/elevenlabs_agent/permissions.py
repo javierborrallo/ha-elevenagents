@@ -1,4 +1,12 @@
-"""Permission model: what the agent may read and what it may do."""
+"""
+Permission model: what the agent may read and what it may do.
+
+A permission key identifies one entity. It is the entity registry ID when
+the entity has a registry entry, and the entity_id when it does not. An
+entity enters the registry only if its integration gives it a unique_id,
+so entities from YAML, templates and groups stay outside it. The two key
+forms never collide: a registry ID holds no dot, an entity_id always does.
+"""
 
 from __future__ import annotations
 
@@ -27,7 +35,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class Permissions:
-    """Entity registry IDs the user selected, and the services they removed."""
+    """Permission keys the user selected, and the services they removed."""
 
     read: frozenset[str]
     control: frozenset[str]
@@ -47,18 +55,14 @@ def from_options(options: Mapping[str, Any]) -> Permissions:
 
 
 def resolve_target(hass: HomeAssistant, target: dict[str, Any]) -> set[str]:
-    """
-    Resolve a target selector value to entity registry IDs.
-
-    An entity without a registry entry has no stable ID and is skipped.
-    """
+    """Resolve a target selector value to permission keys."""
     selected = async_extract_referenced_entity_ids(hass, TargetSelection(target))
     entities = er.async_get(hass)
 
     resolved: set[str] = set()
     for entity_id in selected.referenced | selected.indirectly_referenced:
-        if (entry := entities.async_get(entity_id)) is not None:
-            resolved.add(entry.id)
+        entry = entities.async_get(entity_id)
+        resolved.add(entity_id if entry is None else entry.id)
     return resolved
 
 
@@ -75,22 +79,36 @@ def matches_supported_features(state_features: int, target: dict[str, Any]) -> b
     return any(state_features & int(mask) == int(mask) for mask in required)
 
 
-def _entity_id_for(hass: HomeAssistant, registry_id: str) -> str | None:
-    """Return the current entity_id of a registry entry."""
-    entry = er.async_get(hass).entities.get_entry(registry_id)
-    return None if entry is None else entry.entity_id
+def entity_id_for(hass: HomeAssistant, key: str) -> str | None:
+    """
+    Return the entity_id a permission key points to.
+
+    A registry key whose entry is gone returns None. A key that is itself
+    an entity_id returns unchanged.
+    """
+    entry = er.async_get(hass).entities.get_entry(key)
+    if entry is not None:
+        return entry.entity_id
+    return key if "." in key else None
 
 
-def _registry_id_for(hass: HomeAssistant, entity_id: str) -> str | None:
-    """Return the registry ID of an entity_id."""
+def _key_for(hass: HomeAssistant, entity_id: str) -> str | None:
+    """
+    Return the permission key of an entity_id.
+
+    An entity outside the registry is keyed by its entity_id. It must hold
+    a state, so a name the caller invented never becomes a key.
+    """
     entry = er.async_get(hass).async_get(entity_id)
-    return None if entry is None else entry.id
+    if entry is not None:
+        return entry.id
+    return entity_id if hass.states.get(entity_id) is not None else None
 
 
 def granted_services(
     hass: HomeAssistant,
     perms: Permissions,
-    registry_id: str,
+    key: str,
     descriptions: Mapping[str, Mapping[str, Any]],
 ) -> set[str]:
     """
@@ -99,7 +117,7 @@ def granted_services(
     Only services of the entity's own domain are considered. Cross-domain
     services such as homeassistant.turn_off are never offered.
     """
-    entity_id = _entity_id_for(hass, registry_id)
+    entity_id = entity_id_for(hass, key)
     if entity_id is None:
         return set()
 
@@ -118,15 +136,15 @@ def granted_services(
         if any(matches_supported_features(features, one) for one in filters):
             granted.add(f"{domain}.{service}")
 
-    return granted - set(perms.exceptions.get(registry_id, ()))
+    return granted - set(perms.exceptions.get(key, ()))
 
 
 def authorise_read(
     hass: HomeAssistant, perms: Permissions, entity_id: str
 ) -> str | None:
     """Return an error code if the entity may not be read, else None."""
-    registry_id = _registry_id_for(hass, entity_id)
-    if registry_id is None or registry_id not in (perms.read | perms.control):
+    key = _key_for(hass, entity_id)
+    if key is None or key not in (perms.read | perms.control):
         return ERROR_NOT_FOUND
     return None
 
@@ -144,9 +162,9 @@ def authorise_action(
     The entity check runs before the action check. An unselected entity
     returns not_found whatever action was requested.
     """
-    registry_id = _registry_id_for(hass, entity_id)
-    if registry_id is None or registry_id not in perms.control:
+    key = _key_for(hass, entity_id)
+    if key is None or key not in perms.control:
         return ERROR_NOT_FOUND
-    if action not in granted_services(hass, perms, registry_id, descriptions):
+    if action not in granted_services(hass, perms, key, descriptions):
         return ERROR_ACTION_NOT_ALLOWED
     return None
