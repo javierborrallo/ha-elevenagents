@@ -40,12 +40,87 @@
       "no_agents": "Esta clave no alcanza ningún agente. Crea uno en el panel de ElevenLabs y vuelve a añadir la integración.",
       "agent_not_found": "Ese agente ya no existe en el espacio de trabajo que alcanza esta clave.",
       "cannot_connect": "Home Assistant no ha podido llegar a ElevenLabs. Revisa la conexión a internet de esta máquina e inténtalo otra vez.",
+      "rotation_unsynced": "No se ha podido actualizar ElevenLabs. El cambio no se ha confirmado; inténtalo otra vez.",
       "unknown": "Ha ocurrido algo inesperado. El detalle está en el registro de Home Assistant."
     },
     "abort": {
       "no_external_url": "Home Assistant no tiene URL externa, así que ElevenLabs no puede alcanzarlo. Configura una URL externa en Ajustes > Sistema > Red y vuelve a añadir la integración.",
       "already_configured": "Este agente ya está configurado.",
       "reauth_successful": "La clave nueva funciona. La integración vuelve a estar conectada."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Gestionar el acceso de este agente",
+        "description": "Estos ajustes controlan qué puede leer el agente, qué puede hacer y cómo está protegido el webhook.",
+        "menu_options": {
+          "read": "Entidades que el agente puede leer",
+          "control": "Entidades que el agente puede controlar",
+          "exceptions": "Quitar acciones concretas",
+          "timeout": "Tiempo de espera de confirmación",
+          "auto_expose": "Exposición automática",
+          "rotate_secret": "Rotar el secreto compartido",
+          "rotate_webhook": "Rotar el identificador del webhook"
+        }
+      },
+      "read": {
+        "title": "Elige qué puede leer el agente",
+        "description": "Elige entidades y áreas. Todo lo que selecciones aquí, y todo lo que selecciones para controlar, se puede leer.",
+        "data": {
+          "read_target": "Entidades y áreas"
+        }
+      },
+      "control": {
+        "title": "Elige qué puede controlar el agente",
+        "description": "Elige entidades y áreas. La siguiente pantalla muestra exactamente qué concede esto antes de guardarlo.",
+        "data": {
+          "control_target": "Entidades y áreas"
+        }
+      },
+      "granted": {
+        "title": "Confirma lo que esto concede",
+        "description": "No se guarda nada hasta que envíes esta pantalla. Si sales ahora, se descarta la selección que acabas de hacer.\n\n{granted}",
+        "data": {
+          "open_exceptions": "Quitar algunas acciones antes de guardar"
+        }
+      },
+      "exceptions": {
+        "title": "Quitar acciones concretas",
+        "description": "Cada entidad controlada aparece abajo con sus servicios, todos seleccionados. Desmarca los que el agente no debe realizar."
+      },
+      "timeout": {
+        "title": "Tiempo de espera de confirmación",
+        "description": "Home Assistant espera este número de segundos a que un dispositivo confirme una acción antes de reportarla como no confirmada. Debe quedar por debajo del tiempo de espera de respuesta de la herramienta en el panel de ElevenLabs.",
+        "data": {
+          "confirm_timeout": "Tiempo de espera (segundos)"
+        }
+      },
+      "auto_expose": {
+        "title": "Exposición automática",
+        "description": "Si está activado, una entidad añadida más tarde a Home Assistant se ofrece automáticamente al agente para leerla y controlarla.",
+        "data": {
+          "auto_expose": "Exponer las entidades nuevas automáticamente"
+        }
+      },
+      "rotate_secret": {
+        "title": "Rotar el secreto compartido",
+        "description": "Genera un secreto de webhook nuevo y lo envía a ElevenLabs de inmediato. El secreto anterior deja de funcionar en cuanto esto termina.",
+        "data": {
+          "confirm": "Rotar ahora"
+        }
+      },
+      "rotate_webhook": {
+        "title": "Rotar el identificador del webhook",
+        "description": "Registra una ruta de webhook nueva, traslada las herramientas del agente a ella y luego elimina la ruta anterior. Confirma para continuar.",
+        "data": {
+          "confirm": "Rotar ahora"
+        }
+      }
+    },
+    "error": {
+      "timeout_not_below_agent": "Este valor debe ser inferior al tiempo de espera de respuesta de la herramienta en el panel de ElevenLabs, o Home Assistant nunca llegará a reportar el resultado.",
+      "rotation_unsynced": "No se ha podido actualizar ElevenLabs. El cambio no se ha confirmado; inténtalo otra vez."
     }
   },
   "issues": {

@@ -40,12 +40,87 @@
       "no_agents": "This key reaches no agents. Create an agent in the ElevenLabs dashboard first, then add this integration again.",
       "agent_not_found": "This agent no longer exists in the workspace this key reaches.",
       "cannot_connect": "Home Assistant could not reach ElevenLabs. Check this machine's internet connection and try again.",
+      "rotation_unsynced": "ElevenLabs could not be updated. The change was not confirmed; try again.",
       "unknown": "Something unexpected went wrong. The Home Assistant log holds the detail."
     },
     "abort": {
       "already_configured": "This agent is already set up.",
       "reauth_successful": "The new API key works. The integration is connected again.",
       "no_external_url": "Home Assistant has no external URL, so ElevenLabs cannot reach it. Set an external URL under Settings > System > Network, then add this integration again."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Manage this agent's access",
+        "description": "These settings control what the agent can read, what it can do, and how the webhook is protected.",
+        "menu_options": {
+          "read": "Entities the agent can read",
+          "control": "Entities the agent can control",
+          "exceptions": "Remove specific actions",
+          "timeout": "Confirmation timeout",
+          "auto_expose": "Automatic exposure",
+          "rotate_secret": "Rotate the shared secret",
+          "rotate_webhook": "Rotate the webhook id"
+        }
+      },
+      "read": {
+        "title": "Choose what the agent can read",
+        "description": "Pick entities and areas. Everything selected here, and everything selected for control, can be read.",
+        "data": {
+          "read_target": "Entities and areas"
+        }
+      },
+      "control": {
+        "title": "Choose what the agent can control",
+        "description": "Pick entities and areas. The next screen shows exactly what this grants before it is saved.",
+        "data": {
+          "control_target": "Entities and areas"
+        }
+      },
+      "granted": {
+        "title": "Confirm what this grants",
+        "description": "Nothing is saved until you submit this screen. Leaving now discards the selection you just made.\n\n{granted}",
+        "data": {
+          "open_exceptions": "Remove some actions before saving"
+        }
+      },
+      "exceptions": {
+        "title": "Remove specific actions",
+        "description": "Every controlled entity is listed below with its services, all selected. Clear the ones the agent must not perform."
+      },
+      "auto_expose": {
+        "title": "Automatic exposure",
+        "description": "When on, an entity added to Home Assistant later is offered to the agent to read and control automatically.",
+        "data": {
+          "auto_expose": "Expose new entities automatically"
+        }
+      },
+      "rotate_secret": {
+        "title": "Rotate the shared secret",
+        "description": "Generates a new webhook secret and sends it to ElevenLabs immediately. The old secret stops working the moment this completes.",
+        "data": {
+          "confirm": "Rotate now"
+        }
+      },
+      "rotate_webhook": {
+        "title": "Rotate the webhook id",
+        "description": "Registers a new webhook path, moves the agent's tools to it, then removes the old path. Confirm to continue.",
+        "data": {
+          "confirm": "Rotate now"
+        }
+      },
+      "timeout": {
+        "title": "Confirmation timeout",
+        "description": "Home Assistant waits this many seconds for a device to confirm an action before reporting it unconfirmed. It must stay below the tool's response timeout in the ElevenLabs dashboard.",
+        "data": {
+          "confirm_timeout": "Timeout (seconds)"
+        }
+      }
+    },
+    "error": {
+      "timeout_not_below_agent": "This must be lower than the tool's response timeout in the ElevenLabs dashboard, or Home Assistant will never get to report the outcome.",
+      "rotation_unsynced": "ElevenLabs could not be updated. The change was not confirmed; try again."
     }
   },
   "issues": {
