@@ -30,3 +30,16 @@ updates:
       # This package pins one exact Home Assistant version, so updating it
       # changes Home Assistant too. Update it together with requirements_dev.txt.
       - dependency-name: "pytest-homeassistant-custom-component"
+      # Home Assistant declares these with an exact pin in the manifests of the
+      # base components the tests import. requirements_test.txt mirrors those
+      # pins, so the version is Home Assistant's to choose, not this repository's.
+      # The tests pass on any version because they only import these modules;
+      # a real installation refuses to set the component up.
+      - dependency-name: "PyTurboJPEG"
+      - dependency-name: "ha-ffmpeg"
+      - dependency-name: "gazetteer-matcher"
+      - dependency-name: "hassil"
+      - dependency-name: "home-assistant-intents"
+      - dependency-name: "mutagen"
+      - dependency-name: "pymicro-vad"
+      - dependency-name: "pyspeex-noise"
