@@ -100,6 +100,13 @@ with neither signed URLs nor a hostname allowlist, and the repair closes the doo
 already exposed is granted on the entities you already selected, and appears ticked the next
 time you open the exceptions screen. Selection is by entity, and it follows the entity.
 
+**Automatic exposure can grant control without a review.** Two switches, both off by default,
+decide whether entities registered after setup join: one for reading, one for control. Each acts
+inside the area, floor, device or label you selected for it, and only when an entity registers —
+a device you move into a watched area later is not reconsidered. So a device already inside your
+selection can gain an entity, through a firmware update or a new sub-device, and that entity
+becomes controllable without anyone having looked at it.
+
 **A timeout means unknown, not failure.** When Home Assistant does not confirm in time, the
 integration reports `unconfirmed`, and the action may still have run. The prompt block tells
 the agent to read the state instead of repeating the command.
