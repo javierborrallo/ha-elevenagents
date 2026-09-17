@@ -91,9 +91,10 @@
       },
       "auto_expose": {
         "title": "Automatic exposure",
-        "description": "When on, an entity added to Home Assistant later is offered to the agent to read and control automatically.",
+        "description": "New entities that register on a device already inside your selection can join by themselves. Reading and control are separate choices, and both start off. An entity that registers while Home Assistant is restarting, or while this integration is not loaded, is missed for good.",
         "data": {
-          "auto_expose": "Expose new entities automatically"
+          "auto_expose": "Let new entities be read",
+          "auto_control": "Let new entities be controlled"
         }
       },
       "rotate_secret": {

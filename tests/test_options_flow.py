@@ -15,6 +15,8 @@ from custom_components.elevenlabs_agent.const import (
     CONF_WEBHOOK_ID,
     DOMAIN,
     ISSUE_ROTATION_UNSYNCED,
+    OPT_AUTO_CONTROL,
+    OPT_AUTO_EXPOSE,
     OPT_CONFIRM_TIMEOUT,
     OPT_CONTROL_ENTITIES,
     OPT_CONTROL_TARGET,
@@ -66,6 +68,36 @@ async def test_a_step_preserves_options_it_did_not_touch(hass, setup_entry):
 
     assert setup_entry.options[OPT_CONFIRM_TIMEOUT] == 8
     assert setup_entry.options[OPT_READ_ENTITIES] == ["keep_me"]
+
+
+async def test_the_auto_expose_step_offers_reading_and_control_separately(
+    hass, setup_entry
+) -> None:
+    """Granting actions automatically is its own decision, never a side effect."""
+    result = await hass.config_entries.options.async_init(setup_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "auto_expose"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {OPT_AUTO_EXPOSE: True, OPT_AUTO_CONTROL: False}
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert setup_entry.options[OPT_AUTO_EXPOSE] is True
+    assert setup_entry.options[OPT_AUTO_CONTROL] is False
+
+
+async def test_both_switches_default_to_off(hass, setup_entry) -> None:
+    """An upgrade never turns something on."""
+    result = await hass.config_entries.options.async_init(setup_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "auto_expose"}
+    )
+
+    schema = result["data_schema"].schema
+    defaults = {str(key): key.default() for key in schema}
+    assert defaults[OPT_AUTO_EXPOSE] is False
+    assert defaults[OPT_AUTO_CONTROL] is False
 
 
 async def test_control_advances_to_the_grant_confirmation(

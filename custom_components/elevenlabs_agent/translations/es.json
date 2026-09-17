@@ -98,9 +98,10 @@
       },
       "auto_expose": {
         "title": "Exposición automática",
-        "description": "Si está activado, una entidad añadida más tarde a Home Assistant se ofrece automáticamente al agente para leerla y controlarla.",
+        "description": "Las entidades nuevas que se registran en un dispositivo ya incluido en tu selección pueden entrar solas. Leer y controlar son decisiones distintas, y las dos empiezan apagadas. Una entidad que se registra mientras Home Assistant se reinicia, o mientras esta integración no está cargada, se pierde para siempre.",
         "data": {
-          "auto_expose": "Exponer las entidades nuevas automáticamente"
+          "auto_expose": "Dejar que se lean las entidades nuevas",
+          "auto_control": "Dejar que se controlen las entidades nuevas"
         }
       },
       "rotate_secret": {

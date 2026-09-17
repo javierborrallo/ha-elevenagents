@@ -24,6 +24,7 @@ OPT_CONTROL_ENTITIES: Final = "control_entities"
 OPT_EXCEPTIONS: Final = "exceptions"
 OPT_CONFIRM_TIMEOUT: Final = "confirm_timeout"
 OPT_AUTO_EXPOSE: Final = "auto_expose"
+OPT_AUTO_CONTROL: Final = "auto_control"
 
 DEFAULT_CONFIRM_TIMEOUT: Final = 5
 DEFAULT_RESPONSE_TIMEOUT: Final = 20

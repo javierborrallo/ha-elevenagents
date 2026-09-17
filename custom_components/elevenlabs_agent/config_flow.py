@@ -44,6 +44,7 @@ from .const import (
     DEFAULT_RESPONSE_TIMEOUT,
     DOMAIN,
     ISSUE_ROTATION_UNSYNCED,
+    OPT_AUTO_CONTROL,
     OPT_AUTO_EXPOSE,
     OPT_CONFIRM_TIMEOUT,
     OPT_CONTROL_ENTITIES,
@@ -479,12 +480,26 @@ class ElevenLabsAgentOptionsFlow(OptionsFlowWithReload):
     async def async_step_auto_expose(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Toggle exposing a newly added entity to the agent automatically."""
+        """Set whether newly registered entities are read or controlled."""
         if user_input is not None:
-            return self._merge(**{OPT_AUTO_EXPOSE: user_input[OPT_AUTO_EXPOSE]})
+            return self._merge(
+                **{
+                    OPT_AUTO_EXPOSE: user_input[OPT_AUTO_EXPOSE],
+                    OPT_AUTO_CONTROL: user_input[OPT_AUTO_CONTROL],
+                }
+            )
 
-        current = self.config_entry.options.get(OPT_AUTO_EXPOSE, False)
-        schema = vol.Schema({vol.Required(OPT_AUTO_EXPOSE, default=current): bool})
+        options = self.config_entry.options
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    OPT_AUTO_EXPOSE, default=options.get(OPT_AUTO_EXPOSE, False)
+                ): bool,
+                vol.Required(
+                    OPT_AUTO_CONTROL, default=options.get(OPT_AUTO_CONTROL, False)
+                ): bool,
+            }
+        )
         return self.async_show_form(step_id="auto_expose", data_schema=schema)
 
     async def async_step_rotate_secret(
