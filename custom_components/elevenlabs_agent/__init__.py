@@ -20,6 +20,7 @@ from .elevenlabs_client import (
     async_get_client,
     async_patch_agent,
 )
+from .expose import async_track_new_entities
 from .services import async_setup_services
 from .tool_sync import async_sync_tools
 from .webhook import TokenBucket, async_register, async_unregister
@@ -64,6 +65,7 @@ async def async_setup_entry(
 
     async_register(hass, entry)
     entry.async_on_unload(lambda: async_unregister(hass, entry))
+    entry.async_on_unload(async_track_new_entities(hass, entry))
 
     try:
         await async_sync_tools(hass, entry, client)
