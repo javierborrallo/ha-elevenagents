@@ -184,9 +184,10 @@ integration only ever acts on the IDs it stored when it created them.
 | Version | Scope |
 | --- | --- |
 | 0.1.0 | Config flow, secure webhook, `ha_get_state` and `ha_call_service`, UI entity selection, permission allowlist, tool synchronisation |
-| 0.2 | A configuration panel replacing the options flow, a reworked action-restriction screen, `ha_list_entities`, `ha_list_areas`, richer tool descriptions, sync diffs and status |
-| 0.3 | Push Home Assistant events to the agent |
-| 0.4 | Confirmation for sensitive actions |
+| 0.2 | A configuration panel replacing the options flow, a reworked action-restriction screen, the ElevenLabs settings this integration writes exposed as settings you edit here, and an editor that offers the prompt block once at setup |
+| 0.3 | `ha_list_entities`, `ha_list_areas`, richer tool descriptions, sync diffs and status, diagnostics |
+| 0.4 | Push Home Assistant events to the agent |
+| 0.5 | Confirmation for sensitive actions |
 
 ## Installation
 
