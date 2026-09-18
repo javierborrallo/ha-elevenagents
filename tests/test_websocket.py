@@ -638,6 +638,7 @@ async def test_agent_get_returns_the_accounts_own_setting(
         result = (await client.receive_json())["result"]
 
     assert result["settings"] == {"pre_tool_speech": "off"}
+    assert get_tool.await_args is not None
     assert get_tool.await_args.args[1] == "tool_123"
 
 
@@ -692,6 +693,7 @@ async def test_agent_save_writes_the_prompt(
         result = (await client.receive_json())["result"]
 
     assert result["outcome"] == "ok"
+    assert patched.await_args is not None
     sent = patched.await_args.kwargs["conversation_config"]
     assert sent["agent"]["prompt"]["prompt"] == "# Tools\n..."
 

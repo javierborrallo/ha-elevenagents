@@ -64,7 +64,7 @@ async def _new_entity_in(
     hass, entity_registry, area_id, domain="light", name="new"
 ) -> er.RegistryEntry:
     """Register an entity and place it in an area."""
-    entry = entity_registry.async_get_or_create(domain, "demo", name)
+    entry: er.RegistryEntry = entity_registry.async_get_or_create(domain, "demo", name)
     entity_registry.async_update_entity(entry.entity_id, area_id=area_id)
     return entry
 
