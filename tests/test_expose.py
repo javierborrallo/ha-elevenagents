@@ -12,6 +12,7 @@ from pytest_homeassistant_custom_component.common import async_fire_time_changed
 from custom_components.elevenlabs_agent.const import (
     OPT_AUTO_CONTROL,
     OPT_AUTO_EXPOSE,
+    OPT_AUTO_EXPOSE_AREAS,
     OPT_CONTROL_ENTITIES,
     OPT_CONTROL_TARGET,
     OPT_READ_ENTITIES,
@@ -314,3 +315,114 @@ async def test_tearing_down_before_the_debounce_elapses_writes_nothing(
     await hass.async_block_till_done()
 
     assert OPT_READ_ENTITIES not in setup_entry.options
+
+
+async def test_the_areas_key_drives_both_switches_when_present(
+    hass, setup_entry, entity_registry, area_registry, freezer
+) -> None:
+    """The panel writes one area list; both switches watch it independently."""
+    area = area_registry.async_create("Salon")
+    hass.config_entries.async_update_entry(
+        setup_entry,
+        options={
+            OPT_AUTO_EXPOSE: True,
+            OPT_AUTO_CONTROL: True,
+            OPT_AUTO_EXPOSE_AREAS: [area.id],
+        },
+    )
+    await hass.async_block_till_done()
+
+    entry = await _new_entity_in(hass, entity_registry, area.id)
+    freezer.tick(DEBOUNCE)
+    await hass.async_block_till_done()
+
+    assert entry.id in setup_entry.options[OPT_READ_ENTITIES]
+    assert entry.id in setup_entry.options[OPT_CONTROL_ENTITIES]
+
+
+async def test_the_areas_key_lets_only_the_control_switch_grant_control(
+    hass, setup_entry, entity_registry, area_registry, freezer
+) -> None:
+    """With only control on, reading stays untouched even with the areas key set."""
+    area = area_registry.async_create("Salon")
+    hass.config_entries.async_update_entry(
+        setup_entry,
+        options={OPT_AUTO_CONTROL: True, OPT_AUTO_EXPOSE_AREAS: [area.id]},
+    )
+    await hass.async_block_till_done()
+
+    entry = await _new_entity_in(hass, entity_registry, area.id, domain="switch")
+    freezer.tick(DEBOUNCE)
+    await hass.async_block_till_done()
+
+    assert entry.id in setup_entry.options[OPT_CONTROL_ENTITIES]
+    assert entry.id not in setup_entry.options.get(OPT_READ_ENTITIES, [])
+
+
+async def test_no_areas_key_falls_back_to_the_stored_target(
+    hass, setup_entry, entity_registry, area_registry, freezer
+) -> None:
+    """A 0.1.1 entry with no areas key keeps working from its stored target."""
+    area = area_registry.async_create("Salon")
+    hass.config_entries.async_update_entry(
+        setup_entry,
+        options={OPT_READ_TARGET: {"area_id": [area.id]}, OPT_AUTO_EXPOSE: True},
+    )
+    await hass.async_block_till_done()
+
+    entry = await _new_entity_in(hass, entity_registry, area.id)
+    freezer.tick(DEBOUNCE)
+    await hass.async_block_till_done()
+
+    assert entry.id in setup_entry.options[OPT_READ_ENTITIES]
+
+
+async def test_the_areas_key_overrides_a_stale_target(
+    hass, setup_entry, entity_registry, area_registry, freezer
+) -> None:
+    """A panel-set areas list wins over a still-stored 0.1.1 target."""
+    old_target_area = area_registry.async_create("Garaje")
+    new_area = area_registry.async_create("Salon")
+    hass.config_entries.async_update_entry(
+        setup_entry,
+        options={
+            OPT_READ_TARGET: {"area_id": [old_target_area.id]},
+            OPT_AUTO_EXPOSE: True,
+            OPT_AUTO_EXPOSE_AREAS: [new_area.id],
+        },
+    )
+    await hass.async_block_till_done()
+
+    in_new_area = await _new_entity_in(
+        hass, entity_registry, new_area.id, name="in_new"
+    )
+    in_old_area = await _new_entity_in(
+        hass, entity_registry, old_target_area.id, name="in_old"
+    )
+    freezer.tick(DEBOUNCE)
+    await hass.async_block_till_done()
+
+    assert in_new_area.id in setup_entry.options[OPT_READ_ENTITIES]
+    assert in_old_area.id not in setup_entry.options.get(OPT_READ_ENTITIES, [])
+
+
+async def test_an_empty_areas_key_overrides_a_stale_target(
+    hass, setup_entry, entity_registry, area_registry, freezer
+) -> None:
+    """Clearing every area in the panel stops watching the old target's areas."""
+    area = area_registry.async_create("Salon")
+    hass.config_entries.async_update_entry(
+        setup_entry,
+        options={
+            OPT_READ_TARGET: {"area_id": [area.id]},
+            OPT_AUTO_EXPOSE: True,
+            OPT_AUTO_EXPOSE_AREAS: [],
+        },
+    )
+    await hass.async_block_till_done()
+
+    entry = await _new_entity_in(hass, entity_registry, area.id)
+    freezer.tick(DEBOUNCE)
+    await hass.async_block_till_done()
+
+    assert entry.id not in setup_entry.options.get(OPT_READ_ENTITIES, [])

@@ -13,6 +13,7 @@ from .const import (
     AUTO_EXPOSE_DEBOUNCE,
     OPT_AUTO_CONTROL,
     OPT_AUTO_EXPOSE,
+    OPT_AUTO_EXPOSE_AREAS,
     OPT_CONTROL_ENTITIES,
     OPT_CONTROL_TARGET,
     OPT_READ_ENTITIES,
@@ -26,6 +27,18 @@ if TYPE_CHECKING:
     from . import ElevenLabsAgentConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _watched_target(options: dict[str, Any], target_key: str) -> dict[str, Any]:
+    """
+    Return the target a switch watches.
+
+    OPT_AUTO_EXPOSE_AREAS wins whenever it is present, even next to a
+    stored target. Its absence falls back to the switch's own target.
+    """
+    if OPT_AUTO_EXPOSE_AREAS in options:
+        return {"area_id": list(options[OPT_AUTO_EXPOSE_AREAS])}
+    return options.get(target_key) or {}
 
 
 def _permission_keys(hass: HomeAssistant, entity_ids: set[str]) -> set[str]:
@@ -76,7 +89,7 @@ def async_track_new_entities(
         ):
             if not options.get(switch, False):
                 continue
-            target = options.get(target_key) or {}
+            target = _watched_target(options, target_key)
             joining = registered & resolve_target(hass, target)
             if not joining:
                 continue
