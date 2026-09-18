@@ -43,3 +43,4 @@ updates:
       - dependency-name: "mutagen"
       - dependency-name: "pymicro-vad"
       - dependency-name: "pyspeex-noise"
+      - dependency-name: "home-assistant-frontend"

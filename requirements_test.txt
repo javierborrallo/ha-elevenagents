@@ -15,6 +15,9 @@ elevenlabs>=2.68.0
 # A clean runner has none of them. Pins match homeassistant 2026.9.1.
 # pymicro-vad and pyspeex-noise are built from source: they ship no wheel
 # for this Python, and the runner has the compiler.
+# panel_custom pulls in frontend, which ships the web assets.
+# The integration declares panel_custom so the 0.2 panel can register.
+home-assistant-frontend==20260826.6
 PyTurboJPEG==1.8.3
 ha-ffmpeg==3.2.2
 gazetteer-matcher==1.1.0
