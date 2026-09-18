@@ -24,6 +24,7 @@ from .expose import async_track_new_entities
 from .services import async_setup_services
 from .tool_sync import async_sync_tools
 from .webhook import TokenBucket, async_register, async_unregister
+from .websocket import async_register_commands
 
 if TYPE_CHECKING:
     from elevenlabs import AsyncElevenLabs
@@ -51,8 +52,9 @@ async def async_setup(
     hass: HomeAssistant,
     config: ConfigType,  # noqa: ARG001 - config-entry-only integration
 ) -> bool:
-    """Register the sync_tools service, independent of any loaded entry."""
+    """Register the sync_tools service and the panel's commands, once."""
     async_setup_services(hass)
+    async_register_commands(hass)
     return True
 
 

@@ -1,0 +1,393 @@
+"""WebSocket commands the configuration panel calls."""
+
+from __future__ import annotations
+
+import secrets
+from typing import TYPE_CHECKING, Any
+
+import voluptuous as vol
+from homeassistant.components import webhook, websocket_api
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import issue_registry as ir
+
+from .const import (
+    CONF_AGENT_ID,
+    CONF_RESPONSE_TIMEOUT,
+    CONF_TOOL_IDS,
+    CONF_WEBHOOK_ID,
+    CONF_WEBHOOK_SECRET,
+    DEFAULT_CONFIRM_TIMEOUT,
+    DEFAULT_RESPONSE_TIMEOUT,
+    DOMAIN,
+    ISSUE_ROTATION_UNSYNCED,
+    OPT_AGENT_SETTINGS,
+    OPT_AUTO_CONTROL,
+    OPT_AUTO_EXPOSE,
+    OPT_AUTO_EXPOSE_AREAS,
+    OPT_CONFIRM_TIMEOUT,
+    OPT_CONTROL_ENTITIES,
+    OPT_EXCEPTIONS,
+    OPT_READ_ENTITIES,
+    TOOL_GET_STATE,
+)
+from .elevenlabs_client import (
+    ElevenLabsError,
+    async_get_agent,
+    async_get_tool,
+    async_patch_agent,
+)
+from .permissions import entity_id_for, resolve_target
+from .tool_sync import AGENT_SETTING_DEFAULTS, ToolSyncError, async_sync_tools
+from .webhook import WEBHOOK_NAME, async_handle_webhook
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable
+
+    from homeassistant.config_entries import ConfigEntry
+
+
+def _entry(hass: HomeAssistant, entry_id: str) -> ConfigEntry | None:
+    """Return this integration's entry with that id, or None."""
+    entry = hass.config_entries.async_get_entry(entry_id)
+    if entry is None or entry.domain != DOMAIN:
+        return None
+    return entry
+
+
+def _entity_ids(hass: HomeAssistant, keys: Iterable[str]) -> list[str]:
+    """Return the entity_id of each key that still exists, sorted."""
+    resolved = (entity_id_for(hass, key) for key in keys)
+    return sorted(entity_id for entity_id in resolved if entity_id is not None)
+
+
+def _exception_entity_ids(
+    hass: HomeAssistant, exceptions: dict[str, Any]
+) -> dict[str, list[str]]:
+    """Key the exceptions by entity_id instead of by permission key."""
+    result: dict[str, list[str]] = {}
+    for key, services in exceptions.items():
+        entity_id = entity_id_for(hass, key)
+        if entity_id is not None:
+            result[entity_id] = sorted(services)
+    return result
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "elevenlabs_agent/config/get",
+        vol.Required("entry_id"): str,
+    }
+)
+@websocket_api.require_admin
+@callback
+def config_get(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return the stored configuration. This never reaches the network."""
+    entry = _entry(hass, msg["entry_id"])
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "Unknown config entry")
+        return
+
+    options = entry.options
+    read = sorted(options.get(OPT_READ_ENTITIES, ()))
+    control = sorted(options.get(OPT_CONTROL_ENTITIES, ()))
+    exceptions = dict(options.get(OPT_EXCEPTIONS, {}))
+
+    connection.send_result(
+        msg["id"],
+        {
+            "read_entities": read,
+            "control_entities": control,
+            "read_entity_ids": _entity_ids(hass, read),
+            "control_entity_ids": _entity_ids(hass, control),
+            "exceptions": exceptions,
+            "exception_entity_ids": _exception_entity_ids(hass, exceptions),
+            "confirm_timeout": options.get(
+                OPT_CONFIRM_TIMEOUT, DEFAULT_CONFIRM_TIMEOUT
+            ),
+            "auto_expose": options.get(OPT_AUTO_EXPOSE, False),
+            "auto_control": options.get(OPT_AUTO_CONTROL, False),
+            "auto_expose_areas": sorted(options.get(OPT_AUTO_EXPOSE_AREAS, ())),
+            "agent_settings": dict(options.get(OPT_AGENT_SETTINGS, {})),
+            "agent_timeout": entry.data.get(
+                CONF_RESPONSE_TIMEOUT, DEFAULT_RESPONSE_TIMEOUT
+            ),
+            "configured": bool(read or control),
+        },
+    )
+
+
+BLOCKS = ("entities", "exceptions", "settings", "auto_expose")
+SYNCING_BLOCKS = ("entities", "exceptions", "settings")
+
+
+def _entities_block(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
+    """Resolve the two lists of entity ids to permission keys."""
+    return {
+        OPT_READ_ENTITIES: sorted(
+            resolve_target(hass, {"entity_id": list(data.get("read", ()))})
+        ),
+        OPT_CONTROL_ENTITIES: sorted(
+            resolve_target(hass, {"entity_id": list(data.get("control", ()))})
+        ),
+    }
+
+
+def _exceptions_block(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
+    """Key the removed services by permission key, not by entity id."""
+    exceptions: dict[str, list[str]] = {}
+    for entity_id, services in data.items():
+        keys = resolve_target(hass, {"entity_id": [entity_id]})
+        for key in keys:
+            exceptions[key] = sorted(services)
+    return {OPT_EXCEPTIONS: exceptions}
+
+
+def _auto_expose_block(_hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
+    """Store both switches and the areas they watch."""
+    return {
+        OPT_AUTO_EXPOSE: bool(data.get("read", False)),
+        OPT_AUTO_CONTROL: bool(data.get("control", False)),
+        OPT_AUTO_EXPOSE_AREAS: sorted(data.get("areas", ())),
+    }
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "elevenlabs_agent/config/save",
+        vol.Required("entry_id"): str,
+        vol.Required("block"): vol.In(BLOCKS),
+        vol.Required("data"): dict,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def config_save(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Write one block of options, then synchronise if the block needs it."""
+    entry = _entry(hass, msg["entry_id"])
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "Unknown config entry")
+        return
+
+    block, data = msg["block"], msg["data"]
+
+    if block == "settings":
+        agent_timeout = entry.data.get(CONF_RESPONSE_TIMEOUT, DEFAULT_RESPONSE_TIMEOUT)
+        value = int(data.get("confirm_timeout", DEFAULT_CONFIRM_TIMEOUT))
+        if value >= agent_timeout:
+            connection.send_result(
+                msg["id"],
+                {"outcome": "failed", "detail": "timeout_not_below_agent"},
+            )
+            return
+        keys: dict[str, Any] = {OPT_CONFIRM_TIMEOUT: value}
+        if "agent_settings" in data:
+            keys[OPT_AGENT_SETTINGS] = dict(data["agent_settings"])
+    elif block == "entities":
+        keys = _entities_block(hass, data)
+    elif block == "exceptions":
+        keys = _exceptions_block(hass, data)
+    elif block == "auto_expose":
+        keys = _auto_expose_block(hass, data)
+    else:
+        error = f"Unhandled block: {block}"
+        raise ValueError(error)
+
+    hass.config_entries.async_update_entry(entry, options={**entry.options, **keys})
+
+    if block not in SYNCING_BLOCKS:
+        connection.send_result(msg["id"], {"outcome": "ok", "detail": None})
+        return
+
+    if entry.state is not ConfigEntryState.LOADED:
+        connection.send_result(
+            msg["id"],
+            {"outcome": "saved_not_sent", "detail": "The config entry is not loaded."},
+        )
+        return
+
+    try:
+        await async_sync_tools(hass, entry, entry.runtime_data.client)
+    except (ElevenLabsError, ToolSyncError) as err:
+        connection.send_result(
+            msg["id"], {"outcome": "saved_not_sent", "detail": str(err)}
+        )
+        return
+
+    connection.send_result(msg["id"], {"outcome": "ok", "detail": None})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "elevenlabs_agent/agent/get",
+        vol.Required("entry_id"): str,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def agent_get(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return the agent's current system prompt and its tool settings."""
+    entry = _entry(hass, msg["entry_id"])
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "Unknown config entry")
+        return
+    if entry.state is not ConfigEntryState.LOADED:
+        connection.send_error(
+            msg["id"], "not_loaded", "The config entry is not loaded."
+        )
+        return
+
+    tool_id = entry.data.get(CONF_TOOL_IDS, {}).get(TOOL_GET_STATE)
+    try:
+        agent = await async_get_agent(
+            entry.runtime_data.client, entry.data[CONF_AGENT_ID]
+        )
+        tool = (
+            None
+            if tool_id is None
+            else await async_get_tool(entry.runtime_data.client, tool_id)
+        )
+    except ElevenLabsError as err:
+        connection.send_error(msg["id"], "unreachable", str(err))
+        return
+
+    config = agent.conversation_config.agent
+    prompt = "" if config is None or config.prompt is None else config.prompt.prompt
+
+    settings = dict(AGENT_SETTING_DEFAULTS)
+    if tool is not None:
+        settings = {
+            key: getattr(tool.tool_config, key, None) or default
+            for key, default in AGENT_SETTING_DEFAULTS.items()
+        }
+
+    connection.send_result(msg["id"], {"prompt": prompt or "", "settings": settings})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "elevenlabs_agent/agent/save",
+        vol.Required("entry_id"): str,
+        vol.Required("prompt"): str,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def agent_save(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Write the system prompt the user submitted, and nothing else."""
+    entry = _entry(hass, msg["entry_id"])
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "Unknown config entry")
+        return
+    if entry.state is not ConfigEntryState.LOADED:
+        connection.send_result(
+            msg["id"],
+            {"outcome": "failed", "detail": "The config entry is not loaded."},
+        )
+        return
+
+    try:
+        await async_patch_agent(
+            entry.runtime_data.client,
+            entry.data[CONF_AGENT_ID],
+            conversation_config={"agent": {"prompt": {"prompt": msg["prompt"]}}},
+        )
+    except ElevenLabsError as err:
+        connection.send_result(msg["id"], {"outcome": "failed", "detail": str(err)})
+        return
+
+    connection.send_result(msg["id"], {"outcome": "ok", "detail": None})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "elevenlabs_agent/rotate",
+        vol.Required("entry_id"): str,
+        vol.Required("what"): vol.In(("secret", "webhook")),
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def rotate(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Replace the shared secret or the webhook id, rolling back on failure."""
+    entry = _entry(hass, msg["entry_id"])
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "Unknown config entry")
+        return
+    if entry.state is not ConfigEntryState.LOADED:
+        connection.send_result(
+            msg["id"],
+            {"outcome": "failed", "detail": "The config entry is not loaded."},
+        )
+        return
+
+    rollback: Callable[[], None] | None
+    if msg["what"] == "secret":
+        hass.config_entries.async_update_entry(
+            entry,
+            data={**entry.data, CONF_WEBHOOK_SECRET: secrets.token_urlsafe(32)},
+        )
+        rollback = None
+    else:
+        old_id = entry.data[CONF_WEBHOOK_ID]
+        new_id = webhook.async_generate_id()
+        webhook.async_register(
+            hass,
+            DOMAIN,
+            WEBHOOK_NAME,
+            new_id,
+            async_handle_webhook,
+            local_only=False,
+            allowed_methods=["POST"],
+        )
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_WEBHOOK_ID: new_id}
+        )
+
+        def rollback() -> None:
+            """Put the old path back and retire the one that never worked."""
+            hass.config_entries.async_update_entry(
+                entry, data={**entry.data, CONF_WEBHOOK_ID: old_id}
+            )
+            webhook.async_unregister(hass, new_id)
+
+    try:
+        await async_sync_tools(hass, entry, entry.runtime_data.client)
+    except (ElevenLabsError, ToolSyncError) as err:
+        if rollback is not None:
+            rollback()
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            ISSUE_ROTATION_UNSYNCED,
+            is_fixable=False,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key=ISSUE_ROTATION_UNSYNCED,
+        )
+        connection.send_result(msg["id"], {"outcome": "failed", "detail": str(err)})
+        return
+
+    if msg["what"] == "webhook":
+        webhook.async_unregister(hass, old_id)
+    ir.async_delete_issue(hass, DOMAIN, ISSUE_ROTATION_UNSYNCED)
+    connection.send_result(msg["id"], {"outcome": "ok", "detail": None})
+
+
+@callback
+def async_register_commands(hass: HomeAssistant) -> None:
+    """Register every command the panel uses."""
+    websocket_api.async_register_command(hass, config_get)
+    websocket_api.async_register_command(hass, config_save)
+    websocket_api.async_register_command(hass, agent_get)
+    websocket_api.async_register_command(hass, agent_save)
+    websocket_api.async_register_command(hass, rotate)
