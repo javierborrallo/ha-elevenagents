@@ -10,17 +10,20 @@ import pytest
 
 from custom_components.elevenlabs_agent.const import (
     CONF_TOOL_IDS,
+    OPT_AGENT_SETTINGS,
     TOOL_CALL_SERVICE,
     TOOL_GET_STATE,
 )
 from custom_components.elevenlabs_agent.elevenlabs_client import ElevenLabsNotFoundError
 from custom_components.elevenlabs_agent.permissions import Permissions
 from custom_components.elevenlabs_agent.tool_sync import (
+    AGENT_SETTING_DEFAULTS,
     CALL_SERVICE_DESCRIPTION,
     GET_STATE_DESCRIPTION,
     ToolSyncError,
     _check_readback,
     _flatten_fields,
+    agent_settings,
     async_sync_tools,
     build_call_service,
     build_get_state,
@@ -260,7 +263,14 @@ async def test_call_service_schema_shape(hass, entity_registry):
 
     perms = Permissions(read=frozenset(), control=frozenset({entry.id}), exceptions={})
     config = build_call_service(
-        hass, perms, DESCRIPTIONS, {}, "https://example/hook", "sekrit", 20
+        hass,
+        perms,
+        DESCRIPTIONS,
+        {},
+        "https://example/hook",
+        "sekrit",
+        20,
+        settings=AGENT_SETTING_DEFAULTS,
     )
 
     properties = config["api_schema"]["request_body_schema"]["properties"]
@@ -279,7 +289,14 @@ async def test_get_state_schema_shape(hass, entity_registry):
     hass.states.async_set(entry.entity_id, "on", {"friendly_name": "One"})
 
     perms = Permissions(read=frozenset({entry.id}), control=frozenset(), exceptions={})
-    config = build_get_state(hass, perms, "https://example/hook", "sekrit", 20)
+    config = build_get_state(
+        hass,
+        perms,
+        "https://example/hook",
+        "sekrit",
+        20,
+        settings=AGENT_SETTING_DEFAULTS,
+    )
 
     schema = config["api_schema"]["request_body_schema"]
     properties = schema["properties"]
@@ -308,9 +325,23 @@ async def test_get_state_reads_read_and_control_call_service_reads_control_only(
         exceptions={},
     )
 
-    get_state = build_get_state(hass, perms, "https://example/hook", "sekrit", 20)
+    get_state = build_get_state(
+        hass,
+        perms,
+        "https://example/hook",
+        "sekrit",
+        20,
+        settings=AGENT_SETTING_DEFAULTS,
+    )
     call_service = build_call_service(
-        hass, perms, DESCRIPTIONS, {}, "https://example/hook", "sekrit", 20
+        hass,
+        perms,
+        DESCRIPTIONS,
+        {},
+        "https://example/hook",
+        "sekrit",
+        20,
+        settings=AGENT_SETTING_DEFAULTS,
     )
 
     get_state_entities = get_state["api_schema"]["request_body_schema"]["properties"][
@@ -322,6 +353,36 @@ async def test_get_state_reads_read_and_control_call_service_reads_control_only(
 
     assert set(get_state_entities) == {readable.entity_id, controllable.entity_id}
     assert call_service_entities == [controllable.entity_id]
+
+
+# --- Task 3 (0.2): agent behaviour settings ride with the tool --------------
+
+
+def test_agent_settings_fall_back_to_the_platform_defaults() -> None:
+    """An entry that never set it still produces a complete block."""
+    assert agent_settings({}) == {"pre_tool_speech": "auto"}
+
+
+def test_agent_settings_take_what_the_user_chose() -> None:
+    """A stored value wins over the default."""
+    stored = {OPT_AGENT_SETTINGS: {"pre_tool_speech": "force"}}
+
+    assert agent_settings(stored) == {"pre_tool_speech": "force"}
+
+
+async def test_the_built_tool_carries_the_settings(hass) -> None:
+    """What the user chose reaches the tool definition, not just the options."""
+    perms = Permissions(read=frozenset(), control=frozenset(), exceptions={})
+    built = build_get_state(
+        hass,
+        perms,
+        "https://example/hook",
+        "secret",
+        20,
+        settings={"pre_tool_speech": "force"},
+    )
+
+    assert built["pre_tool_speech"] == "force"
 
 
 # --- Task 12: synchronising, owning and attaching ---------------------------
@@ -536,8 +597,19 @@ def test_both_tool_configs_declare_their_type(hass) -> None:
     perms = Permissions(read=frozenset(), control=frozenset(), exceptions={})
 
     for config in (
-        build_get_state(hass, perms, "https://x.invalid/h", "s", 20),
-        build_call_service(hass, perms, {}, {}, "https://x.invalid/h", "s", 20),
+        build_get_state(
+            hass, perms, "https://x.invalid/h", "s", 20, settings=AGENT_SETTING_DEFAULTS
+        ),
+        build_call_service(
+            hass,
+            perms,
+            {},
+            {},
+            "https://x.invalid/h",
+            "s",
+            20,
+            settings=AGENT_SETTING_DEFAULTS,
+        ),
     ):
         assert config["type"] == "webhook"
 
@@ -603,4 +675,23 @@ def test_readback_still_catches_a_changed_value() -> None:
     got = {"name": "ha_get_state", "description": "Something else.", "api_schema": {}}
 
     with pytest.raises(ToolSyncError):
+        _check_readback("ha_get_state", sent, got)
+
+
+def test_readback_catches_a_discarded_pre_tool_speech() -> None:
+    """A setting the API silently reverts must not sync as if it landed."""
+    sent = {
+        "name": "ha_get_state",
+        "description": "Read state.",
+        "api_schema": {},
+        "pre_tool_speech": "force",
+    }
+    got = {
+        "name": "ha_get_state",
+        "description": "Read state.",
+        "api_schema": {},
+        "pre_tool_speech": "auto",
+    }
+
+    with pytest.raises(ToolSyncError, match="pre_tool_speech"):
         _check_readback("ha_get_state", sent, got)

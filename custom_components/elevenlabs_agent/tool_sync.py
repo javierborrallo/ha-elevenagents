@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from homeassistant.components import webhook
 from homeassistant.helpers import area_registry as ar
@@ -20,6 +20,7 @@ from .const import (
     DEFAULT_RESPONSE_TIMEOUT,
     DISCRIMINATOR_CALL_SERVICE,
     DISCRIMINATOR_GET_STATE,
+    OPT_AGENT_SETTINGS,
     SECRET_HEADER,
     TOOL_CALL_SERVICE,
     TOOL_GET_STATE,
@@ -66,8 +67,13 @@ _SELECTOR_TYPES: dict[str, str] = {
     "boolean": "boolean",
 }
 
-# response_timeout_secs is excluded on purpose. The API may normalise it.
-COMPARED_FIELDS: tuple[str, ...] = ("name", "description", "api_schema")
+# Fields this integration checks in the tool's read-back after a write.
+COMPARED_FIELDS: tuple[str, ...] = (
+    "name",
+    "description",
+    "api_schema",
+    "pre_tool_speech",
+)
 
 
 class ToolSyncError(Exception):
@@ -184,12 +190,27 @@ def service_data_properties(
     return properties
 
 
-def build_get_state(
+AGENT_SETTING_DEFAULTS: Final = {
+    "pre_tool_speech": "auto",
+}
+
+
+def agent_settings(options: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the tool behaviour block, with the platform defaults filled in."""
+    stored = options.get(OPT_AGENT_SETTINGS, {})
+    return {
+        key: stored.get(key, value) for key, value in AGENT_SETTING_DEFAULTS.items()
+    }
+
+
+def build_get_state(  # noqa: PLR0913 - a keyword-only settings argument joins the rest
     hass: HomeAssistant,
     perms: Permissions,
     url: str,
     secret: str,
     timeout: int,
+    *,
+    settings: dict[str, Any],
 ) -> dict[str, Any]:
     """Build the ha_get_state tool definition."""
     enum, catalogue = entity_catalogue(hass, perms.read | perms.control)
@@ -200,6 +221,7 @@ def build_get_state(
         "type": "webhook",
         "description": GET_STATE_DESCRIPTION,
         "response_timeout_secs": timeout,
+        **settings,
         "api_schema": {
             "url": url,
             "method": "POST",
@@ -235,6 +257,8 @@ def build_call_service(  # noqa: PLR0913, PLR0917 - the plan fixes this exact si
     url: str,
     secret: str,
     timeout: int,
+    *,
+    settings: dict[str, Any],
 ) -> dict[str, Any]:
     """Build the ha_call_service tool definition."""
     enum, catalogue = entity_catalogue(hass, perms.control)
@@ -250,6 +274,7 @@ def build_call_service(  # noqa: PLR0913, PLR0917 - the plan fixes this exact si
         "type": "webhook",
         "description": CALL_SERVICE_DESCRIPTION,
         "response_timeout_secs": timeout,
+        **settings,
         "api_schema": {
             "url": url,
             "method": "POST",
@@ -379,11 +404,21 @@ async def _sync(
     url = webhook.async_generate_url(
         hass, entry.data[CONF_WEBHOOK_ID], allow_internal=False
     )
+    settings = agent_settings(entry.options)
 
     definitions = {
-        TOOL_GET_STATE: build_get_state(hass, perms, url, secret, timeout),
+        TOOL_GET_STATE: build_get_state(
+            hass, perms, url, secret, timeout, settings=settings
+        ),
         TOOL_CALL_SERVICE: build_call_service(
-            hass, perms, descriptions, translations, url, secret, timeout
+            hass,
+            perms,
+            descriptions,
+            translations,
+            url,
+            secret,
+            timeout,
+            settings=settings,
         ),
     }
 

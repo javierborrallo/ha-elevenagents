@@ -25,6 +25,8 @@ OPT_EXCEPTIONS: Final = "exceptions"
 OPT_CONFIRM_TIMEOUT: Final = "confirm_timeout"
 OPT_AUTO_EXPOSE: Final = "auto_expose"
 OPT_AUTO_CONTROL: Final = "auto_control"
+OPT_AUTO_EXPOSE_AREAS: Final = "auto_expose_areas"
+OPT_AGENT_SETTINGS: Final = "agent_settings"
 
 DEFAULT_CONFIRM_TIMEOUT: Final = 5
 DEFAULT_RESPONSE_TIMEOUT: Final = 20
