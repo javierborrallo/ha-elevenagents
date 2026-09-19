@@ -9,6 +9,7 @@ import pytest
 from homeassistant.components import webhook
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.elevenlabs_agent.const import (
@@ -94,6 +95,52 @@ async def test_config_get_returns_entity_id_forms_for_the_panels_table(
     assert result["exception_entity_ids"] == {control_entry.entity_id: ["light.toggle"]}
 
 
+async def test_config_get_returns_available_actions_for_a_controlled_entity(
+    hass, setup_entry, entity_registry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """A controlled entity's actions come back keyed by its entity_id."""
+    await async_setup_component(hass, "lock", {})
+    control_entry = entity_registry.async_get_or_create("lock", "demo", "front")
+    hass.states.async_set(control_entry.entity_id, "locked", {"supported_features": 0})
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_CONTROL_ENTITIES: [control_entry.id]}
+    )
+    await hass.async_block_till_done()
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+    )
+    result = (await client.receive_json())["result"]
+
+    assert "lock.lock" in result["available_actions"][control_entry.entity_id]
+
+
+async def test_config_get_available_actions_are_not_reduced_by_exceptions(
+    hass, setup_entry, entity_registry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """An already-removed action still appears, so the user can grant it back."""
+    await async_setup_component(hass, "lock", {})
+    control_entry = entity_registry.async_get_or_create("lock", "demo", "front")
+    hass.states.async_set(control_entry.entity_id, "locked", {"supported_features": 0})
+    hass.config_entries.async_update_entry(
+        setup_entry,
+        options={
+            OPT_CONTROL_ENTITIES: [control_entry.id],
+            OPT_EXCEPTIONS: {control_entry.id: ["lock.unlock"]},
+        },
+    )
+    await hass.async_block_till_done()
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+    )
+    result = (await client.receive_json())["result"]
+
+    assert "lock.unlock" in result["available_actions"][control_entry.entity_id]
+
+
 async def test_config_get_drops_a_stale_key_from_the_entity_id_form(
     hass, setup_entry, entity_registry, hass_ws_client: WebSocketGenerator
 ) -> None:
@@ -119,6 +166,29 @@ async def test_config_get_drops_a_stale_key_from_the_entity_id_form(
     assert result["read_entity_ids"] == []
     assert result["exceptions"] == {entry.id: ["light.toggle"]}
     assert result["exception_entity_ids"] == {}
+
+
+async def test_config_get_offers_no_actions_for_a_control_key_whose_entity_is_gone(
+    hass, setup_entry, entity_registry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """A key that resolves to nothing has no actions to offer the screen."""
+    await async_setup_component(hass, "lock", {})
+    control_entry = entity_registry.async_get_or_create("lock", "demo", "front")
+    hass.states.async_set(control_entry.entity_id, "locked", {"supported_features": 0})
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_CONTROL_ENTITIES: [control_entry.id]}
+    )
+    await hass.async_block_till_done()
+    entity_registry.async_remove(control_entry.entity_id)
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+    )
+    result = (await client.receive_json())["result"]
+
+    assert result["control_entities"] == [control_entry.id]
+    assert result["available_actions"] == {}
 
 
 async def test_config_get_returns_both_auto_expose_switches(

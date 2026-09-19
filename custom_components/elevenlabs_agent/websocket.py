@@ -10,6 +10,7 @@ from homeassistant.components import webhook, websocket_api
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.service import async_get_all_descriptions
 
 from .const import (
     CONF_AGENT_ID,
@@ -37,7 +38,7 @@ from .elevenlabs_client import (
     async_get_tool,
     async_patch_agent,
 )
-from .permissions import entity_id_for, resolve_target
+from .permissions import Permissions, entity_id_for, granted_services, resolve_target
 from .tool_sync import AGENT_SETTING_DEFAULTS, ToolSyncError, async_sync_tools
 from .webhook import WEBHOOK_NAME, async_handle_webhook
 
@@ -73,6 +74,27 @@ def _exception_entity_ids(
     return result
 
 
+async def _available_actions(
+    hass: HomeAssistant, control: Iterable[str]
+) -> dict[str, list[str]]:
+    """
+    Map each controlled entity_id to every service its domain grants it.
+
+    Exceptions play no part here: this is the full list an entity's type
+    accepts, not what remains after subtraction, so a removed action still
+    appears and can be granted back.
+    """
+    descriptions = await async_get_all_descriptions(hass)
+    result: dict[str, list[str]] = {}
+    for key in control:
+        entity_id = entity_id_for(hass, key)
+        if entity_id is None:
+            continue
+        perms = Permissions(read=frozenset(), control=frozenset((key,)), exceptions={})
+        result[entity_id] = sorted(granted_services(hass, perms, key, descriptions))
+    return result
+
+
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "elevenlabs_agent/config/get",
@@ -80,8 +102,8 @@ def _exception_entity_ids(
     }
 )
 @websocket_api.require_admin
-@callback
-def config_get(
+@websocket_api.async_response
+async def config_get(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
     """Return the stored configuration. This never reaches the network."""
@@ -104,6 +126,7 @@ def config_get(
             "control_entity_ids": _entity_ids(hass, control),
             "exceptions": exceptions,
             "exception_entity_ids": _exception_entity_ids(hass, exceptions),
+            "available_actions": await _available_actions(hass, control),
             "confirm_timeout": options.get(
                 OPT_CONFIRM_TIMEOUT, DEFAULT_CONFIRM_TIMEOUT
             ),
