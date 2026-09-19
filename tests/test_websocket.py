@@ -637,10 +637,12 @@ async def test_an_unknown_block_is_refused_by_the_schema(
     assert message["error"]["code"] == "invalid_format"
 
 
-def _agent_with_prompt(text: str) -> MagicMock:
+def _agent_with_prompt(text: str, first_message: str = "") -> MagicMock:
     """Build the nested response shape the SDK returns."""
     agent = MagicMock()
+    agent.name = "Casa"
     agent.conversation_config.agent.prompt.prompt = text
+    agent.conversation_config.agent.first_message = first_message
     return agent
 
 
@@ -660,6 +662,25 @@ async def test_agent_get_returns_the_prompt_that_is_there(
         result = (await client.receive_json())["result"]
 
     assert result["prompt"] == "Eres un asistente."
+
+
+async def test_agent_get_returns_the_opening_line_and_the_agent_name(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The settings dialog opens on the agent's own opening line."""
+    client = await hass_ws_client(hass)
+
+    with patch(
+        "custom_components.elevenlabs_agent.websocket.async_get_agent",
+        AsyncMock(return_value=_agent_with_prompt("Eres un asistente.", "Hola.")),
+    ):
+        await client.send_json_auto_id(
+            {"type": "elevenlabs_agent/agent/get", "entry_id": setup_entry.entry_id}
+        )
+        result = (await client.receive_json())["result"]
+
+    assert result["first_message"] == "Hola."
+    assert result["name"] == "Casa"
 
 
 async def test_agent_get_falls_back_to_the_default_settings_when_never_synced(
@@ -766,6 +787,51 @@ async def test_agent_save_writes_the_prompt(
     assert patched.await_args is not None
     sent = patched.await_args.kwargs["conversation_config"]
     assert sent["agent"]["prompt"]["prompt"] == "# Tools\n..."
+
+
+async def test_agent_save_writes_the_opening_line(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The settings dialog writes the opening line without touching the prompt."""
+    client = await hass_ws_client(hass)
+
+    with patch(
+        "custom_components.elevenlabs_agent.websocket.async_patch_agent", AsyncMock()
+    ) as patched:
+        await client.send_json_auto_id(
+            {
+                "type": "elevenlabs_agent/agent/save",
+                "entry_id": setup_entry.entry_id,
+                "first_message": "Hola, soy tu casa.",
+            }
+        )
+        result = (await client.receive_json())["result"]
+
+    assert result["outcome"] == "ok"
+    assert patched.await_args is not None
+    sent = patched.await_args.kwargs["conversation_config"]
+    assert sent["agent"] == {"first_message": "Hola, soy tu casa."}
+
+
+async def test_agent_save_writes_nothing_when_nothing_is_sent(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """A message with no field to write must not reach ElevenLabs."""
+    client = await hass_ws_client(hass)
+
+    with patch(
+        "custom_components.elevenlabs_agent.websocket.async_patch_agent", AsyncMock()
+    ) as patched:
+        await client.send_json_auto_id(
+            {
+                "type": "elevenlabs_agent/agent/save",
+                "entry_id": setup_entry.entry_id,
+            }
+        )
+        result = (await client.receive_json())["result"]
+
+    assert result["outcome"] == "ok"
+    assert patched.await_count == 0
 
 
 async def test_agent_save_refuses_a_non_admin(

@@ -282,6 +282,7 @@ async def agent_get(
 
     config = agent.conversation_config.agent
     prompt = "" if config is None or config.prompt is None else config.prompt.prompt
+    first_message = "" if config is None else config.first_message
 
     settings = dict(AGENT_SETTING_DEFAULTS)
     if tool is not None:
@@ -290,14 +291,23 @@ async def agent_get(
             for key, default in AGENT_SETTING_DEFAULTS.items()
         }
 
-    connection.send_result(msg["id"], {"prompt": prompt or "", "settings": settings})
+    connection.send_result(
+        msg["id"],
+        {
+            "name": agent.name or "",
+            "prompt": prompt or "",
+            "first_message": first_message or "",
+            "settings": settings,
+        },
+    )
 
 
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "elevenlabs_agent/agent/save",
         vol.Required("entry_id"): str,
-        vol.Required("prompt"): str,
+        vol.Optional("prompt"): str,
+        vol.Optional("first_message"): str,
     }
 )
 @websocket_api.require_admin
@@ -305,7 +315,7 @@ async def agent_get(
 async def agent_save(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Write the system prompt the user submitted, and nothing else."""
+    """Write the fields the user submitted, and nothing else."""
     entry = _entry(hass, msg["entry_id"])
     if entry is None:
         connection.send_error(msg["id"], "not_found", "Unknown config entry")
@@ -317,11 +327,20 @@ async def agent_save(
         )
         return
 
+    agent_config: dict[str, Any] = {}
+    if "prompt" in msg:
+        agent_config["prompt"] = {"prompt": msg["prompt"]}
+    if "first_message" in msg:
+        agent_config["first_message"] = msg["first_message"]
+    if not agent_config:
+        connection.send_result(msg["id"], {"outcome": "ok", "detail": None})
+        return
+
     try:
         await async_patch_agent(
             entry.runtime_data.client,
             entry.data[CONF_AGENT_ID],
-            conversation_config={"agent": {"prompt": {"prompt": msg["prompt"]}}},
+            conversation_config={"agent": agent_config},
         )
     except ElevenLabsError as err:
         connection.send_result(msg["id"], {"outcome": "failed", "detail": str(err)})
