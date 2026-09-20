@@ -56,6 +56,22 @@ def _entry(hass: HomeAssistant, entry_id: str) -> ConfigEntry | None:
     return entry
 
 
+def _sole_entry(hass: HomeAssistant) -> tuple[ConfigEntry | None, str]:
+    """
+    Return the only entry of this domain, for a caller that names none.
+
+    The manifest declares single_config_entry, so Home Assistant allows
+    exactly one. Any other count breaks that assumption, and this reports
+    it instead of choosing.
+    """
+    entries = hass.config_entries.async_entries(DOMAIN)
+    if len(entries) == 1:
+        return entries[0], ""
+    if not entries:
+        return None, "No config entry"
+    return None, "More than one config entry"
+
+
 def _entity_ids(hass: HomeAssistant, keys: Iterable[str]) -> list[str]:
     """Return the entity_id of each key that still exists, sorted."""
     resolved = (entity_id_for(hass, key) for key in keys)
@@ -98,7 +114,7 @@ async def _available_actions(
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "elevenlabs_agent/config/get",
-        vol.Required("entry_id"): str,
+        vol.Optional("entry_id"): str,
     }
 )
 @websocket_api.require_admin
@@ -106,10 +122,20 @@ async def _available_actions(
 async def config_get(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Return the stored configuration. This never reaches the network."""
-    entry = _entry(hass, msg["entry_id"])
+    """
+    Return the stored configuration. This never reaches the network.
+
+    A caller that names no entry gets the only one. That is how the panel
+    opens from the link the config flow leaves behind, where the entry id
+    does not exist yet.
+    """
+    if "entry_id" in msg:
+        entry = _entry(hass, msg["entry_id"])
+        detail = "Unknown config entry"
+    else:
+        entry, detail = _sole_entry(hass)
     if entry is None:
-        connection.send_error(msg["id"], "not_found", "Unknown config entry")
+        connection.send_error(msg["id"], "not_found", detail)
         return
 
     options = entry.options
@@ -120,6 +146,7 @@ async def config_get(
     connection.send_result(
         msg["id"],
         {
+            "entry_id": entry.entry_id,
             "read_entities": read,
             "control_entities": control,
             "read_entity_ids": _entity_ids(hass, read),

@@ -224,6 +224,48 @@ async def test_config_get_says_nothing_is_configured_when_nothing_is_granted(
     assert result["configured"] is False
 
 
+async def test_config_get_answers_a_caller_that_names_no_entry(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The link the config flow leaves behind carries no entry id."""
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "elevenlabs_agent/config/get"})
+    message = await client.receive_json()
+
+    assert message["success"] is True
+    assert message["result"]["entry_id"] == setup_entry.entry_id
+
+
+async def test_config_get_refuses_to_choose_between_two_entries(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The manifest allows one entry. A second one must fail, never be picked."""
+    second = MockConfigEntry(domain=DOMAIN)
+    second.add_to_hass(hass)
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "elevenlabs_agent/config/get"})
+    message = await client.receive_json()
+
+    assert message["success"] is False
+    assert message["error"]["code"] == "not_found"
+    assert message["error"]["message"] == "More than one config entry"
+
+
+async def test_config_get_refuses_a_caller_that_names_no_entry_when_none_exists(
+    hass, hass_ws_client: WebSocketGenerator
+) -> None:
+    """Without the integration set up there is nothing to answer with."""
+    assert await async_setup_component(hass, DOMAIN, {})
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "elevenlabs_agent/config/get"})
+    message = await client.receive_json()
+
+    assert message["success"] is False
+    assert message["error"]["code"] == "not_found"
+    assert message["error"]["message"] == "No config entry"
+
+
 async def test_config_get_refuses_an_unknown_entry(
     hass, setup_entry, hass_ws_client: WebSocketGenerator
 ) -> None:
