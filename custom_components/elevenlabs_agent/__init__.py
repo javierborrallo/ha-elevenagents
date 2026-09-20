@@ -21,6 +21,7 @@ from .elevenlabs_client import (
     async_patch_agent,
 )
 from .expose import async_track_new_entities
+from .panel import async_register_panel
 from .services import async_setup_services
 from .tool_sync import async_sync_tools
 from .webhook import TokenBucket, async_register, async_unregister
@@ -54,6 +55,7 @@ async def async_setup(
 ) -> bool:
     """Register the sync_tools service and the panel's commands, once."""
     async_setup_services(hass)
+    await async_register_panel(hass)
     async_register_commands(hass)
     return True
 
