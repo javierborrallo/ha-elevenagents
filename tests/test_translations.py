@@ -70,25 +70,15 @@ def test_every_repair_issue_has_text(language: str) -> None:
 
 @pytest.mark.parametrize("language", ["en", "es"])
 def test_every_flow_step_has_a_title(language: str) -> None:
-    """
-    A step without a title renders with none at all.
-
-    Config-flow steps live under "config", options-flow steps under
-    "options". Home Assistant reads them from different places, so a step
-    documented in the wrong one is invisible at runtime.
-    """
+    """A step without a title renders with none at all."""
     source = (SOURCE / "config_flow.py").read_text()
-    split = source.index("class ElevenLabsAgentOptionsFlow")
-    strings = _load(language)
+    documented = _load(language).get("config", {}).get("step", {})
 
-    for section, code in (("config", source[:split]), ("options", source[split:])):
-        steps = set(re.findall(r'step_id="([a-z_]+)"', code))
-        documented = strings.get(section, {}).get("step", {})
-        for step in steps:
-            assert step in documented, f"{language}.json has no {section} step {step}"
-            assert documented[step].get("title"), (
-                f"{language}.json {section} step {step} has no title"
-            )
+    for step in set(re.findall(r'step_id="([a-z_]+)"', source)):
+        assert step in documented, f"{language}.json has no config step {step}"
+        assert documented[step].get("title"), (
+            f"{language}.json config step {step} has no title"
+        )
 
 
 @pytest.mark.parametrize("language", ["en", "es"])
@@ -107,16 +97,3 @@ def test_an_issue_is_fixable_or_informative_but_not_both(language: str) -> None:
         assert "description" in issue or "fix_flow" in issue, (
             f"{language}.json issue {name} carries neither"
         )
-
-
-@pytest.mark.parametrize("language", ["en", "es"])
-def test_the_options_flow_error_lives_under_options(language: str) -> None:
-    """
-    Home Assistant reads an options-flow error from its own section.
-
-    VERIFIED 15 September 2026 against components/generic/strings.json: a
-    real integration keeps config and options in separate top-level keys.
-    """
-    strings = _load(language)
-    assert "timeout_not_below_agent" in strings["options"]["error"]
-    assert "timeout_not_below_agent" not in strings.get("config", {}).get("error", {})

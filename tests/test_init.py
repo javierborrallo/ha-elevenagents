@@ -70,8 +70,8 @@ async def test_setup_registers_no_update_listener(hass, setup_entry):
     """
     A write to entry.data during sync must not reload the entry mid-setup.
 
-    The reload comes from OptionsFlowWithReload once the options flow
-    exists, never from an update listener registered here.
+    Nothing needs the reload. The panel synchronises the tools itself when
+    it writes a block, and the webhook reads entry.options on every request.
     """
     assert setup_entry.update_listeners == []
 
