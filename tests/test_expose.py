@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import floor_registry as fr
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
@@ -15,9 +17,12 @@ from custom_components.elevenlabs_agent.const import (
     OPT_AUTO_EXPOSE_AREAS,
     OPT_CONTROL_ENTITIES,
     OPT_CONTROL_TARGET,
+    OPT_EXCEPTIONS,
     OPT_READ_ENTITIES,
     OPT_READ_TARGET,
 )
+from custom_components.elevenlabs_agent.permissions import from_options
+from custom_components.elevenlabs_agent.tool_sync import entity_catalogue
 
 if TYPE_CHECKING:
     from homeassistant.helpers import entity_registry as er
@@ -58,6 +63,19 @@ def mock_sync_tools():
         "custom_components.elevenlabs_agent.expose.async_sync_tools", AsyncMock()
     ) as mock:
         yield mock
+
+
+def _record_catalogue(hass, entry) -> None:
+    """Store the catalogue as if a sync had just sent it."""
+    perms = from_options(entry.options)
+    entry.runtime_data.catalogue = entity_catalogue(hass, perms.read | perms.control)
+
+
+@pytest.fixture
+def setup_entry(hass, setup_entry):
+    """Record the catalogue the patched initial sync would have sent."""
+    _record_catalogue(hass, setup_entry)
+    return setup_entry
 
 
 async def _new_entity_in(
@@ -426,3 +444,211 @@ async def test_an_empty_areas_key_overrides_a_stale_target(
     await hass.async_block_till_done()
 
     assert entry.id not in setup_entry.options.get(OPT_READ_ENTITIES, [])
+
+
+async def _granted(
+    hass, entity_registry, entry, freezer, key=OPT_READ_ENTITIES
+) -> er.RegistryEntry:
+    """
+    Register an entity, grant it under key, and record the catalogue.
+
+    Return after the debounce that the registration armed has fired.
+    """
+    registered: er.RegistryEntry = entity_registry.async_get_or_create(
+        "light", "demo", "kept"
+    )
+    hass.config_entries.async_update_entry(entry, options={key: [registered.id]})
+    _record_catalogue(hass, entry)
+    await _settle(hass, freezer)
+    return registered
+
+
+async def _settle(hass, freezer) -> None:
+    """Let the debounce fire and the flush finish."""
+    freezer.tick(DEBOUNCE)
+    await hass.async_block_till_done()
+
+
+async def test_deleting_a_granted_entity_removes_its_permission_and_synchronises(
+    hass, setup_entry, entity_registry, freezer, mock_sync_tools
+) -> None:
+    """A permission dies with its entity."""
+    granted = await _granted(
+        hass, entity_registry, setup_entry, freezer, key=OPT_CONTROL_ENTITIES
+    )
+    hass.config_entries.async_update_entry(
+        setup_entry,
+        options={
+            **setup_entry.options,
+            OPT_EXCEPTIONS: {granted.id: ["light.turn_on"]},
+        },
+    )
+
+    entity_registry.async_remove(granted.entity_id)
+    await _settle(hass, freezer)
+
+    assert setup_entry.options[OPT_CONTROL_ENTITIES] == []
+    assert setup_entry.options[OPT_EXCEPTIONS] == {}
+    mock_sync_tools.assert_awaited_once()
+
+
+async def test_deleting_an_entity_nobody_granted_writes_nothing(
+    hass, setup_entry, entity_registry, freezer, mock_sync_tools
+) -> None:
+    """ElevenLabs is not written for a change the agent cannot see."""
+    await _granted(hass, entity_registry, setup_entry, freezer)
+    before = dict(setup_entry.options)
+    other = entity_registry.async_get_or_create("light", "demo", "other")
+
+    entity_registry.async_remove(other.entity_id)
+    await _settle(hass, freezer)
+
+    assert dict(setup_entry.options) == before
+    mock_sync_tools.assert_not_awaited()
+
+
+async def test_renaming_a_granted_entity_keeps_its_permission_and_synchronises(
+    hass, setup_entry, entity_registry, freezer, mock_sync_tools
+) -> None:
+    """The key survives a rename; the enum must follow it."""
+    granted = await _granted(
+        hass, entity_registry, setup_entry, freezer, key=OPT_CONTROL_ENTITIES
+    )
+
+    entity_registry.async_update_entity(
+        granted.entity_id, new_entity_id="light.renamed"
+    )
+    await _settle(hass, freezer)
+
+    assert setup_entry.options[OPT_CONTROL_ENTITIES] == [granted.id]
+    mock_sync_tools.assert_awaited_once()
+
+
+async def test_moving_a_granted_entity_to_another_area_synchronises(
+    hass, setup_entry, entity_registry, freezer, mock_sync_tools
+) -> None:
+    """The area is part of the line the model reads."""
+    area = ar.async_get(hass).async_create("Cocina")
+    granted = await _granted(hass, entity_registry, setup_entry, freezer)
+
+    entity_registry.async_update_entity(granted.entity_id, area_id=area.id)
+    await _settle(hass, freezer)
+
+    mock_sync_tools.assert_awaited_once()
+
+
+async def test_moving_the_device_of_a_granted_entity_synchronises(
+    hass, setup_entry, entity_registry, freezer, mock_sync_tools
+) -> None:
+    """An entity with no area of its own inherits the area of its device."""
+    device_registry = dr.async_get(hass)
+    device = device_registry.async_get_or_create(
+        config_entry_id=setup_entry.entry_id, identifiers={("demo", "lamp")}
+    )
+    lamp = entity_registry.async_get_or_create(
+        "light", "demo", "lamp", device_id=device.id
+    )
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_READ_ENTITIES: [lamp.id]}
+    )
+    area = ar.async_get(hass).async_create("Dormitorio")
+    await _settle(hass, freezer)
+    _record_catalogue(hass, setup_entry)
+    mock_sync_tools.reset_mock()
+
+    device_registry.async_update_device(device.id, area_id=area.id)
+    await _settle(hass, freezer)
+
+    mock_sync_tools.assert_awaited_once()
+
+
+async def test_renaming_the_area_of_a_granted_entity_synchronises(
+    hass, setup_entry, entity_registry, freezer, mock_sync_tools
+) -> None:
+    """The owner speaks the area's new name the next day."""
+    area_registry = ar.async_get(hass)
+    area = area_registry.async_create("Salon")
+    granted = await _granted(hass, entity_registry, setup_entry, freezer)
+    entity_registry.async_update_entity(granted.entity_id, area_id=area.id)
+    await _settle(hass, freezer)
+    _record_catalogue(hass, setup_entry)
+    mock_sync_tools.reset_mock()
+
+    area_registry.async_update(area.id, name="Sala de estar")
+    await _settle(hass, freezer)
+
+    mock_sync_tools.assert_awaited_once()
+
+
+async def test_a_new_name_on_a_granted_entity_synchronises(
+    hass, setup_entry, entity_registry, freezer, mock_sync_tools
+) -> None:
+    """
+    The name in the catalogue comes from the state's friendly_name.
+
+    This test writes the state itself, as the entity would. Task 6 checks
+    that a real entity rewrites it inside the debounce.
+    """
+    granted = await _granted(hass, entity_registry, setup_entry, freezer)
+    hass.states.async_set(granted.entity_id, "on", {"friendly_name": "Old"})
+    _record_catalogue(hass, setup_entry)
+
+    entity_registry.async_update_entity(granted.entity_id, name="New")
+    hass.states.async_set(granted.entity_id, "on", {"friendly_name": "New"})
+    await _settle(hass, freezer)
+
+    mock_sync_tools.assert_awaited_once()
+
+
+async def test_a_burst_of_deletions_produces_one_sync(
+    hass, setup_entry, entity_registry, freezer, mock_sync_tools
+) -> None:
+    """Removing an integration deletes many entities at once."""
+    first = entity_registry.async_get_or_create("light", "demo", "first")
+    second = entity_registry.async_get_or_create("light", "demo", "second")
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_READ_ENTITIES: [first.id, second.id]}
+    )
+    _record_catalogue(hass, setup_entry)
+    await _settle(hass, freezer)
+
+    entity_registry.async_remove(first.entity_id)
+    freezer.tick(2)
+    entity_registry.async_remove(second.entity_id)
+    await _settle(hass, freezer)
+
+    mock_sync_tools.assert_awaited_once()
+
+
+async def test_a_missing_entity_outside_the_registry_is_never_pruned(
+    hass, setup_entry, entity_registry, freezer
+) -> None:
+    """Its state also disappears on a reload, which the listener cannot tell apart."""
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_READ_ENTITIES: ["sensor.template_gone"]}
+    )
+    _record_catalogue(hass, setup_entry)
+    other = entity_registry.async_get_or_create("light", "demo", "other")
+
+    entity_registry.async_remove(other.entity_id)
+    await _settle(hass, freezer)
+
+    assert setup_entry.options[OPT_READ_ENTITIES] == ["sensor.template_gone"]
+
+
+async def test_a_deletion_while_not_running_is_pruned_at_setup(
+    hass, setup_entry, entity_registry
+) -> None:
+    """The registry keeps no event for a listener that was not there."""
+    gone = entity_registry.async_get_or_create("light", "demo", "gone")
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_READ_ENTITIES: [gone.id]}
+    )
+    await hass.config_entries.async_unload(setup_entry.entry_id)
+    entity_registry.async_remove(gone.entity_id)
+
+    with patch("custom_components.elevenlabs_agent.async_sync_tools", AsyncMock()):
+        assert await hass.config_entries.async_setup(setup_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert setup_entry.options[OPT_READ_ENTITIES] == []
