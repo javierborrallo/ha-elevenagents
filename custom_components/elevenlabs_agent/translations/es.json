@@ -47,6 +47,9 @@
       "no_external_url": "Home Assistant no tiene URL externa, así que ElevenLabs no puede alcanzarlo. Configura una URL externa en Ajustes > Sistema > Red y vuelve a añadir la integración.",
       "already_configured": "Este agente ya está configurado.",
       "reauth_successful": "La clave nueva funciona. La integración vuelve a estar conectada."
+    },
+    "create_entry": {
+      "default": "Tu clave y tu agente quedan guardados.\n\nTodavía no hay nada expuesto. **[Elige qué puede ver y hacer tu agente]({panel_url})** — hasta que lo hagas, el agente no alcanza nada de esta instalación."
     }
   },
   "options": {

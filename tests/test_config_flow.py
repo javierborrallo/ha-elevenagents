@@ -128,6 +128,7 @@ async def test_successful_setup_lists_agents_then_creates_the_entry(hass):
     assert result["data"][CONF_WEBHOOK_SECRET]
     assert result["data"][CONF_WEBHOOK_ID] != result["data"][CONF_WEBHOOK_SECRET]
     assert result["options"] == {}
+    assert result["description_placeholders"] == {"panel_url": "/elevenlabs-agent"}
 
 
 async def test_agent_step_offers_a_dropdown_sorted_by_name(hass):

@@ -52,6 +52,7 @@ from .const import (
     OPT_EXCEPTIONS,
     OPT_READ_ENTITIES,
     OPT_READ_TARGET,
+    PANEL_URL_PATH,
     TOOL_CALL_SERVICE,
     TOOL_GET_STATE,
 )
@@ -203,6 +204,7 @@ class ElevenLabsAgentConfigFlow(ConfigFlow, domain=DOMAIN):
                 CONF_TOOL_IDS: {},
             },
             options={},
+            description_placeholders={"panel_url": f"/{PANEL_URL_PATH}"},
         )
 
     async def async_step_duplicate(

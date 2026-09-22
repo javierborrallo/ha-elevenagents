@@ -47,6 +47,9 @@
       "already_configured": "This agent is already set up.",
       "reauth_successful": "The new API key works. The integration is connected again.",
       "no_external_url": "Home Assistant has no external URL, so ElevenLabs cannot reach it. Set an external URL under Settings > System > Network, then add this integration again."
+    },
+    "create_entry": {
+      "default": "Your key and your agent are stored.\n\nNothing is exposed yet. **[Choose what your agent may see and do]({panel_url})** — until you do, the agent can reach nothing in this installation."
     }
   },
   "options": {
