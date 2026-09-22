@@ -10,14 +10,22 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.elevenlabs_agent.const import (
     ERROR_ACTION_NOT_ALLOWED,
     ERROR_NOT_FOUND,
+    OPT_CONFIRM_TIMEOUT,
+    OPT_CONTROL_ENTITIES,
+    OPT_EXCEPTIONS,
+    OPT_READ_ENTITIES,
 )
 from custom_components.elevenlabs_agent.permissions import (
     Permissions,
     authorise_action,
     authorise_read,
     granted_services,
+    is_missing,
     matches_supported_features,
+    removed_registry_keys,
     resolve_target,
+    stored_keys,
+    without_keys,
 )
 
 
@@ -305,3 +313,70 @@ async def test_read_does_not_imply_control(hass, entity_registry):
         authorise_action(hass, perms, entry.entity_id, "light.turn_on", descriptions)
         == ERROR_NOT_FOUND
     )
+
+
+def test_stored_keys_reads_both_lists_and_the_exceptions():
+    """A key held only by a restriction is still a stored key."""
+    options = {
+        OPT_READ_ENTITIES: ["a"],
+        OPT_CONTROL_ENTITIES: ["b"],
+        OPT_EXCEPTIONS: {"c": ["lock.unlock"]},
+    }
+    assert stored_keys(options) == {"a", "b", "c"}
+
+
+async def test_a_registry_key_is_missing_once_its_entry_is_removed(
+    hass, entity_registry
+):
+    """The registry is the only witness for a registry key."""
+    entry = entity_registry.async_get_or_create("light", "demo", "gone")
+    assert not is_missing(hass, entry.id)
+    entity_registry.async_remove(entry.entity_id)
+    assert is_missing(hass, entry.id)
+
+
+async def test_an_entity_id_key_is_missing_without_a_state(hass):
+    """An entity outside the registry exists only while it holds a state."""
+    hass.states.async_set("sensor.yaml_only", "1")
+    assert not is_missing(hass, "sensor.yaml_only")
+    assert is_missing(hass, "sensor.never_there")
+
+
+async def test_removed_registry_keys_never_names_an_entity_id_key(
+    hass, entity_registry
+):
+    """A reload hides a YAML entity's state; that must never prune it."""
+    entry = entity_registry.async_get_or_create("light", "demo", "gone")
+    kept = entity_registry.async_get_or_create("light", "demo", "kept")
+    entity_registry.async_remove(entry.entity_id)
+    options = {
+        OPT_READ_ENTITIES: [entry.id, kept.id, "sensor.absent_during_reload"],
+        OPT_EXCEPTIONS: {entry.id: ["light.turn_on"]},
+    }
+
+    assert removed_registry_keys(hass, options) == {entry.id}
+
+
+def test_without_keys_drops_from_every_place_and_touches_nothing_else():
+    """A forgotten key leaves no restriction behind to be inherited."""
+    options = {
+        OPT_READ_ENTITIES: ["a", "b"],
+        OPT_CONTROL_ENTITIES: ["a"],
+        OPT_EXCEPTIONS: {"a": ["lock.unlock"], "b": ["light.turn_on"]},
+        OPT_CONFIRM_TIMEOUT: 8,
+    }
+
+    result = without_keys(options, {"a"})
+
+    assert result == {
+        OPT_READ_ENTITIES: ["b"],
+        OPT_CONTROL_ENTITIES: [],
+        OPT_EXCEPTIONS: {"b": ["light.turn_on"]},
+        OPT_CONFIRM_TIMEOUT: 8,
+    }
+    assert options[OPT_READ_ENTITIES] == ["a", "b"]
+
+
+def test_without_keys_leaves_an_absent_list_absent():
+    """Writing an empty list where none existed changes the stored shape."""
+    assert without_keys({OPT_CONFIRM_TIMEOUT: 8}, {"a"}) == {OPT_CONFIRM_TIMEOUT: 8}

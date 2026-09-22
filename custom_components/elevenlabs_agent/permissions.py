@@ -28,7 +28,7 @@ from .const import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Iterable, Mapping
 
     from homeassistant.core import HomeAssistant
 
@@ -90,6 +90,53 @@ def entity_id_for(hass: HomeAssistant, key: str) -> str | None:
     if entry is not None:
         return entry.entity_id
     return key if "." in key else None
+
+
+def stored_keys(options: Mapping[str, Any]) -> set[str]:
+    """Return every permission key in the two lists and the exceptions."""
+    return (
+        set(options.get(OPT_READ_ENTITIES, ()))
+        | set(options.get(OPT_CONTROL_ENTITIES, ()))
+        | set(options.get(OPT_EXCEPTIONS, {}))
+    )
+
+
+def is_missing(hass: HomeAssistant, key: str) -> bool:
+    """
+    Return True when the entity a permission key names does not exist now.
+
+    A registry key is missing when its registry entry is gone. An entity_id
+    key is missing when it holds no state.
+    """
+    if "." in key:
+        return hass.states.get(key) is None
+    return er.async_get(hass).entities.get_entry(key) is None
+
+
+def removed_registry_keys(hass: HomeAssistant, options: Mapping[str, Any]) -> set[str]:
+    """Return the stored registry keys whose registry entry is gone."""
+    registry = er.async_get(hass)
+    return {
+        key
+        for key in stored_keys(options)
+        if "." not in key and registry.entities.get_entry(key) is None
+    }
+
+
+def without_keys(options: Mapping[str, Any], keys: Iterable[str]) -> dict[str, Any]:
+    """Return a copy of options with keys dropped from both lists and the exceptions."""
+    drop = set(keys)
+    result = dict(options)
+    for list_key in (OPT_READ_ENTITIES, OPT_CONTROL_ENTITIES):
+        if list_key in result:
+            result[list_key] = [key for key in result[list_key] if key not in drop]
+    if OPT_EXCEPTIONS in result:
+        result[OPT_EXCEPTIONS] = {
+            key: services
+            for key, services in result[OPT_EXCEPTIONS].items()
+            if key not in drop
+        }
+    return result
 
 
 def _key_for(hass: HomeAssistant, entity_id: str) -> str | None:
