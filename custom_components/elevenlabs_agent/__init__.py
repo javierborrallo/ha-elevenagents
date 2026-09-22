@@ -44,6 +44,7 @@ class RuntimeData:
     bucket: TokenBucket
     client: AsyncElevenLabs
     sync_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    catalogue: tuple[list[str], str] | None = None
 
 
 type ElevenLabsAgentConfigEntry = ConfigEntry[RuntimeData]

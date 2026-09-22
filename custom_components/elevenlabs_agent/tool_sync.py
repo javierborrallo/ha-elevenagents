@@ -406,6 +406,8 @@ async def _sync(
     )
     settings = agent_settings(entry.options)
 
+    catalogue = entity_catalogue(hass, perms.read | perms.control)
+
     definitions = {
         TOOL_GET_STATE: build_get_state(
             hass, perms, url, secret, timeout, settings=settings
@@ -446,6 +448,7 @@ async def _sync(
         _check_readback(name, config, readback.tool_config)
 
     await _attach(hass, entry, client, stored)
+    entry.runtime_data.catalogue = catalogue
 
 
 async def async_sync_tools(

@@ -11,10 +11,14 @@ import pytest
 from custom_components.elevenlabs_agent.const import (
     CONF_TOOL_IDS,
     OPT_AGENT_SETTINGS,
+    OPT_READ_ENTITIES,
     TOOL_CALL_SERVICE,
     TOOL_GET_STATE,
 )
-from custom_components.elevenlabs_agent.elevenlabs_client import ElevenLabsNotFoundError
+from custom_components.elevenlabs_agent.elevenlabs_client import (
+    ElevenLabsError,
+    ElevenLabsNotFoundError,
+)
 from custom_components.elevenlabs_agent.permissions import Permissions
 from custom_components.elevenlabs_agent.tool_sync import (
     AGENT_SETTING_DEFAULTS,
@@ -441,6 +445,40 @@ def tool_calls():
             patch_agent=patch_agent,
             written=written,
         )
+
+
+async def test_a_sync_records_the_catalogue_it_sent(
+    hass, setup_entry, tool_calls, entity_registry
+):
+    """The registry listener compares against this record."""
+    entry = entity_registry.async_get_or_create("light", "demo", "kept")
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_READ_ENTITIES: [entry.id]}
+    )
+
+    await async_sync_tools(hass, setup_entry, _CLIENT)
+
+    assert setup_entry.runtime_data.catalogue == entity_catalogue(hass, {entry.id})
+    assert setup_entry.runtime_data.catalogue[0] == [entry.entity_id]
+
+
+async def test_a_failed_sync_keeps_the_previous_record(
+    hass, setup_entry, tool_calls, entity_registry
+):
+    """A record the agent never received would hide the change from the next event."""
+    await async_sync_tools(hass, setup_entry, _CLIENT)
+    before = setup_entry.runtime_data.catalogue
+
+    entry = entity_registry.async_get_or_create("light", "demo", "added")
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_READ_ENTITIES: [entry.id]}
+    )
+    tool_calls.patch_agent.side_effect = ElevenLabsError("down")
+
+    with pytest.raises(ElevenLabsError):
+        await async_sync_tools(hass, setup_entry, _CLIENT)
+
+    assert setup_entry.runtime_data.catalogue == before
 
 
 async def test_sync_is_idempotent(hass, setup_entry, tool_calls):
