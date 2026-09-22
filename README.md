@@ -3,8 +3,7 @@
 Let an [ElevenLabs conversational agent](https://elevenlabs.io/docs/agents-platform/overview)
 operate your Home Assistant installation through controlled, automatically synchronised tools.
 
-> **Status: beta.** 0.1 works, and it is a first version. Expect changes that break an
-> existing configuration. The configuration screens are replaced in 0.2.
+> **Status: beta.** Expect changes that break an existing configuration.
 
 ## What this is
 
@@ -28,10 +27,9 @@ Agent answers naturally
 
 ## The point of it
 
-You should never have to hand-write a tool schema in the ElevenLabs dashboard. The
-integration inspects the entities you choose to expose, generates safe tool definitions
-from them, synchronises them with your agent, and keeps them aligned as your Home
-Assistant configuration changes.
+The integration writes your agent's tool schemas for you. It inspects the entities you
+choose to expose, generates the tool definitions from them, synchronises them with your
+agent, and keeps them aligned as your Home Assistant configuration changes.
 
 ## Design principles
 
@@ -51,33 +49,42 @@ Assistant configuration changes.
   **write** access — a key scoped only to text-to-speech will not be able to
   synchronise tools
 - A way for ElevenLabs to reach your Home Assistant webhook from the internet
-  (Nabu Casa, a Cloudflare tunnel, or a reverse proxy)
+  (Nabu Casa, a Cloudflare tunnel, ngrok, or a reverse proxy)
 
 ## Setting it up
 
 **Set your external URL first.** Settings → System → Network. The integration writes that
-address into your agent's tools, so it refuses to configure without one. An internal
-address would leave the agent calling a host it cannot reach.
+address into your agent's tools, so it refuses to configure without one.
 
-1. Add the integration and paste your API key. It is validated against ElevenLabs before
-   anything else happens.
-2. Pick your agent from the list the integration reads back from your account.
-3. Choose what the agent may **read**, and what it may **control**. Both start empty.
-4. Optionally remove individual actions from a controlled entity — see *Selecting a lock*
-   below before you skip this step.
-5. Paste the prompt block into your agent's system prompt.
+Adding the integration asks for two things: your API key, validated against ElevenLabs
+before anything else happens, and your agent, picked from the list read back from your
+account.
 
-The integration then creates two tools in your agent, `ha_get_state` and `ha_call_service`,
-and keeps their schemas aligned with your selection. Both point at one webhook, secured with
-a shared secret. You can re-run the synchronisation at any time with the
+Nothing is exposed yet. The closing message links to the configuration panel, which is also
+what **Configure** opens on the integration page. The first time, the panel walks six steps:
+
+1. **Agent settings** — the opening line, how long an action waits to be confirmed, and
+   whether the agent speaks before it acts.
+2. **Prompt** — your agent's prompt beside the block this integration recommends, to copy
+   across as much or as little as you want.
+3. **Read** — the entities the agent may read.
+4. **Control** — the entities it may act on.
+5. **Restrictions** — actions to take back from a controlled entity. Skippable.
+6. **Automatic exposure** — what happens to entities you add to Home Assistant later.
+
+Afterwards the panel opens on a page of cards instead of the wizard: the agent's prompt,
+settings and rotations, and the four entity screens, each behind its own row.
+
+The integration creates two tools in your agent, `ha_get_state` and `ha_call_service`, and
+keeps their schemas aligned with your selection. Both point at one webhook, secured with a
+shared secret. You can re-run the synchronisation at any time with the
 `elevenlabs_agent.sync_tools` action, and rotate either the secret or the webhook address
-from the options.
+from the panel.
 
 ## What the agent can do
 
 `ha_get_state` reads. It carries the entities you selected for reading **and** the ones you
-selected for control, because being able to open a lock without being able to ask whether it
-is open makes no sense. It accepts several entities in one call.
+selected for control. It accepts several entities in one call.
 
 `ha_call_service` acts. It carries only the entities you selected for control, and only the
 actions those entities accept, minus anything you removed.
@@ -98,14 +105,14 @@ with neither signed URLs nor a hostname allowlist, and the repair closes the doo
 
 **A Home Assistant upgrade can widen what is granted.** A new action added to a domain you
 already exposed is granted on the entities you already selected, and appears ticked the next
-time you open the exceptions screen. Selection is by entity, and it follows the entity.
+time you open the restrictions screen. Selection is by entity, and it follows the entity.
 
 **Automatic exposure can grant control without a review.** Two switches, both off by default,
-decide whether entities registered after setup join: one for reading, one for control. Each acts
-inside the area, floor, device or label you selected for it, and only when an entity registers —
-a device you move into a watched area later is not reconsidered. So a device already inside your
-selection can gain an entity, through a firmware update or a new sub-device, and that entity
-becomes controllable without anyone having looked at it.
+decide whether entities registered after setup join: one for reading, one for control. They act
+inside the areas you chose, and only when an entity registers — a device you move into a watched
+area later is not reconsidered. So a device already inside your selection can gain an entity,
+through a firmware update or a new sub-device, and that entity becomes controllable without
+anyone having looked at it.
 
 **A timeout means unknown, not failure.** When Home Assistant does not confirm in time, the
 integration reports `unconfirmed`, and the action may still have run. The prompt block tells
@@ -117,7 +124,8 @@ stops matching: the agent loses access, and nothing says so.
 
 ## The recommended prompt block
 
-The integration never writes to your agent's system prompt. That text is yours.
+Your agent's prompt is yours. The integration writes it only when you press save on the
+panel's prompt screen, which shows your text beside this block and merges nothing by itself.
 
 Paste these two sections into your agent's prompt, under the `Tools` and `Error handling`
 headings [ElevenLabs recommends](https://elevenlabs.io/docs/agents-platform/best-practices/prompting-guide).
@@ -190,20 +198,15 @@ integration only ever acts on the IDs it stored when it created them.
 
 | Version | Scope |
 | --- | --- |
-| 0.1.0 | Config flow, secure webhook, `ha_get_state` and `ha_call_service`, UI entity selection, permission allowlist, tool synchronisation |
-| 0.2 | A configuration panel replacing the options flow, a reworked action-restriction screen, the ElevenLabs settings this integration writes exposed as settings you edit here, and an editor that offers the prompt block once at setup |
-| 0.3 | `ha_list_entities`, `ha_list_areas`, richer tool descriptions, sync diffs and status, diagnostics |
+| 0.3 | `ha_list_entities`, `ha_list_areas`, richer tool descriptions, sync diffs and status, diagnostics, synchronising when an entity is removed or renamed |
 | 0.4 | Push Home Assistant events to the agent |
 | 0.5 | Confirmation for sensitive actions |
 
 ## Installation
 
-Not yet available. This section will describe HACS installation once there is
-something to install.
+Not published yet.
 
 ## Home Assistant versions
-
-Two versions appear in this repository and they mean different things.
 
 `hacs.json` declares **2026.6.4**, the minimum a user needs to install the integration.
 `requirements_dev.txt` pins the newest release, which is what development and CI run against.
@@ -218,8 +221,6 @@ avoids excluding users who have not updated yet.
 Dependabot is enabled and proposes updates for pip packages, GitHub Actions and
 devcontainer features. It does not touch `homeassistant`, whose version must match the
 `homeassistant` key in `hacs.json`.
-
-A Renovate configuration is kept alongside it as `.github/_renovate.json`, inactive.
 
 ## Credits
 
