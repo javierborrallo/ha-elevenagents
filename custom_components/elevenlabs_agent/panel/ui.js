@@ -64,7 +64,15 @@ button.icon-button:hover{background:rgba(127,127,127,.2)}
  color:var(--text-primary-color,#fff)}
 .status-icon.ok{background:var(--success-color,#4caf50)}
 .status-icon.bad{background:var(--error-color,#db4437)}
-.status-text{display:flex;flex-direction:column;min-width:0}
+.status-text{display:flex;flex-direction:column;min-width:0;flex:1}
+button.status{width:100%;border:none;background:none;font:inherit;color:inherit;
+ text-align:left;cursor:pointer}
+button.status:hover{background:var(--secondary-background-color)}
+.check-list{display:flex;flex-direction:column}
+.check-row{display:flex;align-items:flex-start;gap:12px;padding:10px 0}
+.check-row+.check-row{border-top:1px solid var(--divider-color)}
+.check-row .status-icon{width:28px;height:28px;flex:none}
+.status-icon.skipped{background:var(--disabled-color,#bdbdbd)}
 .status-text strong{font-size:16px;font-weight:500}
 .status-text small{color:var(--secondary-text-color);font-size:13px;
  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -209,9 +217,13 @@ export function card(headerText) {
 
 // The connection line at the top of the page: a coloured disc, a headline
 // and one line of detail.
-export function statusCard(ok, headline, detail) {
+export function statusCard(ok, headline, detail, onClick) {
   const node = card();
-  const row = el("div", "status");
+  const row = el(onClick ? "button" : "div", "status");
+  if (onClick) {
+    row.type = "button";
+    row.addEventListener("click", onClick);
+  }
   const disc = el("div", `status-icon ${ok ? "ok" : "bad"}`);
   disc.appendChild(icon(ok ? ICON.check : ICON.alert));
   row.appendChild(disc);
@@ -219,6 +231,7 @@ export function statusCard(ok, headline, detail) {
   text.appendChild(el("strong", null, headline));
   text.appendChild(el("small", null, detail));
   row.appendChild(text);
+  if (onClick) row.appendChild(icon(ICON.chevronRight));
   node.body.appendChild(row);
   return node;
 }

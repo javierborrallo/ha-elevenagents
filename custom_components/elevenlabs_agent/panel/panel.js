@@ -5,12 +5,13 @@ import { autoExposeScreen, operationsScreen, settingsScreen } from "./settings.j
 import { promptScreen } from "./prompt.js";
 import { BLOCK_MARKER, RECOMMENDED_BLOCK } from "./block.js";
 import {
-  CSS,
-  ICON,
   button,
+  CSS,
   describeSaveOutcome,
   el,
   fillPanelHeight,
+  ICON,
+  icon,
   isAdvanceable,
   navCard,
   openDialog,
@@ -26,7 +27,12 @@ const WS = {
   agentGet: "elevenlabs_agent/agent/get",
   agentSave: "elevenlabs_agent/agent/save",
   rotate: "elevenlabs_agent/rotate",
+  check: "elevenlabs_agent/check",
 };
+
+// The icon and the disc colour of each check status.
+const STATUS_ICON = { ok: ICON.check, problem: ICON.alert, skipped: ICON.minusCircle };
+const STATUS_CLASS = { ok: "ok", problem: "bad", skipped: "skipped" };
 
 // The name the toolbar shows. It names the integration, not the entry.
 const PANEL_TITLE = "ElevenLabs Agent";
@@ -165,6 +171,7 @@ class ElevenLabsAgentPanel extends HTMLElement {
         online,
         online ? t.statusConnected : t.statusDisconnected,
         online ? this._agent.name : t.statusDisconnectedDetail,
+        () => this._openCheck(),
       ),
     );
 
@@ -307,6 +314,66 @@ class ElevenLabsAgentPanel extends HTMLElement {
         return result;
       },
     });
+  }
+
+  _openCheck() {
+    const t = this._t;
+    openDialog(this.shadowRoot, {
+      t,
+      title: t.checkTitle,
+      build: () => {
+        const host = el("div", "check-list");
+        host.appendChild(el("p", null, t.checkRunning));
+        this._callWS(WS.check)
+          .then((result) => this._paintCheck(host, result))
+          .catch((err) => {
+            host.textContent = t.checkFailed.replace(
+              "{detail}",
+              (err && err.message) || "",
+            );
+          });
+        return host;
+      },
+    });
+  }
+
+  // Replace the dialog body with one row for each check.
+  _paintCheck(host, result) {
+    const t = this._t;
+    host.textContent = "";
+    host.appendChild(
+      el("p", null, result.ok ? t.checkAllOk : t.checkProblems),
+    );
+    for (const item of result.checks) {
+      const row = el("div", "check-row");
+      const disc = el("div", `status-icon ${STATUS_CLASS[item.status]}`);
+      disc.appendChild(icon(STATUS_ICON[item.status]));
+      row.appendChild(disc);
+      const text = el("div", "status-text");
+      text.appendChild(el("strong", null, t[`check_${item.check}`] || item.check));
+      const detail = this._checkDetail(item);
+      if (detail) text.appendChild(el("small", null, detail));
+      row.appendChild(text);
+      host.appendChild(row);
+    }
+  }
+
+  // Return the sentence under one check, or an empty string.
+  _checkDetail(item) {
+    const t = this._t;
+    if (item.status === "skipped") return t.checkSkipped;
+    if (item.status === "ok") return "";
+    const detail = item.detail;
+    if (item.check === "key" && detail === "refused") return t.checkKeyRefused;
+    if (item.check === "protected") return t.checkProtectedDetail;
+    if (item.check === "loaded") return t.checkLoadedDetail.replace("{detail}", detail);
+    if (item.check === "timeouts") {
+      return t.checkTimeoutsDetail
+        .replace("{confirm}", String(detail.confirm_timeout))
+        .replace("{agent}", String(detail.agent_timeout));
+    }
+    if (Array.isArray(detail)) return detail.join(", ");
+    return detail ? String(detail) : "";
   }
 
   _openMissing() {
