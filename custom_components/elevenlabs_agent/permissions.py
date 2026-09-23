@@ -113,6 +113,11 @@ def is_missing(hass: HomeAssistant, key: str) -> bool:
     return er.async_get(hass).entities.get_entry(key) is None
 
 
+def missing_keys(hass: HomeAssistant, options: Mapping[str, Any]) -> set[str]:
+    """Return the stored keys whose entity does not exist now."""
+    return {key for key in stored_keys(options) if is_missing(hass, key)}
+
+
 def removed_registry_keys(hass: HomeAssistant, options: Mapping[str, Any]) -> set[str]:
     """Return the stored registry keys whose registry entry is gone."""
     registry = er.async_get(hass)

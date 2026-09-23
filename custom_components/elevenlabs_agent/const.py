@@ -73,5 +73,6 @@ PROJECTION_ATTRIBUTES: Final[dict[str, tuple[str, ...]]] = {
 ISSUE_AGENT_UNPROTECTED: Final = "agent_unprotected"
 ISSUE_TIMEOUT_CROSSED: Final = "timeout_crossed"
 ISSUE_ROTATION_UNSYNCED: Final = "rotation_unsynced"
+ISSUE_MISSING_ENTITIES: Final = "missing_entities"
 
 PANEL_URL_PATH: Final = "elevenlabs-agent"

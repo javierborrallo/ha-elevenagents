@@ -71,6 +71,10 @@
     "rotation_unsynced": {
       "title": "The new value did not reach ElevenLabs",
       "description": "The webhook credential was changed here, but ElevenLabs could not be updated, so the agent is still sending the old one. Run the synchronise action again, or open the integration's options and repeat the change. This notice clears itself once a synchronisation succeeds."
+    },
+    "missing_entities": {
+      "title": "Permissions remain for entities that no longer exist",
+      "description": "These entities are not in Home Assistant now, but the agent still holds permissions for them: {entities}.\n\nIf you deleted them, remove their permissions under **Missing entities** in the integration's panel. A new entity that takes one of these names would otherwise receive them.\n\nIf an entity is only reloading, it comes back by itself and this notice clears. Ignore this notice to keep the permissions."
     }
   },
   "services": {

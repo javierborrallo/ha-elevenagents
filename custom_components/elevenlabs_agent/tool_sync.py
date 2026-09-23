@@ -34,6 +34,7 @@ from .elevenlabs_client import (
     async_update_tool,
 )
 from .permissions import entity_id_for, from_options, granted_services
+from .repairs import async_check_agent, async_check_timeouts
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -360,7 +361,7 @@ def _check_readback(name: str, sent: dict[str, Any], got: Any) -> None:
 
 
 async def _attach(
-    hass: HomeAssistant,  # noqa: ARG001 - kept for signature symmetry with the sync helpers
+    hass: HomeAssistant,
     entry: ElevenLabsAgentConfigEntry,
     client: AsyncElevenLabs,
     stored: dict[str, str],
@@ -368,11 +369,13 @@ async def _attach(
     """
     Attach every synced tool id to the agent's prompt.
 
-    The write is a union. Sending only the ids this integration owns would
-    detach every tool the user attached to the agent by hand.
+    Check the agent's protection from the same read. The write is a union.
+    Sending only the ids this integration owns would detach every tool the
+    user attached to the agent by hand.
     """
     agent_id = entry.data[CONF_AGENT_ID]
     agent = await async_get_agent(client, agent_id)
+    async_check_agent(hass, entry, agent)
     agent_config = agent.conversation_config.agent
     prompt = None if agent_config is None else agent_config.prompt
     attached = [] if prompt is None else list(prompt.tool_ids or [])
@@ -449,6 +452,7 @@ async def _sync(
 
     await _attach(hass, entry, client, stored)
     entry.runtime_data.catalogue = catalogue
+    async_check_timeouts(hass, entry, definitions[TOOL_CALL_SERVICE])
 
 
 async def async_sync_tools(

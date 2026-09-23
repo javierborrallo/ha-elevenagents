@@ -9,6 +9,7 @@ import voluptuous as vol
 from homeassistant.components import webhook, websocket_api
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.service import async_get_all_descriptions
 
@@ -38,12 +39,21 @@ from .elevenlabs_client import (
     async_get_tool,
     async_patch_agent,
 )
-from .permissions import Permissions, entity_id_for, granted_services, resolve_target
+from .permissions import (
+    Permissions,
+    entity_id_for,
+    granted_services,
+    is_missing,
+    resolve_target,
+    stored_keys,
+    without_keys,
+)
+from .repairs import async_check_missing
 from .tool_sync import AGENT_SETTING_DEFAULTS, ToolSyncError, async_sync_tools
 from .webhook import WEBHOOK_NAME, async_handle_webhook
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable, Iterable, Mapping
 
     from homeassistant.config_entries import ConfigEntry
 
@@ -111,6 +121,34 @@ async def _available_actions(
     return result
 
 
+def _missing(hass: HomeAssistant, options: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Describe each stored key whose entity does not exist now."""
+    read = set(options.get(OPT_READ_ENTITIES, ()))
+    control = set(options.get(OPT_CONTROL_ENTITIES, ()))
+    restricted = set(options.get(OPT_EXCEPTIONS, {}))
+    return [
+        {
+            "key": key,
+            "entity_id": key if "." in key else None,
+            "read": key in read,
+            "control": key in control,
+            "restricted": key in restricted,
+        }
+        for key in sorted(stored_keys(options))
+        if is_missing(hass, key)
+    ]
+
+
+def _unregistered(hass: HomeAssistant) -> list[str]:
+    """Return every entity_id that holds a state and has no registry entry."""
+    registry = er.async_get(hass)
+    return sorted(
+        entity_id
+        for entity_id in hass.states.async_entity_ids()
+        if registry.async_get(entity_id) is None
+    )
+
+
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "elevenlabs_agent/config/get",
@@ -154,6 +192,8 @@ async def config_get(
             "exceptions": exceptions,
             "exception_entity_ids": _exception_entity_ids(hass, exceptions),
             "available_actions": await _available_actions(hass, control),
+            "missing": _missing(hass, options),
+            "unregistered_entity_ids": _unregistered(hass),
             "confirm_timeout": options.get(
                 OPT_CONFIRM_TIMEOUT, DEFAULT_CONFIRM_TIMEOUT
             ),
@@ -169,8 +209,8 @@ async def config_get(
     )
 
 
-BLOCKS = ("entities", "exceptions", "settings", "auto_expose")
-SYNCING_BLOCKS = ("entities", "exceptions", "settings")
+BLOCKS = ("entities", "exceptions", "settings", "auto_expose", "forget")
+SYNCING_BLOCKS = ("entities", "exceptions", "settings", "forget")
 
 
 def _entities_block(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
@@ -243,11 +283,15 @@ async def config_save(
         keys = _exceptions_block(hass, data)
     elif block == "auto_expose":
         keys = _auto_expose_block(hass, data)
+    elif block == "forget":
+        missing = {key for key in stored_keys(entry.options) if is_missing(hass, key)}
+        keys = without_keys(entry.options, missing & set(data.get("keys", ())))
     else:
         error = f"Unhandled block: {block}"
         raise ValueError(error)
 
     hass.config_entries.async_update_entry(entry, options={**entry.options, **keys})
+    async_check_missing(hass, entry)
 
     if block not in SYNCING_BLOCKS:
         connection.send_result(msg["id"], {"outcome": "ok", "detail": None})

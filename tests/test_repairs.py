@@ -15,19 +15,25 @@ from elevenlabs.types.allowlist_item import AllowlistItem
 from elevenlabs.types.auth_settings import AuthSettings
 from elevenlabs.types.conversational_config import ConversationalConfig
 from elevenlabs.types.privacy_config_output import PrivacyConfigOutput
+from homeassistant import data_entry_flow
 from homeassistant.helpers import issue_registry as ir
 
 from custom_components.elevenlabs_agent.const import (
     CONF_AGENT_ID,
     DOMAIN,
     ISSUE_AGENT_UNPROTECTED,
+    ISSUE_MISSING_ENTITIES,
     ISSUE_TIMEOUT_CROSSED,
     OPT_CONFIRM_TIMEOUT,
+    OPT_CONTROL_ENTITIES,
+    OPT_EXCEPTIONS,
+    PANEL_URL_PATH,
 )
 from custom_components.elevenlabs_agent.repairs import (
     ElevenLabsAgentRepairFlow,
     async_apply_auth_fix,
     async_check_agent,
+    async_check_missing,
     async_check_timeouts,
     async_create_fix_flow,
 )
@@ -57,14 +63,13 @@ def _agent(
 
 async def test_open_agent_raises_the_issue(hass, setup_entry):
     """Anyone holding the agent_id can converse with an unprotected agent."""
-    client = AsyncMock()
-    client.conversational_ai.agents.get.return_value = _agent(
+    agent = _agent(
         AgentPlatformSettingsResponseModel(
             auth=AuthSettings(enable_auth=False, allowlist=[])
         )
     )
 
-    await async_check_agent(hass, setup_entry, client)
+    async_check_agent(hass, setup_entry, agent)
 
     issue = ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_AGENT_UNPROTECTED)
     assert issue is not None
@@ -74,8 +79,7 @@ async def test_open_agent_raises_the_issue(hass, setup_entry):
 
 async def test_an_allowlist_counts_as_protected(hass, setup_entry):
     """The two mechanisms are alternatives, not a pair."""
-    client = AsyncMock()
-    client.conversational_ai.agents.get.return_value = _agent(
+    agent = _agent(
         AgentPlatformSettingsResponseModel(
             auth=AuthSettings(
                 enable_auth=False,
@@ -84,7 +88,7 @@ async def test_an_allowlist_counts_as_protected(hass, setup_entry):
         )
     )
 
-    await async_check_agent(hass, setup_entry, client)
+    async_check_agent(hass, setup_entry, agent)
 
     assert ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_AGENT_UNPROTECTED) is None
 
@@ -99,14 +103,13 @@ async def test_a_protected_agent_clears_a_standing_issue(hass, setup_entry):
         severity=ir.IssueSeverity.WARNING,
         translation_key=ISSUE_AGENT_UNPROTECTED,
     )
-    client = AsyncMock()
-    client.conversational_ai.agents.get.return_value = _agent(
+    agent = _agent(
         AgentPlatformSettingsResponseModel(
             auth=AuthSettings(enable_auth=True, allowlist=[])
         )
     )
 
-    await async_check_agent(hass, setup_entry, client)
+    async_check_agent(hass, setup_entry, agent)
 
     assert ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_AGENT_UNPROTECTED) is None
 
@@ -193,3 +196,53 @@ async def test_create_fix_flow_returns_the_repair_flow(hass, setup_entry):
 
     assert isinstance(flow, ElevenLabsAgentRepairFlow)
     assert flow.entry.data[CONF_AGENT_ID] == setup_entry.data[CONF_AGENT_ID]
+
+
+def _missing_setup(hass, entry) -> None:
+    """Grant one entity that exists and one that does not, both keyed by entity_id."""
+    hass.states.async_set("lock.yaml_present", "locked")
+    hass.config_entries.async_update_entry(
+        entry,
+        options={
+            OPT_CONTROL_ENTITIES: ["lock.yaml_gone", "lock.yaml_present"],
+            OPT_EXCEPTIONS: {"lock.yaml_gone": ["lock.unlock"]},
+        },
+    )
+
+
+async def test_a_missing_entity_raises_an_issue_that_points_to_the_panel(
+    hass, setup_entry
+):
+    """The owner decides in the panel; the issue itself removes nothing."""
+    _missing_setup(hass, setup_entry)
+
+    async_check_missing(hass, setup_entry)
+
+    issue = ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_MISSING_ENTITIES)
+    assert issue is not None
+    assert issue.is_fixable is False
+    assert issue.learn_more_url == f"homeassistant://{PANEL_URL_PATH}"
+    assert issue.translation_placeholders == {"entities": "lock.yaml_gone"}
+    assert setup_entry.options[OPT_CONTROL_ENTITIES] == [
+        "lock.yaml_gone",
+        "lock.yaml_present",
+    ]
+
+
+async def test_nothing_missing_clears_the_missing_issue(hass, setup_entry):
+    """An entity that comes back takes the issue with it."""
+    _missing_setup(hass, setup_entry)
+    async_check_missing(hass, setup_entry)
+
+    hass.states.async_set("lock.yaml_gone", "locked")
+    async_check_missing(hass, setup_entry)
+
+    assert ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_MISSING_ENTITIES) is None
+
+
+async def test_the_missing_issue_has_no_fix_flow(hass, setup_entry):
+    """Only agent_unprotected is fixable."""
+    with pytest.raises(data_entry_flow.UnknownStep):
+        await async_create_fix_flow(
+            hass, ISSUE_MISSING_ENTITIES, {"entry_id": setup_entry.entry_id}
+        )

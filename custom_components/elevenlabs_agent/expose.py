@@ -1,15 +1,17 @@
-"""Automatic exposure, pruning of deleted entities, and catalogue refresh."""
+"""Automatic exposure, pruning, catalogue refresh and missing entities."""
 
 from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Any
 
+from homeassistant.const import EVENT_STATE_CHANGED
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.start import async_at_started
 
 from .const import (
     AUTO_EXPOSE_DEBOUNCE,
@@ -26,8 +28,10 @@ from .permissions import (
     from_options,
     removed_registry_keys,
     resolve_target,
+    stored_keys,
     without_keys,
 )
+from .repairs import async_check_missing
 from .tool_sync import async_sync_tools, entity_catalogue
 
 if TYPE_CHECKING:
@@ -57,6 +61,32 @@ def _permission_keys(hass: HomeAssistant, entity_ids: set[str]) -> set[str]:
         if registry_entry is not None:
             keys.add(registry_entry.id)
     return keys
+
+
+def _grant_new(
+    hass: HomeAssistant, options: dict[str, Any], entity_ids: set[str]
+) -> bool:
+    """
+    Add new entities to the lists their switches allow.
+
+    Change options in place. Return True when it added an entity.
+    """
+    changed = False
+    registered = _permission_keys(hass, entity_ids)
+    for switch, target_key, list_key in (
+        (OPT_AUTO_EXPOSE, OPT_READ_TARGET, OPT_READ_ENTITIES),
+        (OPT_AUTO_CONTROL, OPT_CONTROL_TARGET, OPT_CONTROL_ENTITIES),
+    ):
+        if not options.get(switch, False):
+            continue
+        target = _watched_target(options, target_key)
+        joining = registered & resolve_target(hass, target)
+        if not joining:
+            continue
+        options[list_key] = sorted(set(options.get(list_key, ())) | joining)
+        changed = True
+        _LOGGER.debug("Automatic exposure added %s to %s", sorted(joining), list_key)
+    return changed
 
 
 def _catalogue_changed(hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry) -> bool:
@@ -95,7 +125,9 @@ def async_track_new_entities(
 
     Remove the permissions of deleted registry entities, add new entities
     to the sets their switches allow, and synchronise when automatic
-    exposure wrote or the catalogue changed.
+    exposure wrote or the catalogue changed. Also watch the state of each
+    stored entity_id key, and check for missing entities once Home Assistant
+    has started.
     """
     pending: set[str] = set()
     cancel_timer: CALLBACK_TYPE | None = None
@@ -112,29 +144,13 @@ def async_track_new_entities(
 
         _prune(hass, entry)
         options = dict(entry.options)
-        changed = False
-        registered = _permission_keys(hass, entity_ids)
-
-        for switch, target_key, list_key in (
-            (OPT_AUTO_EXPOSE, OPT_READ_TARGET, OPT_READ_ENTITIES),
-            (OPT_AUTO_CONTROL, OPT_CONTROL_TARGET, OPT_CONTROL_ENTITIES),
-        ):
-            if not options.get(switch, False):
-                continue
-            target = _watched_target(options, target_key)
-            joining = registered & resolve_target(hass, target)
-            if not joining:
-                continue
-            options[list_key] = sorted(set(options.get(list_key, ())) | joining)
-            changed = True
-            _LOGGER.debug(
-                "Automatic exposure added %s to %s", sorted(joining), list_key
-            )
+        changed = _grant_new(hass, options, entity_ids)
 
         if options != dict(entry.options):
             hass.config_entries.async_update_entry(entry, options=options)
         if changed or _catalogue_changed(hass, entry):
             entry.async_create_task(hass, _synchronise(hass, entry))
+        async_check_missing(hass, entry)
 
     @callback
     def _arm(_event: Any = None) -> None:
@@ -151,7 +167,24 @@ def async_track_new_entities(
             pending.add(event.data["entity_id"])
         _arm()
 
+    @callback
+    def _appears_or_vanishes(event_data: Any) -> bool:
+        """Return True when a stored entity_id key gains or loses its state."""
+        if event_data["old_state"] is not None and event_data["new_state"] is not None:
+            return False
+        entity_id = event_data["entity_id"]
+        return "." in entity_id and entity_id in stored_keys(entry.options)
+
+    @callback
+    def _started(_hass: HomeAssistant) -> None:
+        """Restart the debounce once Home Assistant has started."""
+        _arm()
+
     unsubscribes = [
+        async_at_started(hass, _started),
+        hass.bus.async_listen(
+            EVENT_STATE_CHANGED, _arm, event_filter=_appears_or_vanishes
+        ),
         hass.bus.async_listen(er.EVENT_ENTITY_REGISTRY_UPDATED, _entity_event),
         hass.bus.async_listen(dr.EVENT_DEVICE_REGISTRY_UPDATED, _arm),
         hass.bus.async_listen(ar.EVENT_AREA_REGISTRY_UPDATED, _arm),

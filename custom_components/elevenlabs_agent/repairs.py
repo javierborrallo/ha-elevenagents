@@ -1,4 +1,4 @@
-"""Repair issues: an unprotected agent, crossed timeouts, an unsynced rotation."""
+"""Repair issues: auth, timeouts, rotation and missing entities."""
 
 from __future__ import annotations
 
@@ -17,10 +17,13 @@ from .const import (
     DEFAULT_RESPONSE_TIMEOUT,
     DOMAIN,
     ISSUE_AGENT_UNPROTECTED,
+    ISSUE_MISSING_ENTITIES,
     ISSUE_TIMEOUT_CROSSED,
     OPT_CONFIRM_TIMEOUT,
+    PANEL_URL_PATH,
 )
 from .elevenlabs_client import async_get_agent, async_get_client, async_patch_agent
+from .permissions import entity_id_for, missing_keys
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -41,13 +44,13 @@ def _is_protected(agent: GetAgentResponseModel) -> bool:
     return bool(auth.enable_auth) or bool(auth.allowlist)
 
 
-async def async_check_agent(
+@callback
+def async_check_agent(
     hass: HomeAssistant,
     entry: ElevenLabsAgentConfigEntry,
-    client: AsyncElevenLabs,
+    agent: GetAgentResponseModel,
 ) -> None:
     """Raise or clear the agent_unprotected issue for one entry."""
-    agent = await async_get_agent(client, entry.data[CONF_AGENT_ID])
     if _is_protected(agent):
         ir.async_delete_issue(hass, DOMAIN, ISSUE_AGENT_UNPROTECTED)
         return
@@ -88,6 +91,34 @@ def async_check_timeouts(
             "confirm_timeout": str(confirm_timeout),
             "agent_timeout": str(agent_timeout),
         },
+    )
+
+
+def _missing_names(hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry) -> str:
+    """Return the missing keys as a comma-separated list, entity_ids where known."""
+    names = (
+        entity_id_for(hass, key) or key for key in missing_keys(hass, entry.options)
+    )
+    return ", ".join(sorted(names))
+
+
+@callback
+def async_check_missing(hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry) -> None:
+    """Raise or clear the missing_entities issue for one entry."""
+    names = _missing_names(hass, entry)
+    if not names:
+        ir.async_delete_issue(hass, DOMAIN, ISSUE_MISSING_ENTITIES)
+        return
+
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        ISSUE_MISSING_ENTITIES,
+        is_fixable=False,
+        learn_more_url=f"homeassistant://{PANEL_URL_PATH}",
+        severity=ir.IssueSeverity.WARNING,
+        translation_key=ISSUE_MISSING_ENTITIES,
+        translation_placeholders={"entities": names},
     )
 
 

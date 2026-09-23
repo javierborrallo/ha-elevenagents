@@ -7,10 +7,17 @@ from typing import TYPE_CHECKING, cast
 from unittest.mock import patch
 
 import pytest
+from homeassistant.helpers import issue_registry as ir
 
 from custom_components.elevenlabs_agent.const import (
+    CONF_RESPONSE_TIMEOUT,
     CONF_TOOL_IDS,
+    DEFAULT_RESPONSE_TIMEOUT,
+    DOMAIN,
+    ISSUE_AGENT_UNPROTECTED,
+    ISSUE_TIMEOUT_CROSSED,
     OPT_AGENT_SETTINGS,
+    OPT_CONFIRM_TIMEOUT,
     OPT_READ_ENTITIES,
     TOOL_CALL_SERVICE,
     TOOL_GET_STATE,
@@ -430,11 +437,12 @@ def tool_calls():
         update_tool.side_effect = update
         get_tool.side_effect = get
         get_agent.return_value = SimpleNamespace(
+            platform_settings=None,
             conversation_config=SimpleNamespace(
                 agent=SimpleNamespace(
                     prompt=SimpleNamespace(tool_ids=["tool_user_made"])
                 )
-            )
+            ),
         )
 
         yield SimpleNamespace(
@@ -479,6 +487,49 @@ async def test_a_failed_sync_keeps_the_previous_record(
         await async_sync_tools(hass, setup_entry, _CLIENT)
 
     assert setup_entry.runtime_data.catalogue == before
+
+
+async def test_a_sync_raises_the_issue_for_an_open_agent(hass, setup_entry, tool_calls):
+    """The agent read for the attach tells whether anyone may call it."""
+    await async_sync_tools(hass, setup_entry, _CLIENT)
+
+    issue = ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_AGENT_UNPROTECTED)
+    assert issue is not None
+
+
+async def test_a_sync_clears_the_issue_for_a_protected_agent(
+    hass, setup_entry, tool_calls
+):
+    """Turning on auth in ElevenLabs clears the issue at the next sync."""
+    await async_sync_tools(hass, setup_entry, _CLIENT)
+    tool_calls.get_agent.return_value.platform_settings = SimpleNamespace(
+        auth=SimpleNamespace(enable_auth=True, allowlist=[])
+    )
+
+    await async_sync_tools(hass, setup_entry, _CLIENT)
+
+    assert ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_AGENT_UNPROTECTED) is None
+
+
+async def test_a_sync_raises_the_issue_for_crossed_timeouts(
+    hass, setup_entry, tool_calls
+):
+    """A confirmation wait longer than the agent waits is never answered."""
+    agent_timeout = int(
+        setup_entry.data.get(CONF_RESPONSE_TIMEOUT, DEFAULT_RESPONSE_TIMEOUT)
+    )
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_CONFIRM_TIMEOUT: agent_timeout + 5}
+    )
+
+    await async_sync_tools(hass, setup_entry, _CLIENT)
+
+    issue = ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_TIMEOUT_CROSSED)
+    assert issue is not None
+    assert issue.translation_placeholders == {
+        "confirm_timeout": str(agent_timeout + 5),
+        "agent_timeout": str(agent_timeout),
+    }
 
 
 async def test_sync_is_idempotent(hass, setup_entry, tool_calls):

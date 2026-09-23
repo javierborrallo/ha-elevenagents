@@ -18,6 +18,7 @@ from custom_components.elevenlabs_agent.const import (
     CONF_WEBHOOK_SECRET,
     DEFAULT_CONFIRM_TIMEOUT,
     DOMAIN,
+    ISSUE_MISSING_ENTITIES,
     ISSUE_ROTATION_UNSYNCED,
     OPT_AGENT_SETTINGS,
     OPT_AUTO_CONTROL,
@@ -1157,3 +1158,151 @@ async def test_the_issue_survives_until_the_sync_actually_finishes(
     assert seen_during_sync == [True]
     # The new secret is written before the sync starts, not after it finishes.
     assert secret_during_sync == [True]
+
+
+async def test_config_get_lists_missing_keys_with_where_they_are_stored(
+    hass, setup_entry, entity_registry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The user can only remove what the screen can show."""
+    present = entity_registry.async_get_or_create("light", "demo", "present")
+    hass.states.async_set("sensor.yaml_present", "1")
+    hass.config_entries.async_update_entry(
+        setup_entry,
+        options={
+            OPT_READ_ENTITIES: [present.id, "sensor.yaml_present", "sensor.yaml_gone"],
+            OPT_CONTROL_ENTITIES: ["lock.yaml_gone"],
+            OPT_EXCEPTIONS: {"lock.yaml_gone": ["lock.unlock"]},
+        },
+    )
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+    )
+    result = (await client.receive_json())["result"]
+
+    assert result["missing"] == [
+        {
+            "key": "lock.yaml_gone",
+            "entity_id": "lock.yaml_gone",
+            "read": False,
+            "control": True,
+            "restricted": True,
+        },
+        {
+            "key": "sensor.yaml_gone",
+            "entity_id": "sensor.yaml_gone",
+            "read": True,
+            "control": False,
+            "restricted": False,
+        },
+    ]
+
+
+async def test_config_get_names_the_entities_outside_the_registry(
+    hass, setup_entry, entity_registry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The panel marks these rows; it does not work them out itself."""
+    registered = entity_registry.async_get_or_create("light", "demo", "reg")
+    hass.states.async_set(registered.entity_id, "on")
+    hass.states.async_set("sensor.yaml_only", "1")
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+    )
+    result = (await client.receive_json())["result"]
+
+    assert "sensor.yaml_only" in result["unregistered_entity_ids"]
+    assert registered.entity_id not in result["unregistered_entity_ids"]
+
+
+async def test_forget_removes_missing_keys_and_synchronises(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The user removes what the integration could not tell was deleted."""
+    hass.config_entries.async_update_entry(
+        setup_entry,
+        options={
+            OPT_CONTROL_ENTITIES: ["lock.yaml_gone"],
+            OPT_EXCEPTIONS: {"lock.yaml_gone": ["lock.unlock"]},
+        },
+    )
+    client = await hass_ws_client(hass)
+
+    with patch(
+        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+    ) as sync:
+        await client.send_json_auto_id(
+            {
+                "type": "elevenlabs_agent/config/save",
+                "entry_id": setup_entry.entry_id,
+                "block": "forget",
+                "data": {"keys": ["lock.yaml_gone"]},
+            }
+        )
+        result = (await client.receive_json())["result"]
+
+    assert result["outcome"] == "ok"
+    assert setup_entry.options[OPT_CONTROL_ENTITIES] == []
+    assert setup_entry.options[OPT_EXCEPTIONS] == {}
+    assert sync.await_count == 1
+
+
+async def test_forget_refuses_a_key_whose_entity_exists(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The browser proposes; only a missing key may be forgotten."""
+    hass.states.async_set("lock.yaml_present", "locked")
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_CONTROL_ENTITIES: ["lock.yaml_present"]}
+    )
+    client = await hass_ws_client(hass)
+
+    with patch(
+        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+    ):
+        await client.send_json_auto_id(
+            {
+                "type": "elevenlabs_agent/config/save",
+                "entry_id": setup_entry.entry_id,
+                "block": "forget",
+                "data": {"keys": ["lock.yaml_present"]},
+            }
+        )
+        await client.receive_json()
+
+    assert setup_entry.options[OPT_CONTROL_ENTITIES] == ["lock.yaml_present"]
+
+
+async def test_forget_clears_the_missing_entities_issue(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """Removing the permission in the panel resolves the repair as well."""
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_READ_ENTITIES: ["sensor.yaml_gone"]}
+    )
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        ISSUE_MISSING_ENTITIES,
+        is_fixable=True,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key=ISSUE_MISSING_ENTITIES,
+    )
+    client = await hass_ws_client(hass)
+
+    with patch(
+        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+    ):
+        await client.send_json_auto_id(
+            {
+                "type": "elevenlabs_agent/config/save",
+                "entry_id": setup_entry.entry_id,
+                "block": "forget",
+                "data": {"keys": ["sensor.yaml_gone"]},
+            }
+        )
+        await client.receive_json()
+
+    assert ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_MISSING_ENTITIES) is None

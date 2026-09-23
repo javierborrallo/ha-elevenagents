@@ -9,9 +9,12 @@ import pytest
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import floor_registry as fr
+from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.elevenlabs_agent.const import (
+    DOMAIN,
+    ISSUE_MISSING_ENTITIES,
     OPT_AUTO_CONTROL,
     OPT_AUTO_EXPOSE,
     OPT_AUTO_EXPOSE_AREAS,
@@ -652,3 +655,61 @@ async def test_a_deletion_while_not_running_is_pruned_at_setup(
         await hass.async_block_till_done()
 
     assert setup_entry.options[OPT_READ_ENTITIES] == []
+
+
+def _missing_issue(hass) -> ir.IssueEntry | None:
+    """Return the missing entities issue, or None."""
+    return ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_MISSING_ENTITIES)
+
+
+async def _granted_outside_registry(hass, entry, freezer) -> None:
+    """Grant an entity that has a state and no registry entry, and settle."""
+    hass.states.async_set("sensor.yaml_only", "1")
+    hass.config_entries.async_update_entry(
+        entry, options={OPT_READ_ENTITIES: ["sensor.yaml_only"]}
+    )
+    _record_catalogue(hass, entry)
+    await _settle(hass, freezer)
+
+
+async def test_a_granted_entity_outside_the_registry_that_vanishes_raises_the_issue(
+    hass, setup_entry, freezer
+) -> None:
+    """Its state is the only witness, so the state change triggers the check."""
+    await _granted_outside_registry(hass, setup_entry, freezer)
+
+    hass.states.async_remove("sensor.yaml_only")
+    await _settle(hass, freezer)
+
+    assert _missing_issue(hass) is not None
+
+
+async def test_a_reload_inside_the_debounce_raises_nothing(
+    hass, setup_entry, freezer
+) -> None:
+    """A template reload removes the state and restores it at once."""
+    await _granted_outside_registry(hass, setup_entry, freezer)
+
+    hass.states.async_remove("sensor.yaml_only")
+    freezer.tick(1)
+    hass.states.async_set("sensor.yaml_only", "1")
+    await _settle(hass, freezer)
+
+    assert _missing_issue(hass) is None
+
+
+async def test_a_missing_entity_is_found_when_home_assistant_has_started(
+    hass, setup_entry, freezer
+) -> None:
+    """A restart sends no state change for an entity that never comes back."""
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_READ_ENTITIES: ["sensor.gone_before_start"]}
+    )
+    await hass.config_entries.async_unload(setup_entry.entry_id)
+
+    with patch("custom_components.elevenlabs_agent.async_sync_tools", AsyncMock()):
+        assert await hass.config_entries.async_setup(setup_entry.entry_id)
+        await hass.async_block_till_done()
+    await _settle(hass, freezer)
+
+    assert _missing_issue(hass) is not None
