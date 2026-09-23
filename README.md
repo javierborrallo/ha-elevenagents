@@ -81,6 +81,13 @@ shared secret. You can re-run the synchronisation at any time with the
 `elevenlabs_agent.sync_tools` action, and rotate either the secret or the webhook address
 from the panel.
 
+**Check that everything works** by clicking the status card at the top of the panel, or with
+the `elevenlabs_agent.check` action. It confirms that the integration is loaded, that
+ElevenLabs accepts your API key, that the agent is protected, that both tools are attached to
+it and match your selection, that the confirmation wait is shorter than the agent's, and that
+no entity you granted has disappeared. It talks to ElevenLabs, never to the agent, so it
+spends no conversation minutes. The action returns the same report, for use in an automation.
+
 ## What the agent can do
 
 `ha_get_state` reads. It carries the entities you selected for reading **and** the ones you
@@ -210,7 +217,7 @@ integration only ever acts on the IDs it stored when it created them.
 
 | Version | Scope |
 | --- | --- |
-| 0.3 | `ha_list_entities`, `ha_list_areas`, richer tool descriptions, sync diffs and status, diagnostics |
+| 0.3 | `ha_list_entities`, `ha_list_areas`, richer tool descriptions, sync diffs and status |
 | 0.4 | Push Home Assistant events to the agent |
 | 0.5 | Confirmation for sensitive actions |
 
