@@ -191,34 +191,41 @@ class ElevenLabsAgentPanel extends HTMLElement {
       ]),
     );
 
-    stack.appendChild(
-      navCard(t.sectionEntities, [
-        {
-          iconPath: ICON.eye,
-          headline: t.navRead,
-          supporting: t.navReadHint,
-          onClick: () => this._openEntities("read"),
-        },
-        {
-          iconPath: ICON.toggle,
-          headline: t.navControl,
-          supporting: t.navControlHint,
-          onClick: () => this._openEntities("control"),
-        },
-        {
-          iconPath: ICON.minusCircle,
-          headline: t.navExceptions,
-          supporting: t.navExceptionsHint,
-          onClick: () => this._openExceptions(),
-        },
-        {
-          iconPath: ICON.shapes,
-          headline: t.navAutoExpose,
-          supporting: t.navAutoExposeHint,
-          onClick: () => this._openAutoExpose(),
-        },
-      ]),
-    );
+    const entityItems = [
+      {
+        iconPath: ICON.eye,
+        headline: t.navRead,
+        supporting: t.navReadHint,
+        onClick: () => this._openEntities("read"),
+      },
+      {
+        iconPath: ICON.toggle,
+        headline: t.navControl,
+        supporting: t.navControlHint,
+        onClick: () => this._openEntities("control"),
+      },
+      {
+        iconPath: ICON.minusCircle,
+        headline: t.navExceptions,
+        supporting: t.navExceptionsHint,
+        onClick: () => this._openExceptions(),
+      },
+      {
+        iconPath: ICON.shapes,
+        headline: t.navAutoExpose,
+        supporting: t.navAutoExposeHint,
+        onClick: () => this._openAutoExpose(),
+      },
+    ];
+    if (this._config.missing.length > 0) {
+      entityItems.push({
+        iconPath: ICON.alert,
+        headline: t.navMissing,
+        supporting: t.navMissingHint,
+        onClick: () => this._openMissing(),
+      });
+    }
+    stack.appendChild(navCard(t.sectionEntities, entityItems));
 
     page.appendChild(stack);
     return page;
@@ -237,6 +244,7 @@ class ElevenLabsAgentPanel extends HTMLElement {
       build: () =>
         entityTree(this._hass, {
           selected: ids,
+          unregistered: this._config.unregistered_entity_ids,
           onChange: (next) => {
             ids = next;
           },
@@ -295,6 +303,48 @@ class ElevenLabsAgentPanel extends HTMLElement {
         }),
       onSave: async () => {
         const result = await commit();
+        if (isAdvanceable(result)) await this._reload();
+        return result;
+      },
+    });
+  }
+
+  _openMissing() {
+    const t = this._t;
+    const forget = new Set();
+    openDialog(this.shadowRoot, {
+      t,
+      title: t.navMissing,
+      subtitle: t.missingSubtitle,
+      saveLabel: t.missingRemove,
+      saveClass: "danger",
+      saveDisabled: true,
+      build: (_dialog, allowSave) => {
+        const list = el("div", "tree-list");
+        for (const item of this._config.missing) {
+          const row = el("div", "row");
+          const box = document.createElement("input");
+          box.type = "checkbox";
+          box.addEventListener("change", () => {
+            if (box.checked) forget.add(item.key);
+            else forget.delete(item.key);
+            allowSave(forget.size > 0);
+          });
+          row.appendChild(box);
+          const name = el("div", "name");
+          name.appendChild(el("span", null, item.entity_id || t.missingUnknown));
+          const where = [];
+          if (item.read) where.push(t.missingRead);
+          if (item.control) where.push(t.missingControl);
+          if (item.restricted) where.push(t.missingRestricted);
+          name.appendChild(el("span", "eid", where.join(" · ")));
+          row.appendChild(name);
+          list.appendChild(row);
+        }
+        return list;
+      },
+      onSave: async () => {
+        const result = await this._saveConfig("forget", { keys: [...forget] });
         if (isAdvanceable(result)) await this._reload();
         return result;
       },
@@ -447,6 +497,7 @@ class ElevenLabsAgentPanel extends HTMLElement {
           key === "read" ? t.wizardReadSubtitle : t.wizardControlSubtitle,
           entityTree(hass, {
             selected: this._draft[key],
+            unregistered: this._config.unregistered_entity_ids,
             onChange: (ids) => {
               this._draft[key] = ids;
             },

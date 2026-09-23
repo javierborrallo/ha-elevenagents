@@ -72,9 +72,10 @@ function entityIcon(hass, entityId) {
  * `selected` is the initial list of entity ids. Every change is reported
  * through `onChange` as a new sorted array.
  */
-export function entityTree(hass, { selected, onChange }) {
+export function entityTree(hass, { selected, onChange, unregistered }) {
   const t = strings(hass.language);
   const chosen = new Set(selected);
+  const outside = new Set(unregistered || []);
   const expanded = new Set();
   let needle = "";
 
@@ -163,6 +164,11 @@ export function entityTree(hass, { selected, onChange }) {
         const name = el("div", "name");
         name.appendChild(el("span", null, entry.name));
         name.appendChild(el("span", "eid", entry.entity_id));
+        if (outside.has(entry.entity_id)) {
+          const mark = el("span", "eid", t.treeNoUniqueId);
+          mark.title = t.treeNoUniqueIdHint;
+          name.appendChild(mark);
+        }
         row.appendChild(name);
         row.addEventListener("click", (event) => {
           if (event.target !== rowBox) rowBox.checked = !rowBox.checked;

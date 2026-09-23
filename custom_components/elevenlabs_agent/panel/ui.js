@@ -297,11 +297,18 @@ export function dirtyReporter(onDirty) {
 /**
  * Open a modal dialog inside `root`.
  *
- * `build` returns the dialog body. `onSave` is optional: without it the
- * dialog shows only a close button. With it, the dialog saves, reports the
- * outcome, and closes when the outcome allows it.
+ * `build` returns the dialog body. It receives the dialog and `allowSave`,
+ * which enables or disables the save button. `onSave` is optional: without
+ * it the dialog shows only a close button. With it, the dialog saves,
+ * reports the outcome, and closes when the outcome allows it.
+ *
+ * `saveLabel` and `saveClass` replace the text and the class of the save
+ * button. `saveDisabled` shows the save button disabled at first.
  */
-export function openDialog(root, { t, title, subtitle, build, onSave }) {
+export function openDialog(
+  root,
+  { t, title, subtitle, build, onSave, saveLabel, saveClass, saveDisabled },
+) {
   const dialog = document.createElement("dialog");
   const frame = el("div", "dlg");
 
@@ -310,8 +317,13 @@ export function openDialog(root, { t, title, subtitle, build, onSave }) {
   if (subtitle) head.appendChild(el("p", null, subtitle));
   frame.appendChild(head);
 
+  let save = null;
+  const allowSave = (enabled) => {
+    if (save) setEnabled(save, enabled);
+  };
+
   const body = el("div", "dlg-body");
-  body.appendChild(build(dialog));
+  body.appendChild(build(dialog, allowSave));
   frame.appendChild(body);
 
   const foot = el("div", "dlg-foot");
@@ -324,7 +336,7 @@ export function openDialog(root, { t, title, subtitle, build, onSave }) {
   foot.appendChild(close);
 
   if (onSave) {
-    const save = button(t.save, "primary", async () => {
+    save = button(saveLabel || t.save, saveClass || "primary", async () => {
       outcome.textContent = "";
       setEnabled(save, false);
       const result = await onSave();
@@ -335,6 +347,7 @@ export function openDialog(root, { t, title, subtitle, build, onSave }) {
       }
       outcome.textContent = describeSaveOutcome(t, result);
     });
+    if (saveDisabled) setEnabled(save, false);
     foot.appendChild(save);
   }
 

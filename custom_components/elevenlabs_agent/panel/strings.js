@@ -36,6 +36,20 @@ const EN = {
   navExceptionsHint: "Actions removed from a controlled entity",
   navAutoExpose: "Automatic exposure",
   navAutoExposeHint: "What happens to entities you add later",
+  navMissing: "Missing entities",
+  navMissingHint: "Permissions whose entity no longer exists",
+  missingSubtitle:
+    "These entities are not in Home Assistant now. Remove the ones you deleted. " +
+    "An entity that is only reloading comes back by itself.",
+  missingRead: "Read",
+  missingControl: "Control",
+  missingRestricted: "Restrictions",
+  missingUnknown: "Deleted entity",
+  missingRemove: "Remove",
+  treeNoUniqueId: "No unique_id",
+  treeNoUniqueIdHint:
+    "Renaming this entity removes its permission, and another entity that takes " +
+    "the name would receive it. Add a unique_id to its YAML to fix this.",
 
   promptHeading: "Agent prompt",
   promptHint: "Copy what you want from the right into your own prompt.",
@@ -142,6 +156,20 @@ const ES = {
   navExceptionsHint: "Acciones retiradas a una entidad controlada",
   navAutoExpose: "Exposición automática",
   navAutoExposeHint: "Qué pasa con las entidades que añadas más adelante",
+  navMissing: "Entidades desaparecidas",
+  navMissingHint: "Permisos cuya entidad ya no existe",
+  missingSubtitle:
+    "Estas entidades no están ahora en Home Assistant. Quita las que hayas borrado. " +
+    "Una entidad que solo se está recargando vuelve sola.",
+  missingRead: "Lectura",
+  missingControl: "Control",
+  missingRestricted: "Restricciones",
+  missingUnknown: "Entidad borrada",
+  missingRemove: "Eliminar",
+  treeNoUniqueId: "Sin unique_id",
+  treeNoUniqueIdHint:
+    "Si renombras esta entidad pierde su permiso, y otra que tome el nombre lo " +
+    "recibiría. Añade un unique_id en su YAML para evitarlo.",
 
   promptHeading: "Prompt del agente",
   promptHint: "Copia lo que quieras de la derecha a tu propio prompt.",
