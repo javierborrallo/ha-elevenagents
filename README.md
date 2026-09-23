@@ -93,6 +93,11 @@ An entity you did not select does not appear in either schema, and the server an
 `not_found` if the agent asks for it anyway — the same answer it gives for an entity that
 does not exist. Nothing reveals what you chose to keep private.
 
+**The schemas follow Home Assistant.** Rename an entity, move it or its device to another area,
+or rename an area, and the agent's tools are updated about ten seconds later. A renamed entity
+keeps its permissions. Delete an entity and its permissions go with it, so a new entity never
+inherits them by taking the same name.
+
 ## Security
 
 Read this section before you expose a lock, an alarm or a garage door.
@@ -119,8 +124,15 @@ integration reports `unconfirmed`, and the action may still have run. The prompt
 the agent to read the state instead of repeating the command.
 
 **An entity outside the entity registry is identified by its `entity_id`.** Entities from
-YAML, from templates and from groups never enter the registry. Rename one and its permission
-stops matching: the agent loses access, and nothing says so.
+YAML, from templates and from groups enter the registry only when they declare a `unique_id`.
+Without one, a rename is a deletion followed by a new entity: the permission stays on the old
+name, and any entity that later takes that name receives it. The panel marks these entities
+**No unique_id**.
+
+When one disappears, the integration cannot tell a deletion from a reload, so it removes nothing
+by itself. If the entity is still gone ten seconds later, a repair issue lists it, and the panel
+shows it under **Missing entities**, where you remove its permissions. Ignore the issue to keep
+them. Add a `unique_id` and the entity is followed like any other.
 
 ## The recommended prompt block
 
@@ -198,7 +210,7 @@ integration only ever acts on the IDs it stored when it created them.
 
 | Version | Scope |
 | --- | --- |
-| 0.3 | `ha_list_entities`, `ha_list_areas`, richer tool descriptions, sync diffs and status, diagnostics, synchronising when an entity is removed or renamed |
+| 0.3 | `ha_list_entities`, `ha_list_areas`, richer tool descriptions, sync diffs and status, diagnostics |
 | 0.4 | Push Home Assistant events to the agent |
 | 0.5 | Confirmation for sensitive actions |
 
