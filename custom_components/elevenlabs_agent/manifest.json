@@ -2,7 +2,7 @@
   "domain": "elevenlabs_agent",
   "name": "ElevenLabs Agent",
   "codeowners": [
-    "@javierBF97"
+    "@javierborrallo"
   ],
   "config_flow": true,
   "dependencies": [
@@ -12,10 +12,10 @@
     "http",
     "websocket_api"
   ],
-  "documentation": "https://github.com/javierBF97/ha-elevenlabs-agent",
+  "documentation": "https://github.com/javierborrallo/ha-elevenlabs-agent",
   "integration_type": "service",
   "iot_class": "cloud_push",
-  "issue_tracker": "https://github.com/javierBF97/ha-elevenlabs-agent/issues",
+  "issue_tracker": "https://github.com/javierborrallo/ha-elevenlabs-agent/issues",
   "requirements": [
     "elevenlabs>=2.68.0"
   ],
