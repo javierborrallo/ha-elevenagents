@@ -87,6 +87,16 @@
           "description": "The ElevenLabs Agent config entry to synchronise."
         }
       }
+    },
+    "check": {
+      "name": "Check the connection",
+      "description": "Check the API key, the agent's protection, both tools and the permissions, and answer with a report. Talks to ElevenLabs, never to the agent.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "The ElevenLabs Agent config entry to check."
+        }
+      }
     }
   }
 }

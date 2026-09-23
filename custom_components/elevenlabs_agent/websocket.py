@@ -13,6 +13,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.service import async_get_all_descriptions
 
+from .check import async_run_check
 from .const import (
     CONF_AGENT_ID,
     CONF_RESPONSE_TIMEOUT,
@@ -497,6 +498,25 @@ async def rotate(
 
 
 @callback
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "elevenlabs_agent/check",
+        vol.Required("entry_id"): str,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def check(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Run the connection check and answer with its report."""
+    entry = _entry(hass, msg["entry_id"])
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "Unknown config entry")
+        return
+    connection.send_result(msg["id"], await async_run_check(hass, entry))
+
+
 def async_register_commands(hass: HomeAssistant) -> None:
     """Register every command the panel uses."""
     websocket_api.async_register_command(hass, config_get)
@@ -504,3 +524,4 @@ def async_register_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, agent_get)
     websocket_api.async_register_command(hass, agent_save)
     websocket_api.async_register_command(hass, rotate)
+    websocket_api.async_register_command(hass, check)

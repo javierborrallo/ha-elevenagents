@@ -5,3 +5,11 @@ sync_tools:
       selector:
         config_entry:
           integration: elevenlabs_agent
+
+check:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: elevenlabs_agent

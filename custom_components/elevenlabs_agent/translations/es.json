@@ -87,6 +87,16 @@
           "description": "La entrada de configuración de ElevenLabs Agent que se sincroniza."
         }
       }
+    },
+    "check": {
+      "name": "Comprobar la conexión",
+      "description": "Comprueba la clave de API, la protección del agente, las dos herramientas y los permisos, y responde con un informe. Habla con ElevenLabs, nunca con el agente.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "La entrada de ElevenLabs Agent que se comprueba."
+        }
+      }
     }
   }
 }

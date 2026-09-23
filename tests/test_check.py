@@ -1,0 +1,228 @@
+"""Tests for the connection check, its service and its WebSocket command."""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+from custom_components.elevenlabs_agent.check import async_run_check
+from custom_components.elevenlabs_agent.const import (
+    CONF_TOOL_IDS,
+    DOMAIN,
+    OPT_CONFIRM_TIMEOUT,
+    OPT_READ_ENTITIES,
+    TOOL_CALL_SERVICE,
+    TOOL_GET_STATE,
+)
+from custom_components.elevenlabs_agent.elevenlabs_client import (
+    ElevenLabsAuthError,
+    ElevenLabsNotFoundError,
+)
+from custom_components.elevenlabs_agent.tool_sync import async_build_definitions
+
+if TYPE_CHECKING:
+    from pytest_homeassistant_custom_component.typing import WebSocketGenerator
+
+# homeassistant 2026.9.1's http server sets self.app["hass"] as a plain key.
+# aiohttp 3.14.3 raises NotAppKeyWarning for that pattern. pyproject.toml
+# turns every warning into an error, so this module ignores this one category.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore::aiohttp.web_exceptions.NotAppKeyWarning"
+)
+
+TOOL_IDS = {TOOL_GET_STATE: "tool_get", TOOL_CALL_SERVICE: "tool_call"}
+
+
+def _agent(*, protected: bool = True, tool_ids: list[str] | None = None) -> Any:
+    """Build an agent read with the two fields the check looks at."""
+    attached = list(TOOL_IDS.values()) if tool_ids is None else tool_ids
+    return SimpleNamespace(
+        platform_settings=SimpleNamespace(
+            auth=SimpleNamespace(enable_auth=protected, allowlist=[])
+        ),
+        conversation_config=SimpleNamespace(
+            agent=SimpleNamespace(prompt=SimpleNamespace(tool_ids=attached))
+        ),
+    )
+
+
+@pytest.fixture
+async def synced(hass, setup_entry):
+    """Store the tool ids, and return the definitions a sync would send now."""
+    hass.config_entries.async_update_entry(
+        setup_entry, data={**setup_entry.data, CONF_TOOL_IDS: TOOL_IDS}
+    )
+    return await async_build_definitions(hass, setup_entry)
+
+
+@pytest.fixture
+def elevenlabs(synced):
+    """Answer the agent and tool reads as a healthy workspace would."""
+    by_id = {TOOL_IDS[name]: config for name, config in synced.items()}
+
+    async def get_tool(_client: object, tool_id: str) -> SimpleNamespace:
+        return SimpleNamespace(tool_config=by_id[tool_id])
+
+    with (
+        patch(
+            "custom_components.elevenlabs_agent.check.async_get_agent",
+            AsyncMock(return_value=_agent()),
+        ) as get_agent,
+        patch(
+            "custom_components.elevenlabs_agent.check.async_get_tool",
+            AsyncMock(side_effect=get_tool),
+        ) as get_tool_mock,
+    ):
+        yield SimpleNamespace(get_agent=get_agent, get_tool=get_tool_mock, by_id=by_id)
+
+
+def _status(result: dict[str, Any]) -> dict[str, str]:
+    """Map each check to its status."""
+    return {item["check"]: item["status"] for item in result["checks"]}
+
+
+def _detail(result: dict[str, Any], check: str) -> Any:
+    """Return the detail of one check."""
+    return next(item["detail"] for item in result["checks"] if item["check"] == check)
+
+
+async def test_a_healthy_setup_passes_every_check(hass, setup_entry, elevenlabs):
+    """The owner reads one line to know everything works."""
+    result = await async_run_check(hass, setup_entry)
+
+    assert result["ok"] is True
+    assert _status(result) == {
+        "loaded": "ok",
+        "key": "ok",
+        "protected": "ok",
+        "tools_attached": "ok",
+        "tools_current": "ok",
+        "timeouts": "ok",
+        "missing_entities": "ok",
+    }
+
+
+async def test_a_refused_key_skips_what_needs_elevenlabs(hass, setup_entry, elevenlabs):
+    """Three failures that share one cause would bury the cause."""
+    elevenlabs.get_agent.side_effect = ElevenLabsAuthError("401")
+
+    result = await async_run_check(hass, setup_entry)
+
+    status = _status(result)
+    assert result["ok"] is False
+    assert status["key"] == "problem"
+    assert status["protected"] == "skipped"
+    assert status["tools_attached"] == "skipped"
+    assert status["tools_current"] == "skipped"
+    assert status["timeouts"] == "ok"
+    assert status["missing_entities"] == "ok"
+
+
+async def test_an_open_agent_is_a_problem(hass, setup_entry, elevenlabs):
+    """Anyone holding the agent id can talk to it."""
+    elevenlabs.get_agent.return_value = _agent(protected=False)
+
+    result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["protected"] == "problem"
+
+
+async def test_a_detached_tool_is_named(hass, setup_entry, elevenlabs):
+    """A tool removed from the agent by hand leaves the agent blind or mute."""
+    elevenlabs.get_agent.return_value = _agent(tool_ids=["tool_get"])
+
+    result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["tools_attached"] == "problem"
+    assert _detail(result, "tools_attached") == [TOOL_CALL_SERVICE]
+
+
+async def test_a_stale_tool_is_named(hass, setup_entry, entity_registry, elevenlabs):
+    """A selection the agent never received is the failure this check exists for."""
+    light = entity_registry.async_get_or_create("light", "demo", "new")
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_READ_ENTITIES: [light.id]}
+    )
+
+    result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["tools_current"] == "problem"
+    assert _detail(result, "tools_current") == [TOOL_GET_STATE]
+
+
+async def test_a_tool_deleted_in_elevenlabs_is_named(hass, setup_entry, elevenlabs):
+    """The next sync recreates it; until then the agent lacks it."""
+    elevenlabs.get_tool.side_effect = ElevenLabsNotFoundError("404")
+
+    result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["tools_current"] == "problem"
+    assert _detail(result, "tools_current") == [TOOL_CALL_SERVICE, TOOL_GET_STATE]
+
+
+async def test_crossed_timeouts_are_a_problem(hass, setup_entry, elevenlabs):
+    """The same rule as the timeout_crossed repair."""
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_CONFIRM_TIMEOUT: 999}
+    )
+
+    result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["timeouts"] == "problem"
+
+
+async def test_a_missing_entity_is_named(hass, setup_entry, elevenlabs):
+    """The same list the panel and the repair show."""
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_READ_ENTITIES: ["sensor.gone"]}
+    )
+
+    result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["missing_entities"] == "problem"
+    assert _detail(result, "missing_entities") == ["sensor.gone"]
+
+
+async def test_an_unloaded_entry_is_still_checked(hass, setup_entry, elevenlabs):
+    """The entry is in trouble precisely when someone runs this."""
+    await hass.config_entries.async_unload(setup_entry.entry_id)
+
+    with patch(
+        "custom_components.elevenlabs_agent.check.async_get_client",
+        return_value=object(),
+    ):
+        result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["loaded"] == "problem"
+    assert _status(result)["key"] == "ok"
+
+
+async def test_the_service_answers_with_the_result(hass, setup_entry, elevenlabs):
+    """Developer Tools and automations read the same result as the panel."""
+    result = await hass.services.async_call(
+        DOMAIN,
+        "check",
+        {"config_entry_id": setup_entry.entry_id},
+        blocking=True,
+        return_response=True,
+    )
+
+    assert result is not None
+    assert result["ok"] is True
+
+
+async def test_the_websocket_command_answers_with_the_result(
+    hass, setup_entry, elevenlabs, hass_ws_client: WebSocketGenerator
+):
+    """The panel's status card runs the same check."""
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "elevenlabs_agent/check", "entry_id": setup_entry.entry_id}
+    )
+    result = (await client.receive_json())["result"]
+
+    assert result["ok"] is True
+    assert len(result["checks"]) == 7

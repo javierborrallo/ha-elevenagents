@@ -348,13 +348,19 @@ def _survives(sent: Any, got: Any, path: str = "") -> list[str]:
     return [] if sent == got else [path or "."]
 
 
-def _check_readback(name: str, sent: dict[str, Any], got: Any) -> None:
-    """Raise when a value this integration sent did not come back unchanged."""
+def readback_divergence(sent: dict[str, Any], got: Any) -> list[str]:
+    """Return the compared fields where a read-back differs from what was sent."""
     sent_view = _as_dict(sent)
     got_view = _as_dict(got)
     divergent: list[str] = []
     for field in COMPARED_FIELDS:
         divergent += _survives(sent_view.get(field), got_view.get(field), field)
+    return divergent
+
+
+def _check_readback(name: str, sent: dict[str, Any], got: Any) -> None:
+    """Raise when a value this integration sent did not come back unchanged."""
+    divergent = readback_divergence(sent, got)
     if divergent:
         message = f"{name} read-back diverged from what was sent: {divergent}"
         raise ToolSyncError(message)
@@ -390,10 +396,10 @@ async def _attach(
     )
 
 
-async def _sync(
-    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry, client: AsyncElevenLabs
-) -> None:
-    """Create or update each tool, store its id, then attach both to the agent."""
+async def async_build_definitions(
+    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry
+) -> dict[str, dict[str, Any]]:
+    """Build the two tool definitions a sync sends now, keyed by tool name."""
     perms = from_options(entry.options)
     descriptions = await async_get_all_descriptions(hass)
     translations = await async_get_translations(
@@ -409,9 +415,7 @@ async def _sync(
     )
     settings = agent_settings(entry.options)
 
-    catalogue = entity_catalogue(hass, perms.read | perms.control)
-
-    definitions = {
+    return {
         TOOL_GET_STATE: build_get_state(
             hass, perms, url, secret, timeout, settings=settings
         ),
@@ -426,6 +430,15 @@ async def _sync(
             settings=settings,
         ),
     }
+
+
+async def _sync(
+    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry, client: AsyncElevenLabs
+) -> None:
+    """Create or update each tool, store its id, then attach both to the agent."""
+    definitions = await async_build_definitions(hass, entry)
+    perms = from_options(entry.options)
+    catalogue = entity_catalogue(hass, perms.read | perms.control)
 
     stored: dict[str, str] = dict(entry.data.get(CONF_TOOL_IDS, {}))
 

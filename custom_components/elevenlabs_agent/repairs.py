@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from . import ElevenLabsAgentConfigEntry
 
 
-def _is_protected(agent: GetAgentResponseModel) -> bool:
+def is_protected(agent: GetAgentResponseModel) -> bool:
     """Return whether the agent requires auth or restricts callers by origin."""
     auth = agent.platform_settings.auth if agent.platform_settings else None
     if auth is None:
@@ -51,7 +51,7 @@ def async_check_agent(
     agent: GetAgentResponseModel,
 ) -> None:
     """Raise or clear the agent_unprotected issue for one entry."""
-    if _is_protected(agent):
+    if is_protected(agent):
         ir.async_delete_issue(hass, DOMAIN, ISSUE_AGENT_UNPROTECTED)
         return
 
