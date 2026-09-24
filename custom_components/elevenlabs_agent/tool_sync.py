@@ -318,6 +318,24 @@ def _as_dict(value: Any) -> dict[str, Any]:
     return cast("dict[str, Any]", vars(value))
 
 
+def entity_enum(config: Any) -> list[str] | None:
+    """
+    Return the entity_id enum of a tool definition or read-back.
+
+    Return None when the definition has no such enum.
+    """
+    try:
+        api_schema = _as_dict(_as_dict(config)["api_schema"])
+        schema = _as_dict(api_schema["request_body_schema"])
+        entity = _as_dict(_as_dict(schema["properties"])["entity_id"])
+    except KeyError, TypeError:
+        return None
+    items = entity.get("items")
+    holder = entity if items is None else _as_dict(items)
+    enum = holder.get("enum")
+    return None if enum is None else [str(value) for value in enum]
+
+
 def _controlled_domains(hass: HomeAssistant, perms: Permissions) -> set[str]:
     """Return the domains of every entity the user may control."""
     domains: set[str] = set()

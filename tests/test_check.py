@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import copy
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from custom_components.elevenlabs_agent.check import async_run_check
+from custom_components.elevenlabs_agent.check import CHECKS, async_run_check
 from custom_components.elevenlabs_agent.const import (
     CONF_TOOL_IDS,
     DOMAIN,
@@ -150,7 +151,12 @@ async def test_a_stale_tool_is_named(hass, setup_entry, entity_registry, elevenl
     result = await async_run_check(hass, setup_entry)
 
     assert _status(result)["tools_current"] == "problem"
-    assert _detail(result, "tools_current") == [TOOL_GET_STATE]
+    assert _detail(result, "tools_current") == {
+        "tools": [TOOL_GET_STATE],
+        "missing": [light.entity_id],
+        "extra": [],
+        "unreadable": [],
+    }
 
 
 async def test_a_tool_deleted_in_elevenlabs_is_named(hass, setup_entry, elevenlabs):
@@ -160,7 +166,59 @@ async def test_a_tool_deleted_in_elevenlabs_is_named(hass, setup_entry, elevenla
     result = await async_run_check(hass, setup_entry)
 
     assert _status(result)["tools_current"] == "problem"
-    assert _detail(result, "tools_current") == [TOOL_CALL_SERVICE, TOOL_GET_STATE]
+    assert _detail(result, "tools_current") == {
+        "tools": [TOOL_CALL_SERVICE, TOOL_GET_STATE],
+        "missing": [],
+        "extra": [],
+        "unreadable": [TOOL_CALL_SERVICE, TOOL_GET_STATE],
+    }
+
+
+async def test_an_entity_left_on_the_agent_is_extra(hass, setup_entry, elevenlabs):
+    """A tool edited by hand can hold an entity nobody selected."""
+    edited = copy.deepcopy(elevenlabs.by_id["tool_get"])
+    schema = edited["api_schema"]["request_body_schema"]
+    schema["properties"]["entity_id"]["items"]["enum"] = ["light.old"]
+    elevenlabs.by_id["tool_get"] = edited
+
+    result = await async_run_check(hass, setup_entry)
+
+    assert _detail(result, "tools_current") == {
+        "tools": [TOOL_GET_STATE],
+        "missing": [],
+        "extra": ["light.old"],
+        "unreadable": [],
+    }
+
+
+async def test_a_changed_description_names_the_tool_only(hass, setup_entry, elevenlabs):
+    """A field other than the enum names the tool and no entity."""
+    edited = copy.deepcopy(elevenlabs.by_id["tool_call"])
+    edited["description"] = "edited by hand"
+    elevenlabs.by_id["tool_call"] = edited
+
+    result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["tools_current"] == "problem"
+    assert _detail(result, "tools_current") == {
+        "tools": [TOOL_CALL_SERVICE],
+        "missing": [],
+        "extra": [],
+        "unreadable": [],
+    }
+
+
+def test_checks_lists_the_report_in_order():
+    """The sensors and the report use one list of names."""
+    assert CHECKS == (
+        "loaded",
+        "key",
+        "protected",
+        "tools_attached",
+        "tools_current",
+        "timeouts",
+        "missing_entities",
+    )
 
 
 async def test_crossed_timeouts_are_a_problem(hass, setup_entry, elevenlabs):

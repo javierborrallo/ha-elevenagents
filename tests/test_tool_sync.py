@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import patch
 
 import pytest
@@ -39,6 +39,7 @@ from custom_components.elevenlabs_agent.tool_sync import (
     build_call_service,
     build_get_state,
     entity_catalogue,
+    entity_enum,
     service_data_properties,
 )
 
@@ -784,3 +785,38 @@ def test_readback_catches_a_discarded_pre_tool_speech() -> None:
 
     with pytest.raises(ToolSyncError, match="pre_tool_speech"):
         _check_readback("ha_get_state", sent, got)
+
+
+def test_entity_enum_reads_both_tool_shapes():
+    """ha_get_state holds the enum under items; ha_call_service holds it directly."""
+    get_state = {
+        "api_schema": {
+            "request_body_schema": {
+                "properties": {
+                    "entity_id": {"type": "array", "items": {"enum": ["a.b"]}}
+                }
+            }
+        }
+    }
+    call_service = {
+        "api_schema": {
+            "request_body_schema": {
+                "properties": {
+                    "entity_id": {"type": "string", "items": None, "enum": ["c.d"]}
+                }
+            }
+        }
+    }
+
+    assert entity_enum(get_state) == ["a.b"]
+    assert entity_enum(call_service) == ["c.d"]
+
+
+def test_entity_enum_is_none_without_an_enum():
+    """A tool in another shape has no list to compare."""
+    assert entity_enum({"name": "x"}) is None
+    assert entity_enum(SimpleNamespace(api_schema=None)) is None
+    empty_schema: dict[str, Any] = {
+        "api_schema": {"request_body_schema": {"properties": {}}}
+    }
+    assert entity_enum(empty_schema) is None

@@ -25,7 +25,7 @@ from .elevenlabs_client import (
 )
 from .permissions import entity_id_for, missing_keys
 from .repairs import is_protected
-from .tool_sync import async_build_definitions, readback_divergence
+from .tool_sync import async_build_definitions, entity_enum, readback_divergence
 
 if TYPE_CHECKING:
     from elevenlabs import AsyncElevenLabs
@@ -36,6 +36,16 @@ if TYPE_CHECKING:
 OK = "ok"
 PROBLEM = "problem"
 SKIPPED = "skipped"
+
+CHECKS = (
+    "loaded",
+    "key",
+    "protected",
+    "tools_attached",
+    "tools_current",
+    "timeouts",
+    "missing_entities",
+)
 
 
 def _item(check: str, status: str, detail: Any = None) -> dict[str, Any]:
@@ -51,25 +61,48 @@ def _client(hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry) -> AsyncElev
     return async_get_client(hass, entry.data[CONF_API_KEY])
 
 
-async def _stale_tools(
+async def _tools_current(
     hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry, client: AsyncElevenLabs
-) -> list[str]:
-    """Return the tools whose read-back differs from what a sync sends now."""
+) -> dict[str, list[str]]:
+    """
+    Compare each tool's read-back with what a sync sends now.
+
+    Return the tools that differ, the entities missing on the agent, the
+    entities extra on the agent, and the tools that could not be read.
+    """
     stored: dict[str, str] = entry.data.get(CONF_TOOL_IDS, {})
-    stale: list[str] = []
+    tools: list[str] = []
+    unreadable: list[str] = []
+    missing: set[str] = set()
+    extra: set[str] = set()
     for name, config in (await async_build_definitions(hass, entry)).items():
         tool_id = stored.get(name)
-        if tool_id is None:
-            stale.append(name)
+        readback: Any = None
+        if tool_id is not None:
+            try:
+                readback = await async_get_tool(client, tool_id)
+            except ElevenLabsNotFoundError:
+                readback = None
+        if readback is None:
+            tools.append(name)
+            unreadable.append(name)
             continue
-        try:
-            readback = await async_get_tool(client, tool_id)
-        except ElevenLabsNotFoundError:
-            stale.append(name)
+        if not readback_divergence(config, readback.tool_config):
             continue
-        if readback_divergence(config, readback.tool_config):
-            stale.append(name)
-    return sorted(stale)
+        tools.append(name)
+        got = entity_enum(readback.tool_config)
+        if got is None:
+            unreadable.append(name)
+            continue
+        sent = set(entity_enum(config) or [])
+        missing |= sent - set(got)
+        extra |= set(got) - sent
+    return {
+        "tools": sorted(tools),
+        "missing": sorted(missing),
+        "extra": sorted(extra),
+        "unreadable": sorted(unreadable),
+    }
 
 
 def _detached_tools(entry: ElevenLabsAgentConfigEntry, agent: Any) -> list[str]:
@@ -137,14 +170,14 @@ async def async_run_check(
         ]
     else:
         detached = _detached_tools(entry, agent)
-        stale = await _stale_tools(hass, entry, client)
+        current = await _tools_current(hass, entry, client)
         checks += [
             _item("protected", OK if is_protected(agent) else PROBLEM),
             _item("tools_attached", PROBLEM, detached)
             if detached
             else _item("tools_attached", OK),
-            _item("tools_current", PROBLEM, stale)
-            if stale
+            _item("tools_current", PROBLEM, current)
+            if current["tools"]
             else _item("tools_current", OK),
         ]
 
