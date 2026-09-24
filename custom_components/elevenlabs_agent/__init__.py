@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import config_validation as cv
 
@@ -39,6 +40,8 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR]
 
 
 @dataclass
@@ -87,15 +90,15 @@ async def async_setup_entry(
     except ElevenLabsAuthError as err:
         raise ConfigEntryAuthFailed from err
 
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
 async def async_unload_entry(
-    hass: HomeAssistant,  # noqa: ARG001 - unloading is done through async_on_unload
-    entry: ElevenLabsAgentConfigEntry,  # noqa: ARG001
+    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry
 ) -> bool:
-    """Unload the config entry. Every resource unregisters through async_on_unload."""
-    return True
+    """Unload the sensors. Every other resource unregisters through async_on_unload."""
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
 async def async_remove_entry(

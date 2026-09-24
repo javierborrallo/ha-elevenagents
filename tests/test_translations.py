@@ -97,3 +97,17 @@ def test_an_issue_is_fixable_or_informative_but_not_both(language: str) -> None:
         assert "description" in issue or "fix_flow" in issue, (
             f"{language}.json issue {name} carries neither"
         )
+
+
+@pytest.mark.parametrize("language", ["en", "es"])
+def test_every_status_sensor_has_a_name(language: str) -> None:
+    """A sensor without a name shows its translation key."""
+    names = _load(language).get("entity", {}).get("binary_sensor", {})
+    source = (SOURCE / "check.py").read_text()
+    checks = re.search(r"^CHECKS = \(\n(.*?)\n\)", source, re.MULTILINE | re.DOTALL)
+    assert checks is not None
+    keys = ["agent", *re.findall(r'"([a-z_]+)"', checks.group(1))]
+
+    assert len(keys) == 8
+    for key in keys:
+        assert names.get(key, {}).get("name"), f"{language}.json has no name for {key}"

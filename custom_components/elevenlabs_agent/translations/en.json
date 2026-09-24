@@ -77,6 +77,18 @@
       "description": "These entities are not in Home Assistant now, but the agent still holds permissions for them: {entities}.\n\nIf you deleted them, remove their permissions under **Missing entities** in the integration's panel. A new entity that takes one of these names would otherwise receive them.\n\nIf an entity is only reloading, it comes back by itself and this notice clears. Ignore this notice to keep the permissions."
     }
   },
+  "entity": {
+    "binary_sensor": {
+      "agent": { "name": "Agent" },
+      "loaded": { "name": "Integration loaded" },
+      "key": { "name": "API key" },
+      "protected": { "name": "Agent protection" },
+      "tools_attached": { "name": "Tools attached" },
+      "tools_current": { "name": "Tools up to date" },
+      "timeouts": { "name": "Confirmation wait" },
+      "missing_entities": { "name": "Missing entities" }
+    }
+  },
   "services": {
     "sync_tools": {
       "name": "Synchronise tools",
