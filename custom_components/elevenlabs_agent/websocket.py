@@ -58,6 +58,8 @@ if TYPE_CHECKING:
 
     from homeassistant.config_entries import ConfigEntry
 
+    from . import ElevenLabsAgentConfigEntry
+
 
 def _entry(hass: HomeAssistant, entry_id: str) -> ConfigEntry | None:
     """Return this integration's entry with that id, or None."""
@@ -150,6 +152,18 @@ def _unregistered(hass: HomeAssistant) -> list[str]:
     )
 
 
+def _unsynced(entry: ElevenLabsAgentConfigEntry) -> list[str]:
+    """Return the entity_ids the last check found missing on the agent."""
+    runtime = getattr(entry, "runtime_data", None)
+    result = None if runtime is None else runtime.last_check
+    if result is None:
+        return []
+    for item in result["checks"]:
+        if item["check"] == "tools_current" and isinstance(item["detail"], dict):
+            return list(item["detail"]["missing"])
+    return []
+
+
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "elevenlabs_agent/config/get",
@@ -195,6 +209,7 @@ async def config_get(
             "available_actions": await _available_actions(hass, control),
             "missing": _missing(hass, options),
             "unregistered_entity_ids": _unregistered(hass),
+            "unsynced_entity_ids": _unsynced(entry),
             "confirm_timeout": options.get(
                 OPT_CONFIRM_TIMEOUT, DEFAULT_CONFIRM_TIMEOUT
             ),

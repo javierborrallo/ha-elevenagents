@@ -71,11 +71,13 @@ function entityIcon(hass, entityId) {
  *
  * `selected` is the initial list of entity ids. Every change is reported
  * through `onChange` as a new sorted array.
+ * `unsynced` is the list of entity ids the agent does not have.
  */
-export function entityTree(hass, { selected, onChange, unregistered }) {
+export function entityTree(hass, { selected, onChange, unregistered, unsynced }) {
   const t = strings(hass.language);
   const chosen = new Set(selected);
   const outside = new Set(unregistered || []);
+  const behind = new Set(unsynced || []);
   const expanded = new Set();
   let needle = "";
 
@@ -167,6 +169,11 @@ export function entityTree(hass, { selected, onChange, unregistered }) {
         if (outside.has(entry.entity_id)) {
           const mark = el("span", "eid", t.treeNoUniqueId);
           mark.title = t.treeNoUniqueIdHint;
+          name.appendChild(mark);
+        }
+        if (behind.has(entry.entity_id)) {
+          const mark = el("span", "eid", t.treeNotSynced);
+          mark.title = t.treeNotSyncedHint;
           name.appendChild(mark);
         }
         row.appendChild(name);

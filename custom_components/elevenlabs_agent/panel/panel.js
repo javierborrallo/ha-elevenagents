@@ -47,6 +47,16 @@ const WIZARD_STEPS = [
   "exposure",
 ];
 
+// Return the entity ids the check found missing on the agent.
+function unsyncedFrom(result) {
+  for (const item of result.checks) {
+    if (item.check === "tools_current" && item.detail && item.detail.missing) {
+      return item.detail.missing.slice();
+    }
+  }
+  return [];
+}
+
 class ElevenLabsAgentPanel extends HTMLElement {
   constructor() {
     super();
@@ -252,6 +262,7 @@ class ElevenLabsAgentPanel extends HTMLElement {
         entityTree(this._hass, {
           selected: ids,
           unregistered: this._config.unregistered_entity_ids,
+          unsynced: this._config.unsynced_entity_ids,
           onChange: (next) => {
             ids = next;
           },
@@ -325,7 +336,10 @@ class ElevenLabsAgentPanel extends HTMLElement {
         const host = el("div", "check-list");
         host.appendChild(el("p", null, t.checkRunning));
         this._callWS(WS.check)
-          .then((result) => this._paintCheck(host, result))
+          .then((result) => {
+            this._config.unsynced_entity_ids = unsyncedFrom(result);
+            this._paintCheck(host, result);
+          })
           .catch((err) => {
             host.textContent = t.checkFailed.replace(
               "{detail}",
@@ -372,8 +386,39 @@ class ElevenLabsAgentPanel extends HTMLElement {
         .replace("{confirm}", String(detail.confirm_timeout))
         .replace("{agent}", String(detail.agent_timeout));
     }
+    if (item.check === "tools_current") return this._toolsDetail(detail);
     if (Array.isArray(detail)) return detail.join(", ");
     return detail ? String(detail) : "";
+  }
+
+  // Return the sentence under tools_current: the entities first, then the tools.
+  _toolsDetail(detail) {
+    const t = this._t;
+    const parts = [];
+    if (detail.missing.length > 0) {
+      parts.push(t.checkToolsMissing.replace("{list}", this._names(detail.missing)));
+    }
+    if (detail.extra.length > 0) {
+      parts.push(t.checkToolsExtra.replace("{list}", this._names(detail.extra)));
+    }
+    if (detail.unreadable.length > 0) {
+      parts.push(t.checkToolsUnreadable.replace("{list}", detail.unreadable.join(", ")));
+    }
+    if (parts.length === 0) {
+      parts.push(t.checkToolsOther.replace("{list}", detail.tools.join(", ")));
+    }
+    return parts.join(" ");
+  }
+
+  // Return the friendly name of each entity id, or the id when no state exists.
+  _names(ids) {
+    return ids
+      .map((id) => {
+        const state = this._hass.states[id];
+        if (state && state.attributes.friendly_name) return state.attributes.friendly_name;
+        return id;
+      })
+      .join(", ");
   }
 
   _openMissing() {
@@ -565,6 +610,7 @@ class ElevenLabsAgentPanel extends HTMLElement {
           entityTree(hass, {
             selected: this._draft[key],
             unregistered: this._config.unregistered_entity_ids,
+            unsynced: this._config.unsynced_entity_ids,
             onChange: (ids) => {
               this._draft[key] = ids;
             },

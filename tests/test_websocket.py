@@ -1306,3 +1306,42 @@ async def test_forget_clears_the_missing_entities_issue(
         await client.receive_json()
 
     assert ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_MISSING_ENTITIES) is None
+
+
+async def test_config_get_lists_the_entities_the_agent_lacks(
+    hass, setup_entry, hass_ws_client
+):
+    """The entity tree marks what the last check found missing on the agent."""
+    setup_entry.runtime_data.last_check = {
+        "ok": False,
+        "checks": [
+            {
+                "check": "tools_current",
+                "status": "problem",
+                "detail": {
+                    "tools": ["ha_get_state"],
+                    "missing": ["light.a"],
+                    "extra": ["light.b"],
+                    "unreadable": [],
+                },
+            }
+        ],
+    }
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+    )
+    result = (await client.receive_json())["result"]
+
+    assert result["unsynced_entity_ids"] == ["light.a"]
+
+
+async def test_config_get_lists_none_before_a_check(hass, setup_entry, hass_ws_client):
+    """No check, no claim."""
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+    )
+    result = (await client.receive_json())["result"]
+
+    assert result["unsynced_entity_ids"] == []

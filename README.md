@@ -88,6 +88,13 @@ it and match your selection, that the confirmation wait is shorter than the agen
 no entity you granted has disappeared. It talks to ElevenLabs, never to the agent, so it
 spends no conversation minutes. The action returns the same report, for use in an automation.
 
+**Watch it from a dashboard.** The integration adds a device for the agent with a binary sensor
+for each of those checks and one for the agent as a whole. Each shows *OK* or *Problem*. They
+update after every synchronisation and every check you run, and never poll. A check that could not
+run shows *Unknown*; while the integration is not loaded, every sensor is *Unavailable*. The
+*Tools up to date* sensor lists, as attributes, the entities the agent is missing and those it
+still holds after you removed them. The panel marks the first kind *Not synced*.
+
 ## What the agent can do
 
 `ha_get_state` reads. It carries the entities you selected for reading **and** the ones you
