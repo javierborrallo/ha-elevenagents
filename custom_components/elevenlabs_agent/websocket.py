@@ -13,7 +13,6 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.service import async_get_all_descriptions
 
-from .check import async_run_check
 from .const import (
     CONF_AGENT_ID,
     CONF_RESPONSE_TIMEOUT,
@@ -50,6 +49,7 @@ from .permissions import (
     without_keys,
 )
 from .repairs import async_check_missing
+from .status import async_record_check
 from .tool_sync import AGENT_SETTING_DEFAULTS, ToolSyncError, async_sync_tools
 from .webhook import WEBHOOK_NAME, async_handle_webhook
 
@@ -514,7 +514,7 @@ async def check(
     if entry is None:
         connection.send_error(msg["id"], "not_found", "Unknown config entry")
         return
-    connection.send_result(msg["id"], await async_run_check(hass, entry))
+    connection.send_result(msg["id"], await async_record_check(hass, entry))
 
 
 def async_register_commands(hass: HomeAssistant) -> None:

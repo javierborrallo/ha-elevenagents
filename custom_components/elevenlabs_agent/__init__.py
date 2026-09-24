@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.exceptions import ConfigEntryAuthFailed
@@ -23,13 +23,17 @@ from .elevenlabs_client import (
 from .expose import async_track_new_entities
 from .panel import async_register_panel
 from .services import async_setup_services
+from .status import async_create_check_debouncer
 from .tool_sync import async_sync_tools
 from .webhook import TokenBucket, async_register, async_unregister
 from .websocket import async_register_commands
 
 if TYPE_CHECKING:
+    from collections.abc import Coroutine
+
     from elevenlabs import AsyncElevenLabs
     from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.debounce import Debouncer
     from homeassistant.helpers.typing import ConfigType
 
 _LOGGER = logging.getLogger(__name__)
@@ -43,8 +47,10 @@ class RuntimeData:
 
     bucket: TokenBucket
     client: AsyncElevenLabs
+    check_debouncer: Debouncer[Coroutine[Any, Any, None]]
     sync_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     catalogue: tuple[list[str], str] | None = None
+    last_check: dict[str, Any] | None = None
 
 
 type ElevenLabsAgentConfigEntry = ConfigEntry[RuntimeData]
@@ -66,7 +72,11 @@ async def async_setup_entry(
 ) -> bool:
     """Set up the config entry: register the webhook and run the initial sync."""
     client = async_get_client(hass, entry.data[CONF_API_KEY])
-    entry.runtime_data = RuntimeData(bucket=TokenBucket(), client=client)
+    debouncer = async_create_check_debouncer(hass, entry)
+    entry.runtime_data = RuntimeData(
+        bucket=TokenBucket(), client=client, check_debouncer=debouncer
+    )
+    entry.async_on_unload(debouncer.async_shutdown)
 
     async_register(hass, entry)
     entry.async_on_unload(lambda: async_unregister(hass, entry))

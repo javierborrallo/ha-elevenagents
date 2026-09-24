@@ -10,8 +10,8 @@ from homeassistant.core import SupportsResponse, callback
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import service
 
-from .check import async_run_check
 from .const import DOMAIN
+from .status import async_record_check
 from .tool_sync import async_sync_tools
 
 if TYPE_CHECKING:
@@ -36,7 +36,7 @@ async def _async_handle_check(call: ServiceCall) -> ServiceResponse:
     entry = service.async_get_config_entry(
         call.hass, DOMAIN, call.data[ATTR_CONFIG_ENTRY_ID]
     )
-    return await async_run_check(call.hass, entry)
+    return await async_record_check(call.hass, entry)
 
 
 @callback

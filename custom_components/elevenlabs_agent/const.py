@@ -32,6 +32,10 @@ DEFAULT_CONFIRM_TIMEOUT: Final = 5
 DEFAULT_RESPONSE_TIMEOUT: Final = 20
 AUTO_EXPOSE_DEBOUNCE: Final = 10
 
+# Seconds between the last sync of a burst and the connection check.
+CHECK_DEBOUNCE: Final = 10
+SIGNAL_CHECK: Final = "elevenlabs_agent_check_{}"
+
 # Transport limits. The handler returns 401, 413, 415 and 429.
 # Every other outcome is HTTP 200 with a structured body.
 SECRET_HEADER: Final = "X-Elevenlabs-Agent-Secret"  # noqa: S105 - a header name

@@ -493,7 +493,12 @@ async def async_sync_tools(
     Synchronise the two tool definitions and attach them to the agent.
 
     One sync runs at a time per entry, because saving options reloads the
-    entry while a registry change may already be running one.
+    entry while a registry change may already be running one. The
+    connection check is scheduled when the sync ends, on success and on
+    failure.
     """
     async with entry.runtime_data.sync_lock:
-        await _sync(hass, entry, client)
+        try:
+            await _sync(hass, entry, client)
+        finally:
+            entry.runtime_data.check_debouncer.async_schedule_call()
