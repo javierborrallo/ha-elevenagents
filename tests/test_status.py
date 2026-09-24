@@ -95,6 +95,21 @@ async def test_a_sync_that_fails_is_followed_by_a_check(
     run_check.assert_awaited_once()
 
 
+async def test_a_sync_that_loses_its_runtime_data_still_raises(hass, setup_entry):
+    """An unload mid-sync does not replace the sync's own exception."""
+
+    async def _lose_runtime_data(*_args: object, **_kwargs: object) -> None:
+        del setup_entry.runtime_data
+        message = "boom"
+        raise ElevenLabsError(message)
+
+    with (
+        patch(SYNC, AsyncMock(side_effect=_lose_runtime_data)),
+        pytest.raises(ElevenLabsError, match="boom"),
+    ):
+        await async_sync_tools(hass, setup_entry, setup_entry.runtime_data.client)
+
+
 async def test_a_burst_of_syncs_gives_one_check(hass, setup_entry, freezer, run_check):
     """Three syncs in a row cost one check."""
     with patch(SYNC, AsyncMock()):

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
 from custom_components.elevenlabs_agent.check import CHECKS, async_run_check
@@ -20,6 +21,7 @@ from custom_components.elevenlabs_agent.const import (
 )
 from custom_components.elevenlabs_agent.elevenlabs_client import (
     ElevenLabsAuthError,
+    ElevenLabsError,
     ElevenLabsNotFoundError,
 )
 from custom_components.elevenlabs_agent.tool_sync import async_build_definitions
@@ -172,6 +174,55 @@ async def test_a_tool_deleted_in_elevenlabs_is_named(hass, setup_entry, elevenla
         "extra": [],
         "unreadable": [TOOL_CALL_SERVICE, TOOL_GET_STATE],
     }
+
+
+async def test_a_tool_read_that_errors_is_unreadable(hass, setup_entry, elevenlabs):
+    """A server error on a tool read is treated like a tool nobody can read."""
+    elevenlabs.get_tool.side_effect = ElevenLabsError("500")
+
+    result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["tools_current"] == "problem"
+    assert _detail(result, "tools_current") == {
+        "tools": [TOOL_CALL_SERVICE, TOOL_GET_STATE],
+        "missing": [],
+        "extra": [],
+        "unreadable": [TOOL_CALL_SERVICE, TOOL_GET_STATE],
+    }
+
+
+async def test_a_tool_read_that_cannot_reach_elevenlabs_is_unreadable(
+    hass, setup_entry, elevenlabs
+):
+    """A transport error on a tool read is treated the same as an API error."""
+    elevenlabs.get_tool.side_effect = httpx.ConnectError("down")
+
+    result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["tools_current"] == "problem"
+    assert _detail(result, "tools_current") == {
+        "tools": [TOOL_CALL_SERVICE, TOOL_GET_STATE],
+        "missing": [],
+        "extra": [],
+        "unreadable": [TOOL_CALL_SERVICE, TOOL_GET_STATE],
+    }
+
+
+async def test_an_unreachable_agent_read_skips_the_remote_checks(
+    hass, setup_entry, elevenlabs
+):
+    """ElevenLabs unreachable skips the checks that need it, like a refused key."""
+    elevenlabs.get_agent.side_effect = httpx.ConnectError("down")
+
+    result = await async_run_check(hass, setup_entry)
+
+    status = _status(result)
+    assert result["ok"] is False
+    assert status["key"] == "problem"
+    assert _detail(result, "key") == "down"
+    assert status["protected"] == "skipped"
+    assert status["tools_attached"] == "skipped"
+    assert status["tools_current"] == "skipped"
 
 
 async def test_an_entity_left_on_the_agent_is_extra(hass, setup_entry, elevenlabs):

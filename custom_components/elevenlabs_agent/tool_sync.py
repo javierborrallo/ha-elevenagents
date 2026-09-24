@@ -501,4 +501,6 @@ async def async_sync_tools(
         try:
             await _sync(hass, entry, client)
         finally:
-            entry.runtime_data.check_debouncer.async_schedule_call()
+            runtime = getattr(entry, "runtime_data", None)
+            if runtime is not None:
+                runtime.check_debouncer.async_schedule_call()

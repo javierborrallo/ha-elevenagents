@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import httpx
 from homeassistant.config_entries import ConfigEntryState
 
 from .const import (
@@ -18,7 +19,6 @@ from .const import (
 from .elevenlabs_client import (
     ElevenLabsAuthError,
     ElevenLabsError,
-    ElevenLabsNotFoundError,
     async_get_agent,
     async_get_client,
     async_get_tool,
@@ -81,7 +81,7 @@ async def _tools_current(
         if tool_id is not None:
             try:
                 readback = await async_get_tool(client, tool_id)
-            except ElevenLabsNotFoundError:
+            except ElevenLabsError, httpx.HTTPError:
                 readback = None
         if readback is None:
             tools.append(name)
@@ -157,7 +157,7 @@ async def async_run_check(
     except ElevenLabsAuthError:
         agent = None
         checks.append(_item("key", PROBLEM, "refused"))
-    except ElevenLabsError as err:
+    except (ElevenLabsError, httpx.HTTPError) as err:
         agent = None
         checks.append(_item("key", PROBLEM, str(err)))
     else:
