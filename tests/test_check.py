@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
+import aiohttp
 import httpx
 import pytest
 
@@ -61,9 +62,13 @@ async def synced(hass, setup_entry):
     return await async_build_definitions(hass, setup_entry)
 
 
+WEBHOOK_URL = "https://home.example/api/webhook/webhook_test"
+
+
 @pytest.fixture
-def elevenlabs(synced):
+def elevenlabs(synced, aioclient_mock):
     """Answer the agent and tool reads as a healthy workspace would."""
+    aioclient_mock.post(WEBHOOK_URL, status=401)
     by_id = {TOOL_IDS[name]: config for name, config in synced.items()}
 
     async def get_tool(_client: object, tool_id: str) -> SimpleNamespace:
@@ -103,6 +108,7 @@ async def test_a_healthy_setup_passes_every_check(hass, setup_entry, elevenlabs)
         "protected": "ok",
         "tools_attached": "ok",
         "tools_current": "ok",
+        "webhook": "ok",
         "timeouts": "ok",
         "missing_entities": "ok",
     }
@@ -267,6 +273,7 @@ def test_checks_lists_the_report_in_order():
         "protected",
         "tools_attached",
         "tools_current",
+        "webhook",
         "timeouts",
         "missing_entities",
     )
@@ -334,4 +341,55 @@ async def test_the_websocket_command_answers_with_the_result(
     result = (await client.receive_json())["result"]
 
     assert result["ok"] is True
-    assert len(result["checks"]) == 7
+    assert len(result["checks"]) == 8
+
+
+async def test_an_unreachable_webhook_is_a_problem(
+    hass, setup_entry, elevenlabs, aioclient_mock
+):
+    """A dead external URL fails every tool call, and the tools still match."""
+    aioclient_mock.clear_requests()
+    aioclient_mock.post(WEBHOOK_URL, exc=aiohttp.ClientConnectionError())
+
+    result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["webhook"] == "problem"
+    assert _detail(result, "webhook") == "ClientConnectionError"
+    assert _status(result)["tools_current"] == "ok"
+
+
+async def test_a_webhook_that_is_not_ours_is_a_problem(
+    hass, setup_entry, elevenlabs, aioclient_mock
+):
+    """Only this integration's handler answers 401 without the secret."""
+    aioclient_mock.clear_requests()
+    aioclient_mock.post(WEBHOOK_URL, status=200)
+
+    result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["webhook"] == "problem"
+    assert _detail(result, "webhook") == "HTTP 200"
+
+
+async def test_the_webhook_probe_carries_no_secret(
+    hass, setup_entry, elevenlabs, aioclient_mock
+):
+    """The probe must be refused, so it never reaches the tools."""
+    await async_run_check(hass, setup_entry)
+
+    calls = [call for call in aioclient_mock.mock_calls if str(call[1]) == WEBHOOK_URL]
+    assert len(calls) == 1
+    headers = calls[0][3] or {}
+    assert "X-Elevenlabs-Agent-Secret" not in headers
+
+
+async def test_no_external_url_is_a_problem(hass, setup_entry, elevenlabs):
+    """ElevenLabs can reach nothing without an external URL."""
+    await hass.config.async_update(external_url=None)
+
+    result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["webhook"] == "problem"
+    assert _detail(result, "webhook") == "no external URL"
+    assert _status(result)["tools_current"] == "problem"
+    assert _detail(result, "tools_current") == "no external URL"

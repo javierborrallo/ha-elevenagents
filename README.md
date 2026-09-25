@@ -84,9 +84,12 @@ from the panel.
 **Check that everything works** by clicking the status card at the top of the panel, or with
 the `elevenlabs_agent.check` action. It confirms that the integration is loaded, that
 ElevenLabs accepts your API key, that the agent is protected, that both tools are attached to
-it and match your selection, that the confirmation wait is shorter than the agent's, and that
-no entity you granted has disappeared. It talks to ElevenLabs, never to the agent, so it
-spends no conversation minutes. The action returns the same report, for use in an automation.
+it and match your selection, that your webhook answers at its external address, that the
+confirmation wait is shorter than the agent's, and that no entity you granted has disappeared.
+It talks to ElevenLabs, never to the agent, so it spends no conversation minutes. The action
+returns the same report, for use in an automation. The webhook test calls your external address
+from Home Assistant itself: behind a router that cannot reach its own public address from
+inside, it reports a problem ElevenLabs would not see.
 
 **Watch it from a dashboard.** The integration adds a device for the agent with a binary sensor
 for each of those checks and one for the agent as a whole. Each shows *OK* or *Problem*. They

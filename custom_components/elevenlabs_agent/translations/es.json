@@ -85,6 +85,7 @@
       "protected": { "name": "Protección del agente" },
       "tools_attached": { "name": "Herramientas conectadas" },
       "tools_current": { "name": "Herramientas al día" },
+      "webhook": { "name": "Webhook accesible" },
       "timeouts": { "name": "Espera de confirmación" },
       "missing_entities": { "name": "Entidades desaparecidas" }
     }

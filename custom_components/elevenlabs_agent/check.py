@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+from http import HTTPStatus
 from typing import TYPE_CHECKING, Any
 
+import aiohttp
 import httpx
+from homeassistant.components import webhook
 from homeassistant.config_entries import ConfigEntryState
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.network import NoURLAvailableError
 
 from .const import (
     CONF_AGENT_ID,
     CONF_API_KEY,
     CONF_RESPONSE_TIMEOUT,
     CONF_TOOL_IDS,
+    CONF_WEBHOOK_ID,
     DEFAULT_CONFIRM_TIMEOUT,
     DEFAULT_RESPONSE_TIMEOUT,
     OPT_CONFIRM_TIMEOUT,
@@ -37,15 +43,46 @@ OK = "ok"
 PROBLEM = "problem"
 SKIPPED = "skipped"
 
+# Seconds the webhook probe waits for an answer.
+WEBHOOK_PROBE_TIMEOUT = 10
+
 CHECKS = (
     "loaded",
     "key",
     "protected",
     "tools_attached",
     "tools_current",
+    "webhook",
     "timeouts",
     "missing_entities",
 )
+
+
+async def _webhook_check(
+    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry
+) -> dict[str, Any]:
+    """
+    Call the webhook's external URL without the secret.
+
+    This integration's handler answers 401. The detail never carries the
+    URL, because the URL holds the webhook id.
+    """
+    try:
+        url = webhook.async_generate_url(
+            hass, entry.data[CONF_WEBHOOK_ID], allow_internal=False
+        )
+    except NoURLAvailableError:
+        return _item("webhook", PROBLEM, "no external URL")
+    try:
+        async with async_get_clientsession(hass).post(
+            url, json={}, timeout=aiohttp.ClientTimeout(total=WEBHOOK_PROBE_TIMEOUT)
+        ) as response:
+            status = response.status
+    except (aiohttp.ClientError, TimeoutError) as err:
+        return _item("webhook", PROBLEM, type(err).__name__)
+    if status == HTTPStatus.UNAUTHORIZED:
+        return _item("webhook", OK)
+    return _item("webhook", PROBLEM, f"HTTP {status}")
 
 
 def _item(check: str, status: str, detail: Any = None) -> dict[str, Any]:
@@ -170,17 +207,25 @@ async def async_run_check(
         ]
     else:
         detached = _detached_tools(entry, agent)
-        current = await _tools_current(hass, entry, client)
+        try:
+            current = await _tools_current(hass, entry, client)
+        except NoURLAvailableError:
+            tools_item = _item("tools_current", PROBLEM, "no external URL")
+        else:
+            tools_item = (
+                _item("tools_current", PROBLEM, current)
+                if current["tools"]
+                else _item("tools_current", OK)
+            )
         checks += [
             _item("protected", OK if is_protected(agent) else PROBLEM),
             _item("tools_attached", PROBLEM, detached)
             if detached
             else _item("tools_attached", OK),
-            _item("tools_current", PROBLEM, current)
-            if current["tools"]
-            else _item("tools_current", OK),
+            tools_item,
         ]
 
+    checks.append(await _webhook_check(hass, entry))
     checks += _local_checks(hass, entry)
     return {
         "ok": all(item["status"] != PROBLEM for item in checks),

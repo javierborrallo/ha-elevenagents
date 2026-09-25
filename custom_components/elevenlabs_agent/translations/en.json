@@ -85,6 +85,7 @@
       "protected": { "name": "Agent protection" },
       "tools_attached": { "name": "Tools attached" },
       "tools_current": { "name": "Tools up to date" },
+      "webhook": { "name": "Webhook reachable" },
       "timeouts": { "name": "Confirmation wait" },
       "missing_entities": { "name": "Missing entities" }
     }

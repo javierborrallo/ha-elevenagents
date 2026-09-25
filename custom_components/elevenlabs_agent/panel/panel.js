@@ -386,7 +386,9 @@ class ElevenLabsAgentPanel extends HTMLElement {
         .replace("{confirm}", String(detail.confirm_timeout))
         .replace("{agent}", String(detail.agent_timeout));
     }
-    if (item.check === "tools_current") return this._toolsDetail(detail);
+    if (item.check === "tools_current" && typeof detail === "object") {
+      return this._toolsDetail(detail);
+    }
     if (Array.isArray(detail)) return detail.join(", ");
     return detail ? String(detail) : "";
   }

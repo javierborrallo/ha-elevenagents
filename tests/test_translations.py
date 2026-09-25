@@ -108,6 +108,6 @@ def test_every_status_sensor_has_a_name(language: str) -> None:
     assert checks is not None
     keys = ["agent", *re.findall(r'"([a-z_]+)"', checks.group(1))]
 
-    assert len(keys) == 8
+    assert len(keys) == 9
     for key in keys:
         assert names.get(key, {}).get("name"), f"{language}.json has no name for {key}"
