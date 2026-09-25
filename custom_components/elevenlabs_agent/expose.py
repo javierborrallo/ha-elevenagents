@@ -11,6 +11,7 @@ from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.network import NoURLAvailableError
 from homeassistant.helpers.start import async_at_started
 
 from .const import (
@@ -26,13 +27,14 @@ from .const import (
 from .elevenlabs_client import ElevenLabsError
 from .permissions import (
     from_options,
+    rekey,
     removed_registry_keys,
     resolve_target,
     stored_keys,
     without_keys,
 )
 from .repairs import async_check_missing
-from .tool_sync import async_sync_tools, entity_catalogue
+from .tool_sync import ToolSyncError, async_sync_tools, entity_catalogue
 
 if TYPE_CHECKING:
     from . import ElevenLabsAgentConfigEntry
@@ -107,11 +109,39 @@ def _prune(hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry) -> None:
     _LOGGER.debug("Removed the permissions of deleted entities %s", sorted(removed))
 
 
+def _migrate_registered(
+    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry, entity_id: str
+) -> bool:
+    """
+    Move a stored entity_id key to the registry id it just gained.
+
+    An entity outside the registry is keyed by its entity_id. When it
+    enters the registry, entity_id_for keeps returning the entity_id, but
+    the permission lookup switches to the registry id. Without this move,
+    a granted entity that gains a unique_id silently loses its permission.
+    Return True when a key moved.
+    """
+    if entity_id not in stored_keys(entry.options):
+        return False
+    registry_entry = er.async_get(hass).async_get(entity_id)
+    if registry_entry is None:
+        return False
+    hass.config_entries.async_update_entry(
+        entry, options=rekey(entry.options, entity_id, registry_entry.id)
+    )
+    _LOGGER.debug(
+        "Migrated the permission of %s to its registry id %s",
+        entity_id,
+        registry_entry.id,
+    )
+    return True
+
+
 async def _synchronise(hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry) -> None:
     """Push the current allowlist and catalogue to the agent."""
     try:
         await async_sync_tools(hass, entry, entry.runtime_data.client)
-    except ElevenLabsError:
+    except ElevenLabsError, ToolSyncError, NoURLAvailableError:
         _LOGGER.warning(
             "A registry change could not reach ElevenLabs; the next sync retries"
         )
@@ -162,9 +192,12 @@ def async_track_new_entities(
 
     @callback
     def _entity_event(event: Any) -> None:
-        """Collect a newly registered entity, then restart the debounce."""
+        """Migrate a stored key, collect the new entity, then restart the debounce."""
         if event.data["action"] == "create":
-            pending.add(event.data["entity_id"])
+            entity_id = event.data["entity_id"]
+            if _migrate_registered(hass, entry, entity_id):
+                entry.async_create_task(hass, _synchronise(hass, entry))
+            pending.add(entity_id)
         _arm()
 
     @callback

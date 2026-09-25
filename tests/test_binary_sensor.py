@@ -16,7 +16,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
-from custom_components.elevenlabs_agent.binary_sensor import OVERALL
+from custom_components.elevenlabs_agent.binary_sensor import OVERALL, CheckSensor
 from custom_components.elevenlabs_agent.check import CHECKS
 from custom_components.elevenlabs_agent.const import DOMAIN
 from custom_components.elevenlabs_agent.status import check_signal
@@ -168,6 +168,13 @@ async def test_only_the_agent_sensor_is_not_diagnostic(hass, setup_entry):
         assert entry is not None
         expected = None if key == OVERALL else EntityCategory.DIAGNOSTIC
         assert entry.entity_category == expected
+
+
+def test_the_check_sensor_excludes_its_entity_lists_from_the_recorder():
+    """Missing and extra can reach several kilobytes on a large home."""
+    assert CheckSensor._unrecorded_attributes == frozenset(  # noqa: SLF001
+        {"tools", "missing", "extra", "unreadable", "detail"}
+    )
 
 
 async def test_an_unloaded_entry_leaves_every_sensor_unavailable(hass, setup_entry):

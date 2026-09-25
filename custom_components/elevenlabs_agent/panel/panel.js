@@ -34,6 +34,15 @@ const WS = {
 const STATUS_ICON = { ok: ICON.check, problem: ICON.alert, skipped: ICON.minusCircle };
 const STATUS_CLASS = { ok: "ok", problem: "bad", skipped: "skipped" };
 
+// The key check's fixed vocabulary, mapped to a translated sentence.
+// "HTTP <n>" carries no code of its own and stays untranslated.
+const KEY_DETAIL = {
+  refused: "checkKeyRefused",
+  scope: "checkKeyScope",
+  agent_not_found: "checkKeyAgentNotFound",
+  unreachable: "checkKeyUnreachable",
+};
+
 // The name the toolbar shows. It names the integration, not the entry.
 const PANEL_TITLE = "ElevenLabs Agent";
 
@@ -378,13 +387,22 @@ class ElevenLabsAgentPanel extends HTMLElement {
     if (item.status === "skipped") return t.checkSkipped;
     if (item.status === "ok") return "";
     const detail = item.detail;
-    if (item.check === "key" && detail === "refused") return t.checkKeyRefused;
+    if (item.check === "key") {
+      const key = KEY_DETAIL[detail];
+      return key ? t[key] : String(detail);
+    }
     if (item.check === "protected") return t.checkProtectedDetail;
     if (item.check === "loaded") return t.checkLoadedDetail.replace("{detail}", detail);
     if (item.check === "timeouts") {
       return t.checkTimeoutsDetail
         .replace("{confirm}", String(detail.confirm_timeout))
         .replace("{agent}", String(detail.agent_timeout));
+    }
+    if (
+      (item.check === "webhook" || item.check === "tools_current") &&
+      detail === "no external URL"
+    ) {
+      return t.checkNoExternalUrl;
     }
     if (item.check === "tools_current" && typeof detail === "object") {
       return this._toolsDetail(detail);
@@ -406,8 +424,9 @@ class ElevenLabsAgentPanel extends HTMLElement {
     if (detail.unreadable.length > 0) {
       parts.push(t.checkToolsUnreadable.replace("{list}", detail.unreadable.join(", ")));
     }
-    if (parts.length === 0) {
-      parts.push(t.checkToolsOther.replace("{list}", detail.tools.join(", ")));
+    const others = detail.tools.filter((name) => !detail.unreadable.includes(name));
+    if (others.length > 0) {
+      parts.push(t.checkToolsOther.replace("{list}", others.join(", ")));
     }
     return parts.join(" ");
   }

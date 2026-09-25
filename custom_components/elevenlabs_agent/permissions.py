@@ -144,6 +144,27 @@ def without_keys(options: Mapping[str, Any], keys: Iterable[str]) -> dict[str, A
     return result
 
 
+def rekey(options: Mapping[str, Any], old_key: str, new_key: str) -> dict[str, Any]:
+    """
+    Return a copy of options with one key renamed in both lists and the exceptions.
+
+    Used when an entity_id key gains a unique_id and enters the registry
+    under a new id: the permission must follow the entity, not stay on a
+    name it no longer answers to.
+    """
+    result = dict(options)
+    for list_key in (OPT_READ_ENTITIES, OPT_CONTROL_ENTITIES):
+        if list_key in result and old_key in result[list_key]:
+            result[list_key] = sorted(
+                {new_key if key == old_key else key for key in result[list_key]}
+            )
+    if OPT_EXCEPTIONS in result and old_key in result[OPT_EXCEPTIONS]:
+        exceptions = dict(result[OPT_EXCEPTIONS])
+        exceptions[new_key] = exceptions.pop(old_key)
+        result[OPT_EXCEPTIONS] = exceptions
+    return result
+
+
 def _key_for(hass: HomeAssistant, entity_id: str) -> str | None:
     """
     Return the permission key of an entity_id.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
@@ -206,3 +207,35 @@ async def test_a_check_on_an_unloaded_entry_stores_nothing(
     await hass.async_block_till_done()
 
     assert await async_record_check(hass, setup_entry) == GOOD
+
+
+# --- M1: a check that outlives a reload must not write into the new runtime -
+
+
+async def test_a_check_that_outlives_a_reload_does_not_store_into_the_new_runtime(
+    hass, setup_entry
+):
+    """A stale probe answering after a reload must not flash the new sensors."""
+    old_runtime = setup_entry.runtime_data
+    heard: list[int] = []
+
+    @callback
+    def _heard() -> None:
+        heard.append(1)
+
+    async_dispatcher_connect(hass, check_signal(setup_entry.entry_id), _heard)
+
+    async def _reload_mid_check(*_args: object, **_kwargs: object) -> dict[str, Any]:
+        """Simulate a reload finishing while this check is still running."""
+        setup_entry.runtime_data = replace(old_runtime, last_check=None)
+        return BAD
+
+    with patch(
+        "custom_components.elevenlabs_agent.status.async_run_check",
+        AsyncMock(side_effect=_reload_mid_check),
+    ):
+        result = await async_record_check(hass, setup_entry)
+
+    assert result == BAD
+    assert setup_entry.runtime_data.last_check is None
+    assert heard == []

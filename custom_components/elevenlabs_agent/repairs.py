@@ -76,7 +76,7 @@ def async_check_timeouts(
     confirm_timeout = entry.options.get(OPT_CONFIRM_TIMEOUT, DEFAULT_CONFIRM_TIMEOUT)
     agent_timeout = tool_config.get("response_timeout_secs", DEFAULT_RESPONSE_TIMEOUT)
 
-    if confirm_timeout <= agent_timeout:
+    if confirm_timeout < agent_timeout:
         ir.async_delete_issue(hass, DOMAIN, ISSUE_TIMEOUT_CROSSED)
         return
 

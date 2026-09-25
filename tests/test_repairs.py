@@ -172,6 +172,17 @@ async def test_crossed_timeouts_raise_an_informative_issue(hass, setup_entry):
     assert placeholders["agent_timeout"] == "20"
 
 
+async def test_equal_timeouts_raise_the_issue(hass, setup_entry):
+    """A confirmation wait equal to the agent's is not below it."""
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_CONFIRM_TIMEOUT: 20}
+    )
+
+    async_check_timeouts(hass, setup_entry, {"response_timeout_secs": 20})
+
+    assert ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_TIMEOUT_CROSSED) is not None
+
+
 async def test_timeouts_no_longer_crossing_clears_the_issue(hass, setup_entry):
     """The issue is informative: it must disappear once the cause is gone."""
     hass.config_entries.async_update_entry(

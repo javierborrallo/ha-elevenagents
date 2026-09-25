@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 from elevenlabs.types import GetAgentResponseModel
 from elevenlabs.types.agent_config import AgentConfig
@@ -11,8 +12,11 @@ from elevenlabs.types.agent_metadata_response_model import AgentMetadataResponse
 from elevenlabs.types.conversational_config import ConversationalConfig
 from elevenlabs.types.prompt_agent_api_model_output import PromptAgentApiModelOutput
 from homeassistant import config_entries
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import ATTR_CONFIG_ENTRY_ID
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.network import NoURLAvailableError
 from homeassistant.setup import async_setup_component
 
 from custom_components.elevenlabs_agent.const import (
@@ -20,8 +24,12 @@ from custom_components.elevenlabs_agent.const import (
     CONF_WEBHOOK_ID,
     DOMAIN,
 )
-from custom_components.elevenlabs_agent.elevenlabs_client import ElevenLabsAuthError
+from custom_components.elevenlabs_agent.elevenlabs_client import (
+    ElevenLabsAuthError,
+    ElevenLabsError,
+)
 from custom_components.elevenlabs_agent.services import SERVICE_SYNC_TOOLS
+from custom_components.elevenlabs_agent.tool_sync import ToolSyncError
 
 # homeassistant 2026.9.1's http server sets self.app["hass"] as a plain key.
 # aiohttp 3.14.3 raises NotAppKeyWarning for that pattern. pyproject.toml
@@ -176,6 +184,84 @@ async def test_an_auth_error_during_setup_starts_a_reauth_flow(hass, config_entr
     assert flows[0]["context"]["entry_id"] == config_entry.entry_id
 
 
+# --- I1: a failed setup sync must not disable the entry ---------------------
+
+
+def _entities_for(hass, entry) -> list[er.RegistryEntry]:
+    """Return the entity registry entries this config entry's platforms created."""
+    return er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+
+
+async def test_a_5xx_during_setup_leaves_the_entry_usable(hass, config_entry):
+    """The status device must exist precisely when it has something to report."""
+    with patch(
+        "custom_components.elevenlabs_agent.async_sync_tools",
+        AsyncMock(side_effect=ElevenLabsError("boom")),
+    ):
+        assert await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.LOADED
+    assert len(_entities_for(hass, config_entry)) == 9
+
+
+async def test_a_tool_sync_error_during_setup_leaves_the_entry_usable(
+    hass, config_entry
+):
+    """A read-back divergence during the first sync is not fatal either."""
+    with patch(
+        "custom_components.elevenlabs_agent.async_sync_tools",
+        AsyncMock(side_effect=ToolSyncError("diverged")),
+    ):
+        assert await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.LOADED
+    assert len(_entities_for(hass, config_entry)) == 9
+
+
+async def test_a_transport_error_during_setup_leaves_the_entry_usable(
+    hass, config_entry
+):
+    """DNS or connect failures during a restart must not disable the entry."""
+    with patch(
+        "custom_components.elevenlabs_agent.async_sync_tools",
+        AsyncMock(side_effect=httpx.ConnectError("down")),
+    ):
+        assert await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.LOADED
+    assert len(_entities_for(hass, config_entry)) == 9
+
+
+async def test_no_external_url_during_setup_is_not_ready(hass, config_entry):
+    """The spec says setup raises ConfigEntryNotReady when the URL has gone."""
+    with patch(
+        "custom_components.elevenlabs_agent.async_sync_tools",
+        AsyncMock(side_effect=NoURLAvailableError),
+    ):
+        assert not await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.SETUP_RETRY
+
+
+async def test_an_auth_error_during_setup_still_leaves_the_platforms_forwarded(
+    hass, config_entry
+):
+    """Even the reauth path must not remove the sensors an existing install has."""
+    with patch(
+        "custom_components.elevenlabs_agent.async_sync_tools",
+        AsyncMock(side_effect=ElevenLabsAuthError("revoked")),
+    ):
+        assert not await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.SETUP_ERROR
+    assert len(_entities_for(hass, config_entry)) == 9
+
+
 # --- Task 16: the sync_tools service ---------------------------------------
 
 
@@ -215,3 +301,39 @@ async def test_sync_tools_syncs_a_loaded_entry(hass, setup_entry):
         )
 
     assert sync.call_args.args[1] == setup_entry
+
+
+async def test_no_external_url_forwards_no_platform_and_recovers(hass, config_entry):
+    """A retry after the URL comes back sets the platforms up once."""
+    await hass.config.async_update(external_url=None)
+    with patch("custom_components.elevenlabs_agent.async_sync_tools", AsyncMock()):
+        assert not await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+    assert config_entry.state is ConfigEntryState.SETUP_RETRY
+    assert _entities_for(hass, config_entry) == []
+
+    await hass.config.async_update(external_url="https://home.example")
+    with patch("custom_components.elevenlabs_agent.async_sync_tools", AsyncMock()):
+        await hass.config_entries.async_reload(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.LOADED
+    assert len(_entities_for(hass, config_entry)) == 9
+
+
+async def test_a_reload_after_an_auth_error_loads_cleanly(hass, config_entry, caplog):
+    """Reauth reloads the entry; the platforms must set up again without an error."""
+    with patch(
+        "custom_components.elevenlabs_agent.async_sync_tools",
+        AsyncMock(side_effect=ElevenLabsAuthError("revoked")),
+    ):
+        await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    with patch("custom_components.elevenlabs_agent.async_sync_tools", AsyncMock()):
+        await hass.config_entries.async_reload(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.LOADED
+    assert len(_entities_for(hass, config_entry)) == 9
+    assert "already been setup" not in caplog.text

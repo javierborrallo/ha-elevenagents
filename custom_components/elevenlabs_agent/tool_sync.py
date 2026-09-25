@@ -468,7 +468,13 @@ async def async_build_definitions(
 async def _sync(
     hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry, client: AsyncElevenLabs
 ) -> None:
-    """Create or update each tool, store its id, then attach both to the agent."""
+    """
+    Create or update each tool, store its id, then attach both to the agent.
+
+    Record the catalogue only when the runtime data of the entry is the
+    runtime data this sync started with.
+    """
+    runtime = entry.runtime_data
     definitions = await async_build_definitions(hass, entry)
     perms = from_options(entry.options)
     catalogue = entity_catalogue(hass, perms.read | perms.control)
@@ -497,7 +503,8 @@ async def _sync(
         _check_readback(name, config, readback.tool_config)
 
     await _attach(hass, entry, client, stored)
-    entry.runtime_data.catalogue = catalogue
+    if getattr(entry, "runtime_data", None) is runtime:
+        runtime.catalogue = catalogue
     async_check_timeouts(hass, entry, definitions[TOOL_CALL_SERVICE])
 
 
@@ -507,10 +514,11 @@ async def async_sync_tools(
     """
     Synchronise the two tool definitions and attach them to the agent.
 
-    One sync runs at a time per entry, because saving options reloads the
-    entry while a registry change may already be running one. The
-    connection check is scheduled when the sync ends, on success and on
-    failure.
+    The lock serialises a burst of syncs within one load of the entry: a
+    registry change and the panel can each start one close together. It
+    lives in RuntimeData, so it does not serialise across a reload, which
+    replaces RuntimeData with a new lock. The connection check is
+    scheduled when the sync ends, on success and on failure.
     """
     async with entry.runtime_data.sync_lock:
         try:

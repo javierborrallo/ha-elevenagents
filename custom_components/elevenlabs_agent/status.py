@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
     from homeassistant.core import HomeAssistant
 
-    from . import ElevenLabsAgentConfigEntry
+    from . import ElevenLabsAgentConfigEntry, RuntimeData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,11 +32,15 @@ async def async_record_check(
     """
     Run the connection check and return its result.
 
-    Store the result and announce it when the entry is loaded.
+    Store the result and announce it only if the entry's runtime data is
+    still the one this check started with. A reload that finishes while
+    the check is in flight replaces runtime_data; without this guard, the
+    stale result would land in the recreated entry's sensors.
     """
+    runtime: RuntimeData | None = getattr(entry, "runtime_data", None)
     result = await async_run_check(hass, entry)
-    runtime = getattr(entry, "runtime_data", None)
-    if runtime is not None:
+    current: RuntimeData | None = getattr(entry, "runtime_data", None)
+    if runtime is not None and current is runtime:
         runtime.last_check = result
         async_dispatcher_send(hass, check_signal(entry.entry_id))
     return result

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import patch
@@ -488,6 +489,24 @@ async def test_a_failed_sync_keeps_the_previous_record(
         await async_sync_tools(hass, setup_entry, _CLIENT)
 
     assert setup_entry.runtime_data.catalogue == before
+
+
+async def test_a_sync_that_outlives_a_reload_does_not_write_into_the_new_runtime(
+    hass, setup_entry, tool_calls
+):
+    """A stale sync must not write its catalogue into a runtime a reload created."""
+    old_runtime = setup_entry.runtime_data
+
+    async def get(_client, tool_id) -> SimpleNamespace:
+        # Simulate a reload finishing while this sync is still running.
+        setup_entry.runtime_data = replace(old_runtime, catalogue=None)
+        return SimpleNamespace(id=tool_id, tool_config=tool_calls.written[tool_id])
+
+    tool_calls.get_tool.side_effect = get
+
+    await async_sync_tools(hass, setup_entry, _CLIENT)
+
+    assert setup_entry.runtime_data.catalogue is None
 
 
 async def test_a_sync_raises_the_issue_for_an_open_agent(hass, setup_entry, tool_calls):

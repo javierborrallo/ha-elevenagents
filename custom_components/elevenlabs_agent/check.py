@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Any
 
@@ -25,6 +26,8 @@ from .const import (
 from .elevenlabs_client import (
     ElevenLabsAuthError,
     ElevenLabsError,
+    ElevenLabsNotFoundError,
+    ElevenLabsScopeError,
     async_get_agent,
     async_get_client,
     async_get_tool,
@@ -32,6 +35,8 @@ from .elevenlabs_client import (
 from .permissions import entity_id_for, missing_keys
 from .repairs import is_protected
 from .tool_sync import async_build_definitions, entity_enum, readback_divergence
+
+_LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from elevenlabs import AsyncElevenLabs
@@ -64,9 +69,11 @@ async def _webhook_check(
     """
     Call the webhook's external URL without the secret.
 
-    This integration's handler answers 401. The detail never carries the
-    URL, because the URL holds the webhook id.
+    Skip the check when the entry is not loaded. The handler of this
+    integration answers 401. The detail never carries the URL.
     """
+    if entry.state is not ConfigEntryState.LOADED:
+        return _item("webhook", SKIPPED)
     try:
         url = webhook.async_generate_url(
             hass, entry.data[CONF_WEBHOOK_ID], allow_internal=False
@@ -88,6 +95,25 @@ async def _webhook_check(
 def _item(check: str, status: str, detail: Any = None) -> dict[str, Any]:
     """Return one line of the report."""
     return {"check": check, "status": status, "detail": detail}
+
+
+def _key_detail(err: Exception) -> str:
+    """
+    Map a failed agent read onto a fixed vocabulary, never the raw error text.
+
+    The raw error can carry every response header and the request body.
+    The recorder stores this detail, and every user with access can read it.
+    """
+    if isinstance(err, ElevenLabsAuthError):
+        return "refused"
+    if isinstance(err, ElevenLabsScopeError):
+        return "scope"
+    if isinstance(err, ElevenLabsNotFoundError):
+        return "agent_not_found"
+    status_code = getattr(err, "status_code", None)
+    if status_code is None:
+        return "unreachable"
+    return f"HTTP {status_code}"
 
 
 def _client(hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry) -> AsyncElevenLabs:
@@ -129,7 +155,8 @@ async def _tools_current(
         tools.append(name)
         got = entity_enum(readback.tool_config)
         if got is None:
-            unreadable.append(name)
+            # The tool was read; it just carries no enum to compare. It
+            # differs (hence "tools"), but the read itself did not fail.
             continue
         sent = set(entity_enum(config) or [])
         missing |= sent - set(got)
@@ -162,7 +189,7 @@ def _local_checks(
     )
     return [
         _item("timeouts", OK)
-        if confirm_timeout <= agent_timeout
+        if confirm_timeout < agent_timeout
         else _item(
             "timeouts",
             PROBLEM,
@@ -191,12 +218,10 @@ async def async_run_check(
     client = _client(hass, entry)
     try:
         agent = await async_get_agent(client, entry.data[CONF_AGENT_ID])
-    except ElevenLabsAuthError:
-        agent = None
-        checks.append(_item("key", PROBLEM, "refused"))
     except (ElevenLabsError, httpx.HTTPError) as err:
         agent = None
-        checks.append(_item("key", PROBLEM, str(err)))
+        checks.append(_item("key", PROBLEM, _key_detail(err)))
+        _LOGGER.debug("The key check failed: %s", err)
     else:
         checks.append(_item("key", OK))
 

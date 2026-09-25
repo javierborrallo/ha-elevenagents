@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
@@ -10,10 +11,14 @@ from unittest.mock import AsyncMock, patch
 import aiohttp
 import httpx
 import pytest
+from homeassistant.exceptions import ServiceValidationError
+from homeassistant.setup import async_setup_component
 
 from custom_components.elevenlabs_agent.check import CHECKS, async_run_check
 from custom_components.elevenlabs_agent.const import (
+    CONF_RESPONSE_TIMEOUT,
     CONF_TOOL_IDS,
+    DEFAULT_RESPONSE_TIMEOUT,
     DOMAIN,
     OPT_CONFIRM_TIMEOUT,
     OPT_READ_ENTITIES,
@@ -24,6 +29,7 @@ from custom_components.elevenlabs_agent.elevenlabs_client import (
     ElevenLabsAuthError,
     ElevenLabsError,
     ElevenLabsNotFoundError,
+    ElevenLabsScopeError,
 )
 from custom_components.elevenlabs_agent.tool_sync import async_build_definitions
 
@@ -225,10 +231,87 @@ async def test_an_unreachable_agent_read_skips_the_remote_checks(
     status = _status(result)
     assert result["ok"] is False
     assert status["key"] == "problem"
-    assert _detail(result, "key") == "down"
+    assert _detail(result, "key") == "unreachable"
     assert status["protected"] == "skipped"
     assert status["tools_attached"] == "skipped"
     assert status["tools_current"] == "skipped"
+
+
+# --- I3: the key check uses a fixed vocabulary, never the raw error ---------
+
+
+async def test_a_forbidden_key_reports_scope(hass, setup_entry, elevenlabs):
+    """A key that lacks the scope to read the agent is not the same as a wrong key."""
+    elevenlabs.get_agent.side_effect = ElevenLabsScopeError("403")
+
+    result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["key"] == "problem"
+    assert _detail(result, "key") == "scope"
+
+
+async def test_a_deleted_agent_reports_agent_not_found(hass, setup_entry, elevenlabs):
+    """The agent id is wrong or the agent was deleted; the key itself is fine."""
+    elevenlabs.get_agent.side_effect = ElevenLabsNotFoundError("404")
+
+    result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["key"] == "problem"
+    assert _detail(result, "key") == "agent_not_found"
+
+
+async def test_a_5xx_key_failure_reports_the_status(hass, setup_entry, elevenlabs):
+    """A status this integration does not name still reaches the user as a number."""
+    elevenlabs.get_agent.side_effect = ElevenLabsError("boom", status_code=500)
+
+    result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["key"] == "problem"
+    assert _detail(result, "key") == "HTTP 500"
+
+
+async def test_a_key_failure_with_no_status_reports_unreachable(
+    hass, setup_entry, elevenlabs
+):
+    """An ElevenLabsError with no status code is a transport failure too."""
+    elevenlabs.get_agent.side_effect = ElevenLabsError("boom")
+
+    result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["key"] == "problem"
+    assert _detail(result, "key") == "unreachable"
+
+
+async def test_the_key_check_never_puts_the_raw_error_in_the_detail(
+    hass, setup_entry, elevenlabs
+):
+    """A header dump must never reach the recorder or the user."""
+    elevenlabs.get_agent.side_effect = ElevenLabsError(
+        "headers: {'x': 'y'}, status_code: 500, body: {}", status_code=500
+    )
+
+    result = await async_run_check(hass, setup_entry)
+
+    assert "headers" not in str(_detail(result, "key"))
+    assert "body" not in str(_detail(result, "key"))
+
+
+async def test_the_key_check_logs_the_full_error_at_debug(
+    hass, setup_entry, elevenlabs, caplog
+):
+    """The administrator can still see the real error, at debug level."""
+    caplog.set_level(logging.DEBUG)
+    elevenlabs.get_agent.side_effect = ElevenLabsError(
+        "the real detail", status_code=500
+    )
+
+    await async_run_check(hass, setup_entry)
+
+    assert any(
+        "the real detail" in r.getMessage()
+        for r in caplog.records
+        if r.name.startswith("custom_components")
+    )
 
 
 async def test_an_entity_left_on_the_agent_is_extra(hass, setup_entry, elevenlabs):
@@ -246,6 +329,22 @@ async def test_an_entity_left_on_the_agent_is_extra(hass, setup_entry, elevenlab
         "extra": ["light.old"],
         "unreadable": [],
     }
+
+
+async def test_a_tool_with_no_enum_is_named_but_not_unreadable(
+    hass, setup_entry, elevenlabs
+):
+    """A hand edit that removed the enum is a real difference, not a read failure."""
+    edited = copy.deepcopy(elevenlabs.by_id["tool_get"])
+    del edited["api_schema"]["request_body_schema"]["properties"]["entity_id"]
+    elevenlabs.by_id["tool_get"] = edited
+
+    result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["tools_current"] == "problem"
+    detail = _detail(result, "tools_current")
+    assert detail["tools"] == [TOOL_GET_STATE]
+    assert detail["unreadable"] == []
 
 
 async def test_a_changed_description_names_the_tool_only(hass, setup_entry, elevenlabs):
@@ -290,6 +389,20 @@ async def test_crossed_timeouts_are_a_problem(hass, setup_entry, elevenlabs):
     assert _status(result)["timeouts"] == "problem"
 
 
+async def test_equal_timeouts_are_a_problem(hass, setup_entry, elevenlabs):
+    """The panel and the README say 'shorter', not 'at most'."""
+    agent_timeout = int(
+        setup_entry.data.get(CONF_RESPONSE_TIMEOUT, DEFAULT_RESPONSE_TIMEOUT)
+    )
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_CONFIRM_TIMEOUT: agent_timeout}
+    )
+
+    result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["timeouts"] == "problem"
+
+
 async def test_a_missing_entity_is_named(hass, setup_entry, elevenlabs):
     """The same list the panel and the repair show."""
     hass.config_entries.async_update_entry(
@@ -316,6 +429,31 @@ async def test_an_unloaded_entry_is_still_checked(hass, setup_entry, elevenlabs)
     assert _status(result)["key"] == "ok"
 
 
+# --- M2: the webhook probe is skipped when the entry is not loaded ----------
+
+
+async def test_the_webhook_check_is_skipped_when_the_entry_is_not_loaded(
+    hass, setup_entry, elevenlabs
+):
+    """The handler is unregistered then; a 200 would only prove it is not ours."""
+    await hass.config_entries.async_unload(setup_entry.entry_id)
+
+    with patch(
+        "custom_components.elevenlabs_agent.check.async_get_client",
+        return_value=object(),
+    ):
+        result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["webhook"] == "skipped"
+
+
+async def test_the_webhook_check_still_runs_while_loaded(hass, setup_entry, elevenlabs):
+    """The skip must not swallow the real probe for a loaded entry."""
+    result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["webhook"] == "ok"
+
+
 async def test_the_service_answers_with_the_result(hass, setup_entry, elevenlabs):
     """Developer Tools and automations read the same result as the panel."""
     result = await hass.services.async_call(
@@ -328,6 +466,43 @@ async def test_the_service_answers_with_the_result(hass, setup_entry, elevenlabs
 
     assert result is not None
     assert result["ok"] is True
+
+
+# --- M5: the check service accepts an entry that is not loaded --------------
+
+
+async def test_the_service_accepts_an_entry_that_is_not_loaded(
+    hass, setup_entry, elevenlabs
+):
+    """An automation must get a report, not an exception, for an unloaded entry."""
+    await hass.config_entries.async_unload(setup_entry.entry_id)
+
+    result = await hass.services.async_call(
+        DOMAIN,
+        "check",
+        {"config_entry_id": setup_entry.entry_id},
+        blocking=True,
+        return_response=True,
+    )
+
+    assert result is not None
+    status = {item["check"]: item["status"] for item in result["checks"]}
+    assert status["loaded"] == "problem"
+
+
+async def test_the_service_still_rejects_an_unknown_entry(hass):
+    """The lookup still validates the entry exists and belongs to this domain."""
+    assert await async_setup_component(hass, DOMAIN, {})
+    await hass.async_block_till_done()
+
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN,
+            "check",
+            {"config_entry_id": "not_a_real_entry"},
+            blocking=True,
+            return_response=True,
+        )
 
 
 async def test_the_websocket_command_answers_with_the_result(

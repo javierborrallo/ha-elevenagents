@@ -10,10 +10,12 @@ from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import floor_registry as fr
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.network import NoURLAvailableError
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.elevenlabs_agent.const import (
     DOMAIN,
+    ERROR_NOT_FOUND,
     ISSUE_MISSING_ENTITIES,
     OPT_AUTO_CONTROL,
     OPT_AUTO_EXPOSE,
@@ -24,8 +26,13 @@ from custom_components.elevenlabs_agent.const import (
     OPT_READ_ENTITIES,
     OPT_READ_TARGET,
 )
-from custom_components.elevenlabs_agent.permissions import from_options
-from custom_components.elevenlabs_agent.tool_sync import entity_catalogue
+from custom_components.elevenlabs_agent.expose import _synchronise
+from custom_components.elevenlabs_agent.permissions import (
+    authorise_action,
+    authorise_read,
+    from_options,
+)
+from custom_components.elevenlabs_agent.tool_sync import ToolSyncError, entity_catalogue
 
 if TYPE_CHECKING:
     from homeassistant.helpers import entity_registry as er
@@ -696,6 +703,75 @@ async def test_a_reload_inside_the_debounce_raises_nothing(
     await _settle(hass, freezer)
 
     assert _missing_issue(hass) is None
+
+
+async def test_an_entity_gaining_a_unique_id_migrates_its_permission(
+    hass, setup_entry, entity_registry, freezer, mock_sync_tools
+) -> None:
+    """The README advises adding a unique_id; the permission must follow it."""
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_CONTROL_ENTITIES: ["sensor.yaml_only"]}
+    )
+    _record_catalogue(hass, setup_entry)
+    before = entity_catalogue(hass, from_options(setup_entry.options).control)
+
+    new_entry = entity_registry.async_get_or_create(
+        "sensor", "demo", "yaml_only", suggested_object_id="yaml_only"
+    )
+    await hass.async_block_till_done()
+
+    assert new_entry.entity_id == "sensor.yaml_only"
+    assert setup_entry.options[OPT_CONTROL_ENTITIES] == [new_entry.id]
+
+    perms = from_options(setup_entry.options)
+    assert authorise_read(hass, perms, "sensor.yaml_only") is None
+    assert (
+        authorise_action(hass, perms, "sensor.yaml_only", "sensor.turn_on", {})
+        != ERROR_NOT_FOUND
+    )
+
+    after = entity_catalogue(hass, perms.control)
+    assert after == before
+
+
+async def test_nothing_moves_when_no_key_matches(
+    hass, setup_entry, entity_registry, freezer, mock_sync_tools
+) -> None:
+    """A newly registered entity nobody granted leaves the options untouched."""
+    granted = await _granted(hass, entity_registry, setup_entry, freezer)
+    before = dict(setup_entry.options)
+
+    entity_registry.async_get_or_create("light", "demo", "brand_new")
+    await hass.async_block_till_done()
+
+    assert dict(setup_entry.options) == before
+    assert setup_entry.options[OPT_READ_ENTITIES] == [granted.id]
+
+
+async def test_a_tool_sync_error_from_the_listener_does_not_escape(
+    hass, setup_entry, caplog
+) -> None:
+    """A read-back divergence during a registry sync is swallowed like any other."""
+    with patch(
+        "custom_components.elevenlabs_agent.expose.async_sync_tools",
+        AsyncMock(side_effect=ToolSyncError("diverged")),
+    ):
+        await _synchronise(hass, setup_entry)
+
+    assert any("could not reach ElevenLabs" in r.getMessage() for r in caplog.records)
+
+
+async def test_a_missing_external_url_from_the_listener_does_not_escape(
+    hass, setup_entry, caplog
+) -> None:
+    """The URL can vanish between the debounce firing and the sync running."""
+    with patch(
+        "custom_components.elevenlabs_agent.expose.async_sync_tools",
+        AsyncMock(side_effect=NoURLAvailableError),
+    ):
+        await _synchronise(hass, setup_entry)
+
+    assert any("could not reach ElevenLabs" in r.getMessage() for r in caplog.records)
 
 
 async def test_a_missing_entity_is_found_when_home_assistant_has_started(

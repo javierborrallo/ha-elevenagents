@@ -90,6 +90,11 @@ class CheckSensor(StatusSensor):
     """One check of the connection check."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    # tools_current's entity lists can reach several kilobytes on a large
+    # home, and they change on every check. Keep them out of the recorder.
+    _unrecorded_attributes = frozenset(
+        {"tools", "missing", "extra", "unreadable", "detail"}
+    )
 
     def __init__(self, entry: ElevenLabsAgentConfigEntry, check: str) -> None:
         """Create the sensor of one check."""

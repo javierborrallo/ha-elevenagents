@@ -7,12 +7,15 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+import httpx
+from homeassistant.components import webhook as ha_webhook
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.network import NoURLAvailableError
 
-from .const import CONF_AGENT_ID, CONF_API_KEY, CONF_TOOL_IDS, DOMAIN
+from .const import CONF_AGENT_ID, CONF_API_KEY, CONF_TOOL_IDS, CONF_WEBHOOK_ID, DOMAIN
 from .elevenlabs_client import (
     ElevenLabsAuthError,
     ElevenLabsError,
@@ -25,7 +28,7 @@ from .expose import async_track_new_entities
 from .panel import async_register_panel
 from .services import async_setup_services
 from .status import async_create_check_debouncer
-from .tool_sync import async_sync_tools
+from .tool_sync import ToolSyncError, async_sync_tools
 from .webhook import TokenBucket, async_register, async_unregister
 from .websocket import async_register_commands
 
@@ -73,7 +76,20 @@ async def async_setup(
 async def async_setup_entry(
     hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry
 ) -> bool:
-    """Set up the config entry: register the webhook and run the initial sync."""
+    """
+    Set up the config entry: register the webhook, forward the platforms, then sync.
+
+    Raise ConfigEntryNotReady before anything is set up when no external URL
+    exists. Unload the platforms before an auth error or a lost external URL
+    ends the setup. Log any other sync failure and keep the entry loaded.
+    """
+    try:
+        ha_webhook.async_generate_url(
+            hass, entry.data[CONF_WEBHOOK_ID], allow_internal=False
+        )
+    except NoURLAvailableError as err:
+        raise ConfigEntryNotReady from err
+
     client = async_get_client(hass, entry.data[CONF_API_KEY])
     debouncer = async_create_check_debouncer(hass, entry)
     entry.runtime_data = RuntimeData(
@@ -85,12 +101,21 @@ async def async_setup_entry(
     entry.async_on_unload(lambda: async_unregister(hass, entry))
     entry.async_on_unload(async_track_new_entities(hass, entry))
 
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
     try:
         await async_sync_tools(hass, entry, client)
     except ElevenLabsAuthError as err:
+        await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
         raise ConfigEntryAuthFailed from err
-
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    except NoURLAvailableError as err:
+        await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+        raise ConfigEntryNotReady from err
+    except ElevenLabsError, ToolSyncError, httpx.HTTPError:
+        _LOGGER.warning(
+            "The initial sync with ElevenLabs failed; the entry stays "
+            "loaded and the next sync retries"
+        )
     return True
 
 
