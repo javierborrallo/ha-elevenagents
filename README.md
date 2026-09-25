@@ -96,7 +96,9 @@ for each of those checks and one for the agent as a whole. Each shows *OK* or *P
 update after every synchronisation and every check you run, and never poll. A check that could not
 run shows *Unknown*; while the integration is not loaded, every sensor is *Unavailable*. The
 *Tools up to date* sensor lists, as attributes, the entities the agent is missing and those it
-still holds after you removed them. The panel marks the first kind *Not synced*.
+still holds after you removed them. The panel marks the first kind *Not synced*. The agent sensor
+leaves out the webhook test, because of the router case above; the webhook's own sensor still
+shows it.
 
 ## What the agent can do
 

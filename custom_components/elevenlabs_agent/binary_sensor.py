@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from . import ElevenLabsAgentConfigEntry
 
 OVERALL = "agent"
+WEBHOOK = "webhook"
 
 
 async def async_setup_entry(
@@ -79,11 +80,14 @@ class AgentSensor(StatusSensor):
 
     @property
     def is_on(self) -> bool | None:
-        """Return True when a check reports a problem."""
+        """Return True when a check other than the webhook reports a problem."""
         result = self._result()
         if result is None:
             return None
-        return not result["ok"]
+        return any(
+            item["status"] == PROBLEM and item["check"] != WEBHOOK
+            for item in result["checks"]
+        )
 
 
 class CheckSensor(StatusSensor):

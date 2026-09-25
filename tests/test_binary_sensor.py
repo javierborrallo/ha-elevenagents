@@ -80,7 +80,7 @@ async def test_a_passing_check_turns_every_sensor_off(hass, setup_entry):
         assert _state(hass, setup_entry, key) == STATE_OFF
 
 
-@pytest.mark.parametrize("check", CHECKS)
+@pytest.mark.parametrize("check", [c for c in CHECKS if c != "webhook"])
 async def test_a_problem_turns_its_sensor_and_the_agent_on(hass, setup_entry, check):
     """One failing check shows on its own sensor and on the agent."""
     await _announce(hass, setup_entry, _result(**{check: "problem"}))
@@ -90,6 +90,21 @@ async def test_a_problem_turns_its_sensor_and_the_agent_on(hass, setup_entry, ch
     for other in CHECKS:
         if other != check:
             assert _state(hass, setup_entry, other) == STATE_OFF
+
+
+async def test_a_webhook_problem_alone_leaves_the_agent_off(hass, setup_entry):
+    """The webhook probe can fail behind a router that ElevenLabs gets through."""
+    await _announce(hass, setup_entry, _result(webhook="problem"))
+
+    assert _state(hass, setup_entry, "webhook") == STATE_ON
+    assert _state(hass, setup_entry, OVERALL) == STATE_OFF
+
+
+async def test_a_webhook_problem_does_not_hide_another_one(hass, setup_entry):
+    """Any other problem still turns the agent on."""
+    await _announce(hass, setup_entry, _result(webhook="problem", key="problem"))
+
+    assert _state(hass, setup_entry, OVERALL) == STATE_ON
 
 
 async def test_a_skipped_check_is_unknown_not_off(hass, setup_entry):
