@@ -820,3 +820,84 @@ def test_entity_enum_is_none_without_an_enum():
         "api_schema": {"request_body_schema": {"properties": {}}}
     }
     assert entity_enum(empty_schema) is None
+
+
+def test_the_write_tool_description_limits_the_call_to_the_named_device() -> None:
+    """The rule sits where the model reads it while it builds the call."""
+    assert "the one Home Assistant entity the user named" in CALL_SERVICE_DESCRIPTION
+    assert "matches the user's words and can do what they asked" in (
+        CALL_SERVICE_DESCRIPTION
+    )
+    assert "Otherwise do not call it: tell the user." in CALL_SERVICE_DESCRIPTION
+
+
+async def test_the_write_catalogue_is_introduced_as_the_named_entity(
+    hass, entity_registry
+):
+    """The catalogue under entity_id says which entry to pick."""
+    entry = entity_registry.async_get_or_create("light", "demo", "one")
+    hass.states.async_set(entry.entity_id, "on", {"supported_features": 0})
+    perms = Permissions(read=frozenset(), control=frozenset({entry.id}), exceptions={})
+
+    config = build_call_service(
+        hass,
+        perms,
+        DESCRIPTIONS,
+        {},
+        "https://example/hook",
+        "sekrit",
+        20,
+        settings=AGENT_SETTING_DEFAULTS,
+    )
+
+    description = config["api_schema"]["request_body_schema"]["properties"][
+        "entity_id"
+    ]["description"]
+    assert description.startswith("The entity the user named, from this catalogue:\n")
+    assert entry.entity_id in description
+
+
+def test_an_empty_write_catalogue_keeps_its_plain_sentence(hass) -> None:
+    """No lead-in points at a catalogue that does not exist."""
+    perms = Permissions(read=frozenset(), control=frozenset(), exceptions={})
+
+    config = build_call_service(
+        hass,
+        perms,
+        DESCRIPTIONS,
+        {},
+        "https://example/hook",
+        "sekrit",
+        20,
+        settings=AGENT_SETTING_DEFAULTS,
+    )
+
+    properties = config["api_schema"]["request_body_schema"]["properties"]
+    assert (
+        properties["entity_id"]["description"] == "No entity is exposed to this tool."
+    )
+
+
+def test_action_and_service_data_state_their_limits(hass) -> None:
+    """The action list is a union, and an unsupported parameter can pass in silence."""
+    perms = Permissions(read=frozenset(), control=frozenset(), exceptions={})
+
+    config = build_call_service(
+        hass,
+        perms,
+        DESCRIPTIONS,
+        {},
+        "https://example/hook",
+        "sekrit",
+        20,
+        settings=AGENT_SETTING_DEFAULTS,
+    )
+
+    properties = config["api_schema"]["request_body_schema"]["properties"]
+    assert (
+        "covers every controlled entity together" in properties["action"]["description"]
+    )
+    assert (
+        "can ignore one it does not support without an error"
+        in properties["service_data"]["description"]
+    )

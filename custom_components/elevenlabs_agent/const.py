@@ -67,7 +67,7 @@ ERROR_MALFORMED_REQUEST: Final = "malformed_request"
 # this mapping returns entity_id, name, area and state only.
 PROJECTION_ATTRIBUTES: Final[dict[str, tuple[str, ...]]] = {
     "climate": ("current_temperature", "temperature", "hvac_action"),
-    "light": ("brightness", "color_temp_kelvin"),
+    "light": ("brightness", "color_mode", "rgb_color", "color_temp_kelvin"),
     "cover": ("current_position", "device_class"),
     "fan": ("percentage",),
     "sensor": ("unit_of_measurement", "device_class"),

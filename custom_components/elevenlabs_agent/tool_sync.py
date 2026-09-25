@@ -54,7 +54,9 @@ GET_STATE_DESCRIPTION = (
 )
 
 CALL_SERVICE_DESCRIPTION = (
-    "Perform one action on one Home Assistant entity. "
+    "Perform one action on the one Home Assistant entity the user named. "
+    "Call it only when an entity in the catalogue matches the user's words and "
+    "can do what they asked. Otherwise do not call it: tell the user. "
     "If a call returns an outcome of unconfirmed, call ha_get_state to check "
     "the entity. Never repeat the action."
 )
@@ -263,7 +265,11 @@ def build_call_service(  # noqa: PLR0913, PLR0917 - the plan fixes this exact si
 ) -> dict[str, Any]:
     """Build the ha_call_service tool definition."""
     enum, catalogue = entity_catalogue(hass, perms.control)
-    entity_description = catalogue or "No entity is exposed to this tool."
+    entity_description = (
+        f"The entity the user named, from this catalogue:\n{catalogue}"
+        if catalogue
+        else "No entity is exposed to this tool."
+    )
 
     actions: set[str] = set()
     for key in perms.control:
@@ -295,12 +301,21 @@ def build_call_service(  # noqa: PLR0913, PLR0917 - the plan fixes this exact si
                     },
                     "action": {
                         "type": "string",
-                        "description": "The domain.service action to run on entity_id.",
+                        "description": (
+                            "The domain.service action to run on entity_id. The list "
+                            "covers every controlled entity together, so an action "
+                            "here may not apply to this one; a failed outcome says why."
+                        ),
                         "enum": sorted(actions),
                     },
                     "service_data": {
                         "type": "object",
-                        "description": "Extra parameters the action accepts.",
+                        "description": (
+                            "Extra parameters the action accepts. An entity may not "
+                            "support every parameter, and Home Assistant can ignore "
+                            "one it does not support without an error: check the state "
+                            "in the response before saying it worked."
+                        ),
                         "properties": properties,
                     },
                 },

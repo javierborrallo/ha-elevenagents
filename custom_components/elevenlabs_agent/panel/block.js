@@ -9,6 +9,21 @@ export const RECOMMENDED_BLOCK = `# Tools
 
 You operate a Home Assistant installation through two tools.
 
+## Choosing the device
+
+Before every \`ha_call_service\`, match the user's words to the catalogue in the tool's
+\`entity_id\` description, by name and room:
+
+- One entry matches and it can do what was asked: call the tool on that entry.
+- Several entries match: ask which one.
+- Nothing matches, or the entry that matches cannot do what was asked: say so and call
+  nothing. Do not change a different device that could, and do not do something close
+  to what was asked instead.
+
+Changing something the user did not ask for is worse than changing nothing.
+
+## Using the tools
+
 Use \`ha_get_state\` to find out what something is doing. Call it before you answer any
 question about state, every time, even when the same question came up earlier in this
 conversation. It takes a list, so ask for every entity you need in one call.
@@ -33,6 +48,8 @@ An entry with \`"error": "not_found"\` is not available to you. Answer with the 
 did get and leave that one out entirely. You know nothing about whether it exists.
 
 ## After an action
+
+When you could do only part of a request, say which part you did not do.
 
 Every action comes back with an \`outcome\`. Decide what to say from that field:
 

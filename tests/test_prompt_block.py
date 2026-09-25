@@ -1,0 +1,34 @@
+"""The recommended prompt block exists twice: in README.md and in the panel."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+README = Path("README.md")
+BLOCK_JS = Path("custom_components/elevenlabs_agent/panel/block.js")
+
+
+def _readme_block() -> str:
+    """Return the fenced markdown block under "The recommended prompt block"."""
+    section = README.read_text().split("## The recommended prompt block", 1)[1]
+    return section.split("```markdown\n", 1)[1].split("\n```", 1)[0]
+
+
+def _panel_block() -> str:
+    """Return RECOMMENDED_BLOCK from block.js, with its escaped backticks restored."""
+    source = BLOCK_JS.read_text()
+    literal = source.split("RECOMMENDED_BLOCK = `", 1)[1].rsplit("`;", 1)[0]
+    return literal.replace("\\`", "`")
+
+
+def test_the_panel_offers_the_block_the_readme_documents() -> None:
+    """A user who copies from either place gets the same text."""
+    assert _panel_block() == _readme_block()
+
+
+def test_the_block_opens_with_how_to_choose_the_device() -> None:
+    """The choosing rule comes before the tools are described."""
+    block = _readme_block()
+
+    assert block.index("## Choosing the device") < block.index("## Using the tools")
+    assert "Changing something the user did not ask for is worse than" in block

@@ -201,3 +201,29 @@ def test_malformed_is_two_fields():
         "error": "malformed_request",
         "detail": "unknown tool discriminator",
     }
+
+
+async def test_a_light_projects_its_colour_mode_and_colour(hass):
+    """The model sees the colour a light holds, not only its brightness."""
+    hass.states.async_set(
+        "light.office",
+        "on",
+        {
+            "friendly_name": "Office",
+            "brightness": 180,
+            "color_mode": "rgbw",
+            "rgb_color": [255, 128, 128],
+            "rgbw_color": [255, 0, 0, 255],
+            "supported_color_modes": ["rgbw"],
+        },
+    )
+
+    assert project(hass, "light.office") == {
+        "entity_id": "light.office",
+        "name": "Office",
+        "area": None,
+        "state": "on",
+        "brightness": 180,
+        "color_mode": "rgbw",
+        "rgb_color": [255, 128, 128],
+    }
