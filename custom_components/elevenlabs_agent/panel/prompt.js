@@ -1,9 +1,28 @@
 import { strings } from "./strings.js";
 import { button, el } from "./ui.js";
 
-// True when `text` already carries the recommended block.
-function hasBlock(text, marker) {
-  return text.includes(marker);
+// Collapse every run of whitespace to one space.
+function squeeze(text) {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+// Return how `text` carries the recommended block: "missing", "twice",
+// "outdated" or "current". The marker counts the copies. The whole block,
+// compared without whitespace differences, tells a current copy from an
+// old one.
+export function blockState(text, marker, block) {
+  const copies = text.split(marker).length - 1;
+  if (copies === 0) return "missing";
+  if (copies > 1) return "twice";
+  return squeeze(text).includes(squeeze(block)) ? "current" : "outdated";
+}
+
+// Return the sentence under the editor for one block state.
+function blockNote(t, state) {
+  if (state === "missing") return t.promptBlockMissing;
+  if (state === "twice") return t.promptBlockTwice;
+  if (state === "outdated") return t.promptBlockOutdated;
+  return t.promptBlockPresent;
 }
 
 // Copy a textarea's content. The clipboard API needs a secure context, so
@@ -56,9 +75,7 @@ export function promptScreen(
   mine.spellcheck = false;
   let reported = false;
   mine.addEventListener("input", () => {
-    note.textContent = hasBlock(mine.value, marker)
-      ? t.promptBlockPresent
-      : t.promptBlockMissing;
+    note.textContent = blockNote(t, blockState(mine.value, marker, block));
     if (reported) return;
     reported = true;
     if (onDirty) onDirty();
@@ -81,9 +98,7 @@ export function promptScreen(
   panes.classList.add("grow");
 
   const note = el("p", "subtitle");
-  note.textContent = hasBlock(current, marker)
-    ? t.promptBlockPresent
-    : t.promptBlockMissing;
+  note.textContent = blockNote(t, blockState(current, marker, block));
   host.appendChild(note);
 
   if (exposeSave) exposeSave(() => onSave(mine.value));

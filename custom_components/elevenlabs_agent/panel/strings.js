@@ -81,6 +81,10 @@ const EN = {
   promptRecommended: "What we recommend",
   promptBlockPresent: "Your prompt already carries the recommended block.",
   promptBlockMissing: "Your prompt does not carry the recommended block yet.",
+  promptBlockTwice:
+    "Your prompt carries the recommended block more than once. Keep one copy.",
+  promptBlockOutdated:
+    "Your prompt carries an older version of the recommended block. Replace it with the one on the right.",
 
   treeSearch: "Search entities",
   treeSelected: "{count} selected",
@@ -225,6 +229,10 @@ const ES = {
   promptRecommended: "El que recomendamos",
   promptBlockPresent: "Tu prompt ya lleva el bloque recomendado.",
   promptBlockMissing: "Tu prompt todavía no lleva el bloque recomendado.",
+  promptBlockTwice:
+    "Tu prompt lleva el bloque recomendado más de una vez. Deja una sola copia.",
+  promptBlockOutdated:
+    "Tu prompt lleva una versión antigua del bloque recomendado. Sustitúyela por la de la derecha.",
 
   treeSearch: "Buscar entidades",
   treeSelected: "{count} seleccionadas",
