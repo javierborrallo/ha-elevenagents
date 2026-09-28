@@ -8,7 +8,7 @@
 # Assistant version. 0.13.364 pins homeassistant==2026.9.1, which matches
 # requirements_dev.txt. Change both files together.
 pytest-homeassistant-custom-component==0.13.364
-elevenlabs>=2.68.0
+elevenlabs>=2.69.0
 
 # Home Assistant's _load_services_file resolves supported_features enum names
 # by importing every base component, and those pull in real dependencies.
