@@ -32,6 +32,26 @@ DEFAULT_CONFIRM_TIMEOUT: Final = 5
 DEFAULT_RESPONSE_TIMEOUT: Final = 20
 AUTO_EXPOSE_DEBOUNCE: Final = 10
 
+# Options the events block writes. Minutes, except the hourly limit.
+OPT_EVENT_COOLDOWN: Final = "event_cooldown_minutes"
+OPT_EVENT_HOURLY_LIMIT: Final = "event_hourly_limit"
+OPT_EVENT_CONTINUITY: Final = "event_continuity_minutes"
+DEFAULT_EVENT_COOLDOWN: Final = 5
+DEFAULT_EVENT_HOURLY_LIMIT: Final = 20
+DEFAULT_EVENT_CONTINUITY: Final = 30
+MAX_EVENT_MESSAGE: Final = 1000
+MAX_EVENT_DATA_BYTES: Final = 4096
+MAX_EVENT_MINUTES: Final = 1440
+MAX_EVENT_HOURLY_LIMIT: Final = 1000
+
+# Seconds. A turn ends this long after the last message, once the agent answered.
+TURN_IDLE_SECONDS: Final = 3.0
+TURN_MAX_SECONDS: Final = 60.0
+
+EVENT_REPLY: Final = "elevenlabs_agent_reply"
+EVENT_DROPPED: Final = "elevenlabs_agent_event_dropped"
+EVENT_FAILED: Final = "elevenlabs_agent_event_failed"
+
 # Seconds between the last sync of a burst and the connection check.
 CHECK_DEBOUNCE: Final = 10
 SIGNAL_CHECK: Final = "elevenlabs_agent_check_{}"

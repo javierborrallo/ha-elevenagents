@@ -1345,3 +1345,72 @@ async def test_config_get_lists_none_before_a_check(hass, setup_entry, hass_ws_c
     result = (await client.receive_json())["result"]
 
     assert result["unsynced_entity_ids"] == []
+
+
+async def test_config_get_returns_the_event_settings(hass, setup_entry, hass_ws_client):
+    """Defaults apply until the user saves."""
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+    )
+    result = (await client.receive_json())["result"]
+
+    assert result["events"] == {
+        "cooldown_minutes": 5,
+        "hourly_limit": 20,
+        "continuity_minutes": 30,
+    }
+
+
+async def test_config_save_stores_the_event_settings(hass, setup_entry, hass_ws_client):
+    """The events block writes three options and does not sync."""
+    client = await hass_ws_client(hass)
+    with patch(
+        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+    ) as sync:
+        await client.send_json_auto_id(
+            {
+                "type": "elevenlabs_agent/config/save",
+                "entry_id": setup_entry.entry_id,
+                "block": "events",
+                "data": {
+                    "cooldown_minutes": 0,
+                    "hourly_limit": 3,
+                    "continuity_minutes": 0,
+                },
+            }
+        )
+        result = (await client.receive_json())["result"]
+
+    assert result["outcome"] == "ok"
+    assert setup_entry.options["event_cooldown_minutes"] == 0
+    assert setup_entry.options["event_hourly_limit"] == 3
+    assert setup_entry.options["event_continuity_minutes"] == 0
+    sync.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"cooldown_minutes": -1, "hourly_limit": 20, "continuity_minutes": 30},
+        {"cooldown_minutes": 5, "hourly_limit": 0, "continuity_minutes": 30},
+        {"cooldown_minutes": 5, "hourly_limit": 20, "continuity_minutes": 1441},
+    ],
+)
+async def test_config_save_refuses_event_settings_out_of_range(
+    hass, setup_entry, hass_ws_client, data
+):
+    """Cooldown and continuity 0-1440 minutes, hourly limit 1-1000."""
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {
+            "type": "elevenlabs_agent/config/save",
+            "entry_id": setup_entry.entry_id,
+            "block": "events",
+            "data": data,
+        }
+    )
+    result = (await client.receive_json())["result"]
+
+    assert result == {"outcome": "failed", "detail": "events_out_of_range"}
+    assert "event_hourly_limit" not in setup_entry.options

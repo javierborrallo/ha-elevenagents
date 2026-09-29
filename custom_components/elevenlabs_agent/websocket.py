@@ -20,15 +20,23 @@ from .const import (
     CONF_WEBHOOK_ID,
     CONF_WEBHOOK_SECRET,
     DEFAULT_CONFIRM_TIMEOUT,
+    DEFAULT_EVENT_CONTINUITY,
+    DEFAULT_EVENT_COOLDOWN,
+    DEFAULT_EVENT_HOURLY_LIMIT,
     DEFAULT_RESPONSE_TIMEOUT,
     DOMAIN,
     ISSUE_ROTATION_UNSYNCED,
+    MAX_EVENT_HOURLY_LIMIT,
+    MAX_EVENT_MINUTES,
     OPT_AGENT_SETTINGS,
     OPT_AUTO_CONTROL,
     OPT_AUTO_EXPOSE,
     OPT_AUTO_EXPOSE_AREAS,
     OPT_CONFIRM_TIMEOUT,
     OPT_CONTROL_ENTITIES,
+    OPT_EVENT_CONTINUITY,
+    OPT_EVENT_COOLDOWN,
+    OPT_EVENT_HOURLY_LIMIT,
     OPT_EXCEPTIONS,
     OPT_READ_ENTITIES,
     TOOL_GET_STATE,
@@ -213,6 +221,17 @@ async def config_get(
             "confirm_timeout": options.get(
                 OPT_CONFIRM_TIMEOUT, DEFAULT_CONFIRM_TIMEOUT
             ),
+            "events": {
+                "cooldown_minutes": options.get(
+                    OPT_EVENT_COOLDOWN, DEFAULT_EVENT_COOLDOWN
+                ),
+                "hourly_limit": options.get(
+                    OPT_EVENT_HOURLY_LIMIT, DEFAULT_EVENT_HOURLY_LIMIT
+                ),
+                "continuity_minutes": options.get(
+                    OPT_EVENT_CONTINUITY, DEFAULT_EVENT_CONTINUITY
+                ),
+            },
             "auto_expose": options.get(OPT_AUTO_EXPOSE, False),
             "auto_control": options.get(OPT_AUTO_CONTROL, False),
             "auto_expose_areas": sorted(options.get(OPT_AUTO_EXPOSE_AREAS, ())),
@@ -225,7 +244,7 @@ async def config_get(
     )
 
 
-BLOCKS = ("entities", "exceptions", "settings", "auto_expose", "forget")
+BLOCKS = ("entities", "exceptions", "settings", "auto_expose", "forget", "events")
 SYNCING_BLOCKS = ("entities", "exceptions", "settings", "forget")
 
 
@@ -251,6 +270,25 @@ def _exceptions_block(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, An
     return {OPT_EXCEPTIONS: exceptions}
 
 
+def _events_block(data: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the three event options, or None when a value is out of range."""
+    cooldown = int(data.get("cooldown_minutes", DEFAULT_EVENT_COOLDOWN))
+    limit = int(data.get("hourly_limit", DEFAULT_EVENT_HOURLY_LIMIT))
+    continuity = int(data.get("continuity_minutes", DEFAULT_EVENT_CONTINUITY))
+    in_range = (
+        0 <= cooldown <= MAX_EVENT_MINUTES
+        and 1 <= limit <= MAX_EVENT_HOURLY_LIMIT
+        and 0 <= continuity <= MAX_EVENT_MINUTES
+    )
+    if not in_range:
+        return None
+    return {
+        OPT_EVENT_COOLDOWN: cooldown,
+        OPT_EVENT_HOURLY_LIMIT: limit,
+        OPT_EVENT_CONTINUITY: continuity,
+    }
+
+
 def _auto_expose_block(_hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
     """Store both switches and the areas they watch."""
     return {
@@ -258,6 +296,39 @@ def _auto_expose_block(_hass: HomeAssistant, data: dict[str, Any]) -> dict[str, 
         OPT_AUTO_CONTROL: bool(data.get("control", False)),
         OPT_AUTO_EXPOSE_AREAS: sorted(data.get("areas", ())),
     }
+
+
+def _block_keys(
+    hass: HomeAssistant,
+    entry: ElevenLabsAgentConfigEntry,
+    block: str,
+    data: dict[str, Any],
+) -> dict[str, Any] | str:
+    """Return the options one block writes, or the failure detail as a string."""
+    if block == "settings":
+        agent_timeout = entry.data.get(CONF_RESPONSE_TIMEOUT, DEFAULT_RESPONSE_TIMEOUT)
+        value = int(data.get("confirm_timeout", DEFAULT_CONFIRM_TIMEOUT))
+        if value >= agent_timeout:
+            return "timeout_not_below_agent"
+        keys: dict[str, Any] = {OPT_CONFIRM_TIMEOUT: value}
+        if "agent_settings" in data:
+            keys[OPT_AGENT_SETTINGS] = dict(data["agent_settings"])
+        return keys
+    if block == "events":
+        events = _events_block(data)
+        return "events_out_of_range" if events is None else events
+    simple = {
+        "entities": _entities_block,
+        "exceptions": _exceptions_block,
+        "auto_expose": _auto_expose_block,
+    }
+    if block in simple:
+        return simple[block](hass, data)
+    if block == "forget":
+        missing = {key for key in stored_keys(entry.options) if is_missing(hass, key)}
+        return without_keys(entry.options, missing & set(data.get("keys", ())))
+    error = f"Unhandled block: {block}"
+    raise ValueError(error)
 
 
 @websocket_api.websocket_command(
@@ -280,31 +351,10 @@ async def config_save(
         return
 
     block, data = msg["block"], msg["data"]
-
-    if block == "settings":
-        agent_timeout = entry.data.get(CONF_RESPONSE_TIMEOUT, DEFAULT_RESPONSE_TIMEOUT)
-        value = int(data.get("confirm_timeout", DEFAULT_CONFIRM_TIMEOUT))
-        if value >= agent_timeout:
-            connection.send_result(
-                msg["id"],
-                {"outcome": "failed", "detail": "timeout_not_below_agent"},
-            )
-            return
-        keys: dict[str, Any] = {OPT_CONFIRM_TIMEOUT: value}
-        if "agent_settings" in data:
-            keys[OPT_AGENT_SETTINGS] = dict(data["agent_settings"])
-    elif block == "entities":
-        keys = _entities_block(hass, data)
-    elif block == "exceptions":
-        keys = _exceptions_block(hass, data)
-    elif block == "auto_expose":
-        keys = _auto_expose_block(hass, data)
-    elif block == "forget":
-        missing = {key for key in stored_keys(entry.options) if is_missing(hass, key)}
-        keys = without_keys(entry.options, missing & set(data.get("keys", ())))
-    else:
-        error = f"Unhandled block: {block}"
-        raise ValueError(error)
+    keys = _block_keys(hass, entry, block, data)
+    if isinstance(keys, str):
+        connection.send_result(msg["id"], {"outcome": "failed", "detail": keys})
+        return
 
     hass.config_entries.async_update_entry(entry, options={**entry.options, **keys})
     async_check_missing(hass, entry)
