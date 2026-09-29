@@ -110,6 +110,25 @@
           "description": "La entrada de ElevenLabs Agent que se comprueba."
         }
       }
+    },
+    "send_event": {
+      "name": "Enviar un evento al agente",
+      "description": "Entrega un evento al agente de ElevenLabs como un turno de texto y devuelve su respuesta. Cada evento entregado gasta créditos de ElevenLabs.",
+      "fields": {
+        "config_entry_id": { "name": "Entrada", "description": "La entrada de ElevenLabs Agent." },
+        "message": { "name": "Mensaje", "description": "Qué ha pasado, con palabras que lee el agente. Como mucho 1000 caracteres." },
+        "entity_id": { "name": "Entidad", "description": "Añade el estado actual de esta entidad. Tiene que ser una que el agente pueda leer." },
+        "event_type": { "name": "Tipo de evento", "description": "Una etiqueta para el evento. Si está, también es la clave del cooldown." },
+        "priority": { "name": "Prioridad", "description": "Alta se salta el cooldown, nunca el límite por hora." },
+        "new_conversation": { "name": "Conversación nueva", "description": "No incluir los eventos recientes en este." },
+        "data": { "name": "Datos", "description": "Valores que el agente recibe como variables dinámicas. Como mucho 4 KB." }
+      }
     }
+  },
+  "exceptions": {
+    "event_data_too_large": { "message": "Los datos del evento superan los 4 KB." },
+    "event_data_reserved_key": { "message": "La clave de datos «{key}» está reservada y no se puede usar." },
+    "event_entity_not_readable": { "message": "El agente no puede leer {entity_id}, así que el evento no puede llevarla." },
+    "event_failed": { "message": "El evento no ha llegado al agente: {reason}." }
   }
 }

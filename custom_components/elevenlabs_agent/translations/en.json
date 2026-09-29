@@ -110,6 +110,25 @@
           "description": "The ElevenLabs Agent config entry to check."
         }
       }
+    },
+    "send_event": {
+      "name": "Send an event to the agent",
+      "description": "Deliver one event to the ElevenLabs agent as a text turn and return its reply. Each delivered event spends ElevenLabs credits.",
+      "fields": {
+        "config_entry_id": { "name": "Config entry", "description": "The ElevenLabs Agent config entry." },
+        "message": { "name": "Message", "description": "What happened, in words the agent reads. At most 1000 characters." },
+        "entity_id": { "name": "Entity", "description": "Adds this entity's current state. It must be one the agent may read." },
+        "event_type": { "name": "Event type", "description": "A label for the event. Also the cooldown key when present." },
+        "priority": { "name": "Priority", "description": "High skips the cooldown, never the hourly limit." },
+        "new_conversation": { "name": "New conversation", "description": "Leave out the recent events for this one." },
+        "data": { "name": "Data", "description": "Values the agent receives as dynamic variables. At most 4 KB." }
+      }
     }
+  },
+  "exceptions": {
+    "event_data_too_large": { "message": "The event's data is larger than 4 KB." },
+    "event_data_reserved_key": { "message": "The data key \"{key}\" is reserved and cannot be used." },
+    "event_entity_not_readable": { "message": "The agent may not read {entity_id}, so the event cannot carry it." },
+    "event_failed": { "message": "The event could not reach the agent: {reason}." }
   }
 }

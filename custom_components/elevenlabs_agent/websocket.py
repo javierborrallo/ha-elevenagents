@@ -271,10 +271,13 @@ def _exceptions_block(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, An
 
 
 def _events_block(data: dict[str, Any]) -> dict[str, Any] | None:
-    """Return the three event options, or None when a value is out of range."""
-    cooldown = int(data.get("cooldown_minutes", DEFAULT_EVENT_COOLDOWN))
-    limit = int(data.get("hourly_limit", DEFAULT_EVENT_HOURLY_LIMIT))
-    continuity = int(data.get("continuity_minutes", DEFAULT_EVENT_CONTINUITY))
+    """Return the three event options, or None when a value is bad or out of range."""
+    try:
+        cooldown = int(data.get("cooldown_minutes", DEFAULT_EVENT_COOLDOWN))
+        limit = int(data.get("hourly_limit", DEFAULT_EVENT_HOURLY_LIMIT))
+        continuity = int(data.get("continuity_minutes", DEFAULT_EVENT_CONTINUITY))
+    except TypeError, ValueError:
+        return None
     in_range = (
         0 <= cooldown <= MAX_EVENT_MINUTES
         and 1 <= limit <= MAX_EVENT_HOURLY_LIMIT

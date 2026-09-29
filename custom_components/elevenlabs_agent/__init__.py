@@ -24,6 +24,7 @@ from .elevenlabs_client import (
     async_get_client,
     async_patch_agent,
 )
+from .events import EventHistory, EventLimiter
 from .expose import async_track_new_entities
 from .panel import async_register_panel
 from .services import async_setup_services
@@ -57,6 +58,9 @@ class RuntimeData:
     sync_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     catalogue: tuple[list[str], str] | None = None
     last_check: dict[str, Any] | None = None
+    event_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    event_limiter: EventLimiter = field(default_factory=EventLimiter)
+    event_history: EventHistory = field(default_factory=EventHistory)
 
 
 type ElevenLabsAgentConfigEntry = ConfigEntry[RuntimeData]

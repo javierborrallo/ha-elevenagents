@@ -117,10 +117,18 @@ export function settingsScreen(
   const t = strings(hass.language);
   const reportDirty = dirtyReporter(onDirty);
   const settings = config.agent_settings || {};
+  const events = config.events || {
+    cooldown_minutes: 5,
+    hourly_limit: 20,
+    continuity_minutes: 30,
+  };
   const draft = {
     first_message: agent ? agent.first_message : "",
     confirm_timeout: config.confirm_timeout,
     pre_tool_speech: settings.pre_tool_speech || "auto",
+    cooldown_minutes: events.cooldown_minutes,
+    hourly_limit: events.hourly_limit,
+    continuity_minutes: events.continuity_minutes,
   };
   const initialMessage = draft.first_message;
 
@@ -183,14 +191,51 @@ export function settingsScreen(
     ),
   );
 
+  const numberRow = (label, hint, key, min, max) =>
+    field(
+      label,
+      hint,
+      selectorField(
+        hass,
+        { number: { min: min, max: max, mode: "box" } },
+        draft[key],
+        (value) => {
+          draft[key] = value;
+          reportDirty();
+        },
+      ),
+    );
+  group.appendChild(
+    numberRow(t.eventsCooldownLabel, t.eventsCooldownHint, "cooldown_minutes", 0, 1440),
+  );
+  group.appendChild(
+    numberRow(t.eventsLimitLabel, t.eventsLimitHint, "hourly_limit", 1, 1000),
+  );
+  group.appendChild(
+    numberRow(
+      t.eventsContinuityLabel,
+      t.eventsContinuityHint,
+      "continuity_minutes",
+      0,
+      1440,
+    ),
+  );
+
   async function doSave() {
     if (agent && draft.first_message !== initialMessage) {
       const written = await saveAgent({ first_message: draft.first_message });
       if (!isAdvanceable(written)) return written;
     }
-    return saveConfig("settings", {
+    // Save settings before events. A failed settings save stops here.
+    const settingsSaved = await saveConfig("settings", {
       confirm_timeout: draft.confirm_timeout,
       agent_settings: { pre_tool_speech: draft.pre_tool_speech },
+    });
+    if (!isAdvanceable(settingsSaved)) return settingsSaved;
+    return saveConfig("events", {
+      cooldown_minutes: Number(draft.cooldown_minutes),
+      hourly_limit: Number(draft.hourly_limit),
+      continuity_minutes: Number(draft.continuity_minutes),
     });
   }
   if (exposeSave) exposeSave(doSave);

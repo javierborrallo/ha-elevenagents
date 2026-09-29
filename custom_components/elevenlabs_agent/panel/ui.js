@@ -294,6 +294,7 @@ export function describeSaveOutcome(t, result) {
   if (result.outcome === "ok") return t.saved;
   if (result.outcome === "saved_not_sent") return t.savedNotSent;
   if (result.detail === "timeout_not_below_agent") return t.timeoutNotBelowAgent;
+  if (result.detail === "events_out_of_range") return t.eventsOutOfRange;
   return t.saveFailed.replace("{detail}", result.detail || "");
 }
 

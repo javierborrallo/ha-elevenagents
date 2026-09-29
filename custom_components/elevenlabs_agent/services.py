@@ -1,4 +1,4 @@
-"""The sync_tools and check services."""
+"""The sync_tools, check and send_event services."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import service
 
 from .const import DOMAIN
+from .events import SEND_EVENT_SCHEMA, async_handle_send_event
 from .status import async_record_check
 from .tool_sync import async_sync_tools
 
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
 
 SERVICE_SYNC_TOOLS = "sync_tools"
 SERVICE_CHECK = "check"
+SERVICE_SEND_EVENT = "send_event"
 
 ENTRY_SCHEMA = vol.Schema({vol.Required(ATTR_CONFIG_ENTRY_ID): cv.string})
 
@@ -65,7 +67,7 @@ async def _async_handle_check(call: ServiceCall) -> ServiceResponse:
 
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
-    """Register both services. They exist whether or not an entry is loaded."""
+    """Register the services. They exist whether or not an entry is loaded."""
     hass.services.async_register(
         DOMAIN, SERVICE_SYNC_TOOLS, _async_handle_sync_tools, schema=ENTRY_SCHEMA
     )
@@ -75,4 +77,11 @@ def async_setup_services(hass: HomeAssistant) -> None:
         _async_handle_check,
         schema=ENTRY_SCHEMA,
         supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SEND_EVENT,
+        async_handle_send_event,
+        schema=SEND_EVENT_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )

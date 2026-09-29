@@ -13,3 +13,36 @@ check:
       selector:
         config_entry:
           integration: elevenlabs_agent
+
+send_event:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: elevenlabs_agent
+    message:
+      required: true
+      selector:
+        text:
+          multiline: true
+    entity_id:
+      selector:
+        entity:
+    event_type:
+      selector:
+        text:
+    priority:
+      selector:
+        select:
+          options:
+            - low
+            - normal
+            - high
+    new_conversation:
+      default: false
+      selector:
+        boolean:
+    data:
+      selector:
+        object:

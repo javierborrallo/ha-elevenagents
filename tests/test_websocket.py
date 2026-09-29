@@ -1414,3 +1414,30 @@ async def test_config_save_refuses_event_settings_out_of_range(
 
     assert result == {"outcome": "failed", "detail": "events_out_of_range"}
     assert "event_hourly_limit" not in setup_entry.options
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"cooldown_minutes": None, "hourly_limit": 20, "continuity_minutes": 30},
+        {"cooldown_minutes": 5, "hourly_limit": "abc", "continuity_minutes": 30},
+    ],
+)
+async def test_config_save_refuses_a_bad_event_number_instead_of_crashing(
+    hass, setup_entry, hass_ws_client, data
+):
+    """An emptied or non-numeric field is out of range, not an unknown_error."""
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {
+            "type": "elevenlabs_agent/config/save",
+            "entry_id": setup_entry.entry_id,
+            "block": "events",
+            "data": data,
+        }
+    )
+    response = await client.receive_json()
+
+    assert response["success"] is True
+    assert response["result"] == {"outcome": "failed", "detail": "events_out_of_range"}
+    assert "event_hourly_limit" not in setup_entry.options

@@ -111,3 +111,25 @@ def test_every_status_sensor_has_a_name(language: str) -> None:
     assert len(keys) == 9
     for key in keys:
         assert names.get(key, {}).get("name"), f"{language}.json has no name for {key}"
+
+
+@pytest.mark.parametrize("language", ["en", "es"])
+def test_every_raised_translation_key_has_text(language: str) -> None:
+    """
+    A ServiceValidationError or HomeAssistantError key without text shows the key.
+
+    Only keys raised under this integration's own translation_domain need
+    text here. A key raised under Home Assistant's own domain, such as the
+    lock re-check reusing service_config_entry_not_loaded, resolves through
+    Home Assistant's own translations instead.
+    """
+    source = (SOURCE / "events.py").read_text()
+    used = set(
+        re.findall(r'translation_domain=DOMAIN,\s*translation_key="([a-z_]+)"', source)
+    )
+    documented = set(_load(language).get("exceptions", {}))
+
+    assert used, "events.py raises no translated error"
+    assert used <= documented, (
+        f"{language}.json has no text for {sorted(used - documented)}"
+    )

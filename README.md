@@ -232,6 +232,32 @@ Tell the user it could not be understood, and move on. The `detail` field is for
 diagnosis; keep it to yourself.
 ```
 
+## Events
+
+An automation can hand the agent something that just happened. The agent reads it as a message,
+can look at the house or act through the same two tools, and answers. What it does next — call you
+through a flow you build in ElevenLabs, or turn the heating on — is up to your agent.
+
+```yaml
+action: elevenlabs_agent.send_event
+data:
+  config_entry_id: <your entry>
+  message: "The house dropped to 10 °C."
+  entity_id: sensor.living_room_temperature
+  priority: high
+response_variable: reply
+```
+
+`entity_id` adds that entity's current state, and must be one the agent may read. `event_type`,
+`priority` and `data` reach your agent as dynamic variables. The reply comes back in
+`response_variable` and as an `elevenlabs_agent_reply` event.
+
+Each delivered event is a short text conversation and **spends ElevenLabs credits**. Three settings
+in the panel keep that in hand: a cooldown for the same event (5 minutes; high priority skips it),
+a limit per hour (20; nothing skips it), and a memory window (30 minutes) during which recent events
+travel with the next one. A dropped event fires `elevenlabs_agent_event_dropped`; one that could not
+be delivered fires `elevenlabs_agent_event_failed` and fails the action with the reason.
+
 ## Uninstalling
 
 Removing the integration detaches its two tools from your agent and then deletes them from
