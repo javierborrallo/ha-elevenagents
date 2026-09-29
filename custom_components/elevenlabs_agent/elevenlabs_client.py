@@ -69,6 +69,17 @@ def async_get_client(hass: HomeAssistant, api_key: str) -> AsyncElevenLabs:
     return AsyncElevenLabs(api_key=api_key, httpx_client=get_async_client(hass))
 
 
+async def async_get_signed_url(client: AsyncElevenLabs, agent_id: str) -> str:
+    """Return a signed WebSocket URL for one conversation with the agent."""
+    try:
+        result = await client.conversational_ai.conversations.get_signed_url(
+            agent_id=agent_id
+        )
+    except (ApiError, httpx.HTTPError) as err:
+        raise _translate(err) from err
+    return str(result.signed_url)
+
+
 async def async_list_tools(client: AsyncElevenLabs) -> ToolsResponseModel:
     """List the tools in the user's workspace."""
     try:

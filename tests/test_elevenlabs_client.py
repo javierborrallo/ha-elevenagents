@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -18,6 +19,7 @@ from custom_components.elevenlabs_agent.elevenlabs_client import (
     async_delete_tool,
     async_get_agent,
     async_get_client,
+    async_get_signed_url,
     async_get_tool,
     async_list_agents,
     async_list_tools,
@@ -176,3 +178,39 @@ async def test_a_transport_error_is_wrapped_in_elevenlabs_error(hass, call):
 
     with pytest.raises(ElevenLabsError):
         await call(client)
+
+
+async def test_get_signed_url_returns_the_url() -> None:
+    """The SDK answers with a model that carries signed_url."""
+    client = SimpleNamespace(
+        conversational_ai=SimpleNamespace(
+            conversations=SimpleNamespace(
+                get_signed_url=AsyncMock(
+                    return_value=SimpleNamespace(signed_url="wss://x/y?token=t")
+                )
+            )
+        )
+    )
+
+    url = await async_get_signed_url(cast("Any", client), "agent_1")
+
+    assert url == "wss://x/y?token=t"
+    client.conversational_ai.conversations.get_signed_url.assert_awaited_once_with(
+        agent_id="agent_1"
+    )
+
+
+async def test_get_signed_url_translates_a_refused_key() -> None:
+    """A 401 becomes ElevenLabsAuthError like every other call."""
+    client = SimpleNamespace(
+        conversational_ai=SimpleNamespace(
+            conversations=SimpleNamespace(
+                get_signed_url=AsyncMock(
+                    side_effect=ApiError(status_code=401, body="no")
+                )
+            )
+        )
+    )
+
+    with pytest.raises(ElevenLabsAuthError):
+        await async_get_signed_url(cast("Any", client), "agent_1")
