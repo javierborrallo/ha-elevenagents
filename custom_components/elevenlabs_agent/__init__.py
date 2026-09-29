@@ -1,4 +1,4 @@
-"""The ElevenLabs Agent integration."""
+"""The ElevenAgents integration."""
 
 from __future__ import annotations
 

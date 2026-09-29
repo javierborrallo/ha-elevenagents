@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Connect to ElevenLabs",
-        "description": "Enter an ElevenLabs API key. The key needs write access to Conversational AI. Nothing is saved until you choose an agent on the next screen.",
+        "description": "Enter an ElevenLabs API key. The key needs write access to ElevenAgents. Nothing is saved until you choose an agent on the next screen.",
         "data": {
           "api_key": "API key"
         },
@@ -36,7 +36,7 @@
     },
     "error": {
       "invalid_auth": "ElevenLabs rejected this key. Check that you copied it whole, and that it has not been revoked.",
-      "insufficient_scope": "This key works, but it may not reach Conversational AI. Open the key in the ElevenLabs dashboard and give it write access to ElevenAgents.",
+      "insufficient_scope": "This key works, but it may not reach ElevenAgents. Open the key in the ElevenLabs dashboard and give it write access to ElevenAgents.",
       "no_agents": "This key reaches no agents. Create an agent in the ElevenLabs dashboard first, then add this integration again.",
       "agent_not_found": "This agent no longer exists in the workspace this key reaches.",
       "cannot_connect": "Home Assistant could not reach ElevenLabs. Check this machine's internet connection and try again.",
@@ -54,7 +54,7 @@
   },
   "issues": {
     "agent_unprotected": {
-      "title": "Your ElevenLabs agent accepts anyone",
+      "title": "Your ElevenAgents agent accepts anyone",
       "fix_flow": {
         "step": {
           "confirm": {
@@ -97,7 +97,7 @@
       "fields": {
         "config_entry_id": {
           "name": "Config entry",
-          "description": "The ElevenLabs Agent config entry to synchronise."
+          "description": "The ElevenAgents config entry to synchronise."
         }
       }
     },
@@ -107,15 +107,15 @@
       "fields": {
         "config_entry_id": {
           "name": "Config entry",
-          "description": "The ElevenLabs Agent config entry to check."
+          "description": "The ElevenAgents config entry to check."
         }
       }
     },
     "send_event": {
       "name": "Send an event to the agent",
-      "description": "Deliver one event to the ElevenLabs agent as a text turn and return its reply. Each delivered event spends ElevenLabs credits.",
+      "description": "Deliver one event to the ElevenAgents agent as a text turn and return its reply. Each delivered event spends ElevenLabs credits.",
       "fields": {
-        "config_entry_id": { "name": "Config entry", "description": "The ElevenLabs Agent config entry." },
+        "config_entry_id": { "name": "Config entry", "description": "The ElevenAgents config entry." },
         "message": { "name": "Message", "description": "What happened, in words the agent reads. At most 1000 characters." },
         "entity_id": { "name": "Entity", "description": "Adds this entity's current state. It must be one the agent may read." },
         "event_type": { "name": "Event type", "description": "A label for the event. Also the cooldown key when present." },

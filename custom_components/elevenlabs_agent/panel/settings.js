@@ -106,7 +106,7 @@ function rotateRow(t, what, label, confirmText, onRotate) {
  * The agent's opening line, the confirmation timeout and the one writable
  * ElevenLabs behaviour setting.
  *
- * The opening line lives on the ElevenLabs agent and the other two live in
+ * The opening line lives on the ElevenAgents agent and the other two live in
  * the config entry, so a save can touch two places. `agent` is null when
  * ElevenLabs could not be reached, and the opening line is then left out.
  */

@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 
     from . import ElevenLabsAgentConfigEntry
 
-WEBHOOK_NAME = "ElevenLabs Agent"
+WEBHOOK_NAME = "ElevenAgents"
 
 
 class TokenBucket:

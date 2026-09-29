@@ -1,4 +1,4 @@
-# ElevenLabs Agent for Home Assistant
+# ElevenAgents for Home Assistant
 
 Let an [ElevenLabs conversational agent](https://elevenlabs.io/docs/agents-platform/overview)
 operate your Home Assistant installation through controlled, automatically synchronised tools.
@@ -10,7 +10,7 @@ operate your Home Assistant installation through controlled, automatically synch
 This is **not** "ElevenLabs text-to-speech for Home Assistant" — Home Assistant already
 ships [that integration](https://www.home-assistant.io/integrations/elevenlabs/).
 
-Here, the ElevenLabs agent is the conversational and reasoning layer, and Home Assistant
+Here, the ElevenAgents agent is the conversational and reasoning layer, and Home Assistant
 stays the source of truth and the secure execution layer:
 
 ```
@@ -45,7 +45,7 @@ agent, and keeps them aligned as your Home Assistant configuration changes.
 ## Requirements
 
 - Home Assistant 2026.6.4 or newer
-- An ElevenLabs account with an agent, and an API key scoped for Conversational AI
+- An ElevenLabs account with an agent, and an API key scoped for ElevenAgents
   **write** access — a key scoped only to text-to-speech will not be able to
   synchronise tools
 - A way for ElevenLabs to reach your Home Assistant webhook from the internet
@@ -121,7 +121,7 @@ inherits them by taking the same name.
 
 Read this section before you expose a lock, an alarm or a garage door.
 
-**An open agent is a door into your house.** By default an ElevenLabs agent accepts a
+**An open agent is a door into your house.** By default an ElevenAgents agent accepts a
 conversation from anyone holding its ID, and that ID is not a secret. Someone who talks to it
 forges nothing: the commands arrive through the legitimate channel, carrying the right secret,
 and do exactly what you approved. The integration raises a repair issue when it finds an agent

@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Conectar con ElevenLabs",
-        "description": "Introduce una clave de API de ElevenLabs. La clave necesita permiso de escritura sobre Conversational AI. No se guarda nada hasta que elijas un agente en la pantalla siguiente.",
+        "description": "Introduce una clave de API de ElevenLabs. La clave necesita permiso de escritura sobre ElevenAgents. No se guarda nada hasta que elijas un agente en la pantalla siguiente.",
         "data": {
           "api_key": "Clave de API"
         },
@@ -36,7 +36,7 @@
     },
     "error": {
       "invalid_auth": "ElevenLabs ha rechazado esta clave. Comprueba que la copiaste entera y que no está revocada.",
-      "insufficient_scope": "La clave funciona, pero puede que no alcance Conversational AI. Ábrela en el panel de ElevenLabs y dale permiso de escritura sobre ElevenAgents.",
+      "insufficient_scope": "La clave funciona, pero puede que no alcance ElevenAgents. Ábrela en el panel de ElevenLabs y dale permiso de escritura sobre ElevenAgents.",
       "no_agents": "Esta clave no alcanza ningún agente. Crea uno en el panel de ElevenLabs y vuelve a añadir la integración.",
       "agent_not_found": "Ese agente ya no existe en el espacio de trabajo que alcanza esta clave.",
       "cannot_connect": "Home Assistant no ha podido llegar a ElevenLabs. Revisa la conexión a internet de esta máquina e inténtalo otra vez.",
@@ -54,7 +54,7 @@
   },
   "issues": {
     "agent_unprotected": {
-      "title": "Tu agente de ElevenLabs acepta a cualquiera",
+      "title": "Tu agente de ElevenAgents acepta a cualquiera",
       "fix_flow": {
         "step": {
           "confirm": {
@@ -97,7 +97,7 @@
       "fields": {
         "config_entry_id": {
           "name": "Entrada de configuración",
-          "description": "La entrada de configuración de ElevenLabs Agent que se sincroniza."
+          "description": "La entrada de configuración de ElevenAgents que se sincroniza."
         }
       }
     },
@@ -107,15 +107,15 @@
       "fields": {
         "config_entry_id": {
           "name": "Entrada de configuración",
-          "description": "La entrada de ElevenLabs Agent que se comprueba."
+          "description": "La entrada de ElevenAgents que se comprueba."
         }
       }
     },
     "send_event": {
       "name": "Enviar un evento al agente",
-      "description": "Entrega un evento al agente de ElevenLabs como un turno de texto y devuelve su respuesta. Cada evento entregado gasta créditos de ElevenLabs.",
+      "description": "Entrega un evento al agente de ElevenAgents como un turno de texto y devuelve su respuesta. Cada evento entregado gasta créditos de ElevenLabs.",
       "fields": {
-        "config_entry_id": { "name": "Entrada", "description": "La entrada de ElevenLabs Agent." },
+        "config_entry_id": { "name": "Entrada", "description": "La entrada de ElevenAgents." },
         "message": { "name": "Mensaje", "description": "Qué ha pasado, con palabras que lee el agente. Como mucho 1000 caracteres." },
         "entity_id": { "name": "Entidad", "description": "Añade el estado actual de esta entidad. Tiene que ser una que el agente pueda leer." },
         "event_type": { "name": "Tipo de evento", "description": "Una etiqueta para el evento. Si está, también es la clave del cooldown." },

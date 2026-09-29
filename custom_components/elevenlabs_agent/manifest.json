@@ -1,6 +1,6 @@
 {
   "domain": "elevenlabs_agent",
-  "name": "ElevenLabs Agent",
+  "name": "ElevenAgents",
   "codeowners": [
     "@javierborrallo"
   ],

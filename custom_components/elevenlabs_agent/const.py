@@ -1,4 +1,4 @@
-"""Constants for the ElevenLabs Agent integration."""
+"""Constants for the ElevenAgents integration."""
 
 from __future__ import annotations
 

@@ -44,7 +44,7 @@ const KEY_DETAIL = {
 };
 
 // The name the toolbar shows. It names the integration, not the entry.
-const PANEL_TITLE = "ElevenLabs Agent";
+const PANEL_TITLE = "ElevenAgents";
 
 // The six wizard steps, in the fixed order the spec sets.
 const WIZARD_STEPS = [

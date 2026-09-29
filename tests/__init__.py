@@ -1,1 +1,1 @@
-"""Tests for the ElevenLabs Agent integration."""
+"""Tests for the ElevenAgents integration."""

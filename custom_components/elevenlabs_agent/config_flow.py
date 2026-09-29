@@ -62,7 +62,7 @@ ROTATE_SCHEMA = vol.Schema({vol.Required("confirm", default=True): bool})
 
 
 class ElevenLabsAgentConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for the ElevenLabs Agent integration."""
+    """Handle a config flow for the ElevenAgents integration."""
 
     VERSION = 1
     MINOR_VERSION = 1
