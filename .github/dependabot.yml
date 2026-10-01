@@ -44,3 +44,6 @@ updates:
       - dependency-name: "pymicro-vad"
       - dependency-name: "pyspeex-noise"
       - dependency-name: "home-assistant-frontend"
+      # Home Assistant pins this version for its own elevenlabs integration.
+      # Update it here and in manifest.json when Home Assistant updates its pin.
+      - dependency-name: "elevenlabs"

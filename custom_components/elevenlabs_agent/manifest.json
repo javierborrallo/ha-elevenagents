@@ -17,7 +17,7 @@
   "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/javierborrallo/ha-elevenlabs-agent/issues",
   "requirements": [
-    "elevenlabs>=2.68.0"
+    "elevenlabs>=2.51.0"
   ],
   "single_config_entry": true,
   "version": "0.3.1"

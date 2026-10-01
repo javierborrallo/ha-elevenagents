@@ -44,7 +44,7 @@ agent, and keeps them aligned as your Home Assistant configuration changes.
 
 ## Requirements
 
-- Home Assistant 2026.6.4 or newer
+- Home Assistant 2026.7.0 or newer
 - An ElevenLabs account with an agent, and an API key scoped for ElevenAgents
   **write** access — a key scoped only to text-to-speech will not be able to
   synchronise tools
@@ -282,13 +282,17 @@ Not published yet.
 
 ## Home Assistant versions
 
-`hacs.json` declares **2026.6.4**, the minimum a user needs to install the integration.
+`hacs.json` declares **2026.7.0**, the minimum a user needs to install the integration. It is the
+first release whose own ElevenLabs integration pins `elevenlabs==2.51.0`, the floor this one needs;
+an older Home Assistant pins an older SDK, and the two integrations would fight over one package.
 `requirements_dev.txt` pins the newest release, which is what development and CI run against.
 Developing against the newest release surfaces deprecations early; keeping the minimum lower
 avoids excluding users who have not updated yet.
 
 `pytest-homeassistant-custom-component` pins one exact Home Assistant version, so it moves with
-`requirements_dev.txt`. Dependabot ignores both.
+`requirements_dev.txt`. `elevenlabs` in `requirements_test.txt` moves with them too: it must equal the
+version that Home Assistant pins, and `tests/test_requirements.py` fails when it does not. Dependabot
+ignores all three.
 
 ## Dependency updates
 
