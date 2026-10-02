@@ -113,9 +113,14 @@ async def _apply_frame(
         )
     elif kind == "conversation_initiation_metadata":
         event = payload.get("conversation_initiation_metadata_event", {})
-        state.result.conversation_id = event.get("conversation_id")
-        if state.result.conversation_id and state.on_started is not None:
-            state.on_started(state.result.conversation_id)
+        conversation_id = event.get("conversation_id")
+        # A start frame without an id ends the turn before the user message.
+        if not isinstance(conversation_id, str) or not conversation_id:
+            reason = "protocol"
+            raise SessionError(reason)
+        state.result.conversation_id = conversation_id
+        if state.on_started is not None:
+            state.on_started(conversation_id)
         if not state.sent:
             await ws.send_json({"type": "user_message", "text": text})
             state.sent = True
@@ -190,7 +195,7 @@ def _handshake_reason(err: aiohttp.WSServerHandshakeError) -> str:
     return "unreachable"
 
 
-async def async_run_turn(  # noqa: PLR0913 - the plan fixes this exact signature
+async def async_run_turn(  # noqa: PLR0913 - each argument is part of one turn
     hass: HomeAssistant,
     client: AsyncElevenLabs,
     agent_id: str,

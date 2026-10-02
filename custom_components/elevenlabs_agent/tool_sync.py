@@ -256,7 +256,7 @@ def build_get_state(  # noqa: PLR0913 - a keyword-only settings argument joins t
     }
 
 
-def build_call_service(  # noqa: PLR0913, PLR0917 - the plan fixes this exact signature
+def build_call_service(  # noqa: PLR0913, PLR0917 - each argument is part of the tool
     hass: HomeAssistant,
     perms: Permissions,
     descriptions: Mapping[str, Mapping[str, Any]],
@@ -323,8 +323,7 @@ def build_call_service(  # noqa: PLR0913, PLR0917 - the plan fixes this exact si
                         ),
                         "properties": properties,
                     },
-                    # No description: SDK 2.51 makes description and
-                    # dynamic_variable mutually exclusive on a property.
+                    # The platform fills this property. It carries no description.
                     "conversation_id": {
                         "type": "string",
                         "dynamic_variable": "system__conversation_id",
@@ -343,7 +342,7 @@ def build_call_service(  # noqa: PLR0913, PLR0917 - the plan fixes this exact si
 
     if with_history:
         schema = config["api_schema"]["request_body_schema"]
-        # No description here either; see conversation_id above.
+        # The platform fills this property. It carries no description.
         schema["properties"]["conversation_history"] = {
             "type": "string",
             "dynamic_variable": "system__conversation_history",

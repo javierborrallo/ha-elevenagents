@@ -252,6 +252,14 @@ the agent asked. A code the agent invents, reuses or carries to another device i
 
 A device marked sensitive with both options off is not protected. The panel warns you.
 
+The mark belongs to one entity. If the agent controls a script, scene or group that moves a marked
+device, a call to that script, scene or group runs without asking. Mark it too, or do not give the
+agent control of it.
+
+While any device asks for confirmation, every action the agent takes sends the conversation so far
+to Home Assistant, which reads it to check that you spoke. Home Assistant refuses a request larger
+than 256 KiB, so in a very long conversation every action fails until a new conversation starts.
+
 ## Events
 
 An automation can hand the agent something that just happened. The agent reads it as a message,

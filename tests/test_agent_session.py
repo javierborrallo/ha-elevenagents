@@ -520,6 +520,37 @@ async def test_a_non_json_frame_is_a_protocol_error(hass, setup_entry, fake):
     assert err.value.reason == "protocol"
 
 
+@pytest.mark.parametrize("conversation_id", [None, "", 7])
+async def test_a_turn_without_a_conversation_id_sends_nothing(
+    hass, setup_entry, fake, conversation_id
+):
+    """The turn stops before the user message when the start frame has no id."""
+
+    async def behave(ws, received) -> None:
+        received.append(await ws.receive_json())
+        await ws.send_json(
+            {
+                "type": "conversation_initiation_metadata",
+                "conversation_initiation_metadata_event": {
+                    "conversation_id": conversation_id
+                },
+            }
+        )
+        message = await ws.receive()
+        if message.type == aiohttp.WSMsgType.TEXT:
+            received.append(message.json())
+
+    fake.behave = behave
+
+    with pytest.raises(SessionError) as err:
+        await _run(hass, setup_entry, "x", {})
+
+    assert err.value.reason == "protocol"
+    assert [frame["type"] for frame in fake.received] == [
+        "conversation_initiation_client_data"
+    ]
+
+
 async def test_a_ping_without_an_event_id_is_a_protocol_error(hass, setup_entry, fake):
     """A malformed ping is a protocol error, not an unhandled KeyError."""
 

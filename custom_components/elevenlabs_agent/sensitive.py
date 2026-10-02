@@ -231,12 +231,7 @@ def _failed(entity_id: str, action: str, reason: str) -> dict[str, Any]:
 
 
 def gate_for_entry(hass: HomeAssistant, entry_id: str) -> Gate:
-    """
-    Return this entry's Gate, creating one on first use.
-
-    The Gate lives in hass.data, not in RuntimeData, so a reload keeps its
-    pending confirmations and event conversations.
-    """
+    """Return the Gate for the entry from hass.data. Create it on first use."""
     domain_data: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
     gates: dict[str, Gate] = domain_data.setdefault("gates", {})
     return gates.setdefault(entry_id, Gate())
