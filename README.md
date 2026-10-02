@@ -61,7 +61,7 @@ before anything else happens, and your agent, picked from the list read back fro
 account.
 
 Nothing is exposed yet. The closing message links to the configuration panel, which is also
-what **Configure** opens on the integration page. The first time, the panel walks six steps:
+what **Configure** opens on the integration page. The first time, the panel walks seven steps:
 
 1. **Agent settings** — the opening line, how long an action waits to be confirmed, and
    whether the agent speaks before it acts.
@@ -70,10 +70,12 @@ what **Configure** opens on the integration page. The first time, the panel walk
 3. **Read** — the entities the agent may read.
 4. **Control** — the entities it may act on.
 5. **Restrictions** — actions to take back from a controlled entity. Skippable.
-6. **Automatic exposure** — what happens to entities you add to Home Assistant later.
+6. **Confirm actions** — devices the agent must not move without a confirmation. Skippable. See
+   [Sensitive devices](#sensitive-devices).
+7. **Automatic exposure** — what happens to entities you add to Home Assistant later.
 
 Afterwards the panel opens on a page of cards instead of the wizard: the agent's prompt,
-settings and rotations, and the four entity screens, each behind its own row.
+settings and rotations, and the five entity screens, each behind its own row.
 
 The integration creates two tools in your agent, `ha_get_state` and `ha_call_service`, and
 keeps their schemas aligned with your selection. Both point at one webhook, secured with a
@@ -237,20 +239,21 @@ diagnosis; keep it to yourself.
 
 ## Sensitive devices
 
-Some devices should not move on a misheard word: a lock, an alarm, a garage door. On the panel's
-action screen, tick **Sensitive** on such a device. Two options appear, both on by default.
+Some devices should not move on a misheard word: a lock, an alarm, a garage door. In the panel,
+**Confirm actions** lists every device the agent controls. Tick **Requires confirmation** on such a
+device. Two options appear, both on by default.
 
-- **Ask for confirmation in a conversation.** The first call to act on the device runs nothing.
+- **In conversations, ask before acting.** The first call to act on the device runs nothing.
   The agent hears back `confirmation_required` and a code, and asks you to confirm. If you confirm,
   it repeats the call with the code and the action runs.
-- **Refuse in automatic runs (events).** A turn started by `send_event` has no person in it, so
+- **In automatic events, refuse.** A turn started by `send_event` has no person in it, so
   nobody can confirm. With this option on, the agent cannot act on the device from an event.
 
 The agent asks, but Home Assistant decides. The repeated call runs only if it comes from the same
 conversation, within 60 seconds, for the same device, action and data, and only if you spoke after
 the agent asked. A code the agent invents, reuses or carries to another device is refused.
 
-A device marked sensitive with both options off is not protected. The panel warns you.
+A device that requires confirmation with both options off is not protected. The panel warns you.
 
 The mark belongs to one entity. If the agent controls a script, scene or group that moves a marked
 device, a call to that script, scene or group runs without asking. Mark it too, or do not give the

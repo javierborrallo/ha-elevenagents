@@ -1,6 +1,6 @@
 import { strings } from "./strings.js";
 import { entityTree } from "./entities.js";
-import { actionScreen } from "./actions.js";
+import { actionScreen, confirmScreen } from "./actions.js";
 import { autoExposeScreen, operationsScreen, settingsScreen } from "./settings.js";
 import { promptScreen } from "./prompt.js";
 import { BLOCK_MARKER, RECOMMENDED_BLOCK } from "./block.js";
@@ -46,13 +46,14 @@ const KEY_DETAIL = {
 // The name the toolbar shows. It names the integration, not the entry.
 const PANEL_TITLE = "ElevenAgents";
 
-// The six wizard steps, in the fixed order the spec sets.
+// The seven wizard steps, in the fixed order the spec sets.
 const WIZARD_STEPS = [
   "settings",
   "prompt",
   "read",
   "control",
   "actions",
+  "confirm",
   "exposure",
 ];
 
@@ -238,6 +239,12 @@ class ElevenLabsAgentPanel extends HTMLElement {
         onClick: () => this._openExceptions(),
       },
       {
+        iconPath: ICON.shieldCheck,
+        headline: t.navConfirm,
+        supporting: t.navConfirmHint,
+        onClick: () => this._openConfirm(),
+      },
+      {
         iconPath: ICON.shapes,
         headline: t.navAutoExpose,
         supporting: t.navAutoExposeHint,
@@ -291,7 +298,6 @@ class ElevenLabsAgentPanel extends HTMLElement {
   _openExceptions() {
     const t = this._t;
     let exceptions = { ...this._config.exception_entity_ids };
-    let sensitive = { ...(this._config.sensitive_entity_ids || {}) };
     openDialog(this.shadowRoot, {
       t,
       title: t.wizardStepActions,
@@ -300,21 +306,38 @@ class ElevenLabsAgentPanel extends HTMLElement {
         actionScreen(this._hass, {
           controlled: this._config.control_entity_ids,
           exceptions,
-          sensitive,
           availableActions: this._config.available_actions,
           onChange: (next) => {
             exceptions = next;
           },
-          onSensitiveChange: (next) => {
+        }),
+      onSave: async () => {
+        const result = await this._saveConfig("exceptions", exceptions);
+        if (isAdvanceable(result)) await this._reload();
+        return result;
+      },
+    });
+  }
+
+  _openConfirm() {
+    const t = this._t;
+    let sensitive = { ...(this._config.sensitive_entity_ids || {}) };
+    openDialog(this.shadowRoot, {
+      t,
+      title: t.wizardStepConfirm,
+      subtitle: t.wizardConfirmSubtitle,
+      build: () =>
+        confirmScreen(this._hass, {
+          controlled: this._config.control_entity_ids,
+          sensitive,
+          onChange: (next) => {
             sensitive = next;
           },
         }),
       onSave: async () => {
-        const result = await this._saveConfig("exceptions", exceptions);
-        if (!isAdvanceable(result)) return result;
-        const marked = await this._saveConfig("sensitive", sensitive);
-        if (isAdvanceable(marked)) await this._reload();
-        return marked;
+        const result = await this._saveConfig("sensitive", sensitive);
+        if (isAdvanceable(result)) await this._reload();
+        return result;
       },
     });
   }
@@ -602,7 +625,7 @@ class ElevenLabsAgentPanel extends HTMLElement {
     setEnabled(back, index > 0);
     foot.appendChild(back);
 
-    if (key === "actions") {
+    if (key === "actions" || key === "confirm") {
       foot.appendChild(button(t.skip, "plain", () => this._advanceWizard()));
     }
 
@@ -661,22 +684,31 @@ class ElevenLabsAgentPanel extends HTMLElement {
           actionScreen(hass, {
             controlled: this._draft.control,
             exceptions: this._draft.exceptions,
-            sensitive: this._draft.sensitive,
             availableActions: this._config.available_actions,
             onChange: (exceptions) => {
               this._draft.exceptions = exceptions;
             },
-            onSensitiveChange: (next) => {
+          }),
+        ),
+      );
+      return () => this._saveConfig("exceptions", this._draft.exceptions);
+    }
+
+    if (key === "confirm") {
+      body.appendChild(
+        titled(
+          t.wizardStepConfirm,
+          t.wizardConfirmSubtitle,
+          confirmScreen(hass, {
+            controlled: this._draft.control,
+            sensitive: this._draft.sensitive,
+            onChange: (next) => {
               this._draft.sensitive = next;
             },
           }),
         ),
       );
-      return async () => {
-        const result = await this._saveConfig("exceptions", this._draft.exceptions);
-        if (!isAdvanceable(result)) return result;
-        return this._saveConfig("sensitive", this._draft.sensitive);
-      };
+      return () => this._saveConfig("sensitive", this._draft.sensitive);
     }
 
     if (key === "prompt") {

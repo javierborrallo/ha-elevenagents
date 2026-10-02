@@ -62,6 +62,8 @@ const EN = {
   navControlHint: "Entities the agent may act on",
   navExceptions: "Restrictions",
   navExceptionsHint: "Actions removed from a controlled entity",
+  navConfirm: "Confirm actions",
+  navConfirmHint: "Devices that need a person to confirm",
   navAutoExpose: "Automatic exposure",
   navAutoExposeHint: "What happens to entities you add later",
   navMissing: "Missing entities",
@@ -146,10 +148,11 @@ const EN = {
   actionsEmpty: "No controlled entities yet.",
   actionsRestrictedCount: "{restricted} of {total} restricted",
   actionsNoActions: "This entity currently offers no actions to restrict.",
-  sensitiveLabel: "Sensitive",
-  sensitiveConfirm: "Ask for confirmation in a conversation",
-  sensitiveRefuse: "Refuse in automatic runs (events)",
-  sensitiveUnprotected: "Marked as sensitive, but neither option protects it.",
+  confirmRequired: "Requires confirmation",
+  confirmAsk: "In conversations, ask before acting",
+  confirmRefuse: "In automatic events, refuse",
+  confirmUnprotected: "Requires confirmation, but neither option protects it.",
+  confirmMarkedCount: "{marked} of {total} require confirmation",
 
   wizardProgress: "Step {step} of {total}",
   wizardStepRead: "What the agent may read",
@@ -159,6 +162,9 @@ const EN = {
   wizardStepActions: "Actions to remove",
   wizardActionsSubtitle:
     "Optionally remove specific actions from an entity's granted permissions.",
+  wizardStepConfirm: "Actions to confirm",
+  wizardConfirmSubtitle:
+    "Tick a device to make the agent ask before acting on it. Skip this step if none needs it.",
 };
 
 const ES = {
@@ -225,6 +231,8 @@ const ES = {
   navControlHint: "Entidades sobre las que el agente puede actuar",
   navExceptions: "Restricciones",
   navExceptionsHint: "Acciones retiradas a una entidad controlada",
+  navConfirm: "Confirmar acciones",
+  navConfirmHint: "Dispositivos que necesitan que una persona confirme",
   navAutoExpose: "Exposición automática",
   navAutoExposeHint: "Qué pasa con las entidades que añadas más adelante",
   navMissing: "Entidades desaparecidas",
@@ -312,10 +320,11 @@ const ES = {
   actionsEmpty: "Todavía no hay entidades controladas.",
   actionsRestrictedCount: "{restricted} de {total} restringidas",
   actionsNoActions: "Esta entidad no ofrece ninguna acción para restringir.",
-  sensitiveLabel: "Delicado",
-  sensitiveConfirm: "Pedir confirmación en una conversación",
-  sensitiveRefuse: "Rechazar en ejecuciones automáticas (eventos)",
-  sensitiveUnprotected: "Marcado como delicado, pero ninguna opción lo protege.",
+  confirmRequired: "Requiere confirmación",
+  confirmAsk: "En conversaciones, preguntar antes de actuar",
+  confirmRefuse: "En eventos automáticos, rechazar",
+  confirmUnprotected: "Requiere confirmación, pero ninguna opción lo protege.",
+  confirmMarkedCount: "{marked} de {total} requieren confirmación",
 
   wizardProgress: "Paso {step} de {total}",
   wizardStepRead: "Qué puede leer el agente",
@@ -326,6 +335,10 @@ const ES = {
   wizardActionsSubtitle:
     "Opcionalmente, elimina acciones concretas de los permisos concedidos " +
     "a una entidad.",
+  wizardStepConfirm: "Acciones a confirmar",
+  wizardConfirmSubtitle:
+    "Marca un dispositivo para que el agente pregunte antes de actuar sobre él. " +
+    "Salta este paso si ninguno lo necesita.",
 };
 
 export function strings(language) {
