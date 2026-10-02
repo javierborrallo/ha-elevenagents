@@ -235,6 +235,23 @@ Tell the user it could not be understood, and move on. The `detail` field is for
 diagnosis; keep it to yourself.
 ```
 
+## Sensitive devices
+
+Some devices should not move on a misheard word: a lock, an alarm, a garage door. On the panel's
+action screen, tick **Sensitive** on such a device. Two options appear, both on by default.
+
+- **Ask for confirmation in a conversation.** The first call to act on the device runs nothing.
+  The agent hears back `confirmation_required` and a code, and asks you to confirm. If you confirm,
+  it repeats the call with the code and the action runs.
+- **Refuse in automatic runs (events).** A turn started by `send_event` has no person in it, so
+  nobody can confirm. With this option on, the agent cannot act on the device from an event.
+
+The agent asks, but Home Assistant decides. The repeated call runs only if it comes from the same
+conversation, within 60 seconds, for the same device, action and data, and only if you spoke after
+the agent asked. A code the agent invents, reuses or carries to another device is refused.
+
+A device marked sensitive with both options off is not protected. The panel warns you.
+
 ## Events
 
 An automation can hand the agent something that just happened. The agent reads it as a message,
