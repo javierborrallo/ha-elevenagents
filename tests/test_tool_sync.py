@@ -20,6 +20,7 @@ from custom_components.elevenlabs_agent.const import (
     OPT_AGENT_SETTINGS,
     OPT_CONFIRM_TIMEOUT,
     OPT_READ_ENTITIES,
+    OPT_SENSITIVE,
     TOOL_CALL_SERVICE,
     TOOL_GET_STATE,
 )
@@ -36,6 +37,7 @@ from custom_components.elevenlabs_agent.tool_sync import (
     _check_readback,
     _flatten_fields,
     agent_settings,
+    async_build_definitions,
     async_sync_tools,
     build_call_service,
     build_get_state,
@@ -686,7 +688,8 @@ def test_the_write_tool_description_carries_the_never_repeat_rule() -> None:
     """
     assert "unconfirmed" in CALL_SERVICE_DESCRIPTION
     assert "ha_get_state" in CALL_SERVICE_DESCRIPTION
-    assert "Never repeat the action." in CALL_SERVICE_DESCRIPTION
+    rule = "Never repeat an action that returned unconfirmed."
+    assert rule in CALL_SERVICE_DESCRIPTION
 
 
 def test_the_read_tool_description_forbids_inventing_an_entity() -> None:
@@ -920,3 +923,109 @@ def test_action_and_service_data_state_their_limits(hass) -> None:
         "can ignore one it does not support without an error"
         in properties["service_data"]["description"]
     )
+
+
+# --- Task 3 (0.5): confirmation wiring in the tool schema -------------------
+
+
+async def test_call_service_carries_the_conversation_id_and_the_code(hass) -> None:
+    """The platform fills conversation_id; the model fills the code."""
+    perms = Permissions(read=frozenset(), control=frozenset(), exceptions={})
+    config = build_call_service(
+        hass,
+        perms,
+        DESCRIPTIONS,
+        {},
+        "https://example/hook",
+        "sekrit",
+        20,
+        settings=AGENT_SETTING_DEFAULTS,
+    )
+    properties = config["api_schema"]["request_body_schema"]["properties"]
+    conversation_id = properties["conversation_id"]
+
+    assert conversation_id["dynamic_variable"] == "system__conversation_id"
+    assert "confirmation_code" in properties
+    assert "conversation_history" not in properties
+    required = config["api_schema"]["request_body_schema"]["required"]
+    assert "confirmation_code" not in required
+    assert "conversation_id" not in required
+
+
+async def test_call_service_carries_the_history_only_when_asked(hass) -> None:
+    """conversation_history is a property only when some mark asks for confirmation."""
+    perms = Permissions(read=frozenset(), control=frozenset(), exceptions={})
+    config = build_call_service(
+        hass,
+        perms,
+        DESCRIPTIONS,
+        {},
+        "https://example/hook",
+        "sekrit",
+        20,
+        settings=AGENT_SETTING_DEFAULTS,
+        with_history=True,
+    )
+    properties = config["api_schema"]["request_body_schema"]["properties"]
+
+    history = properties["conversation_history"]
+    assert history["dynamic_variable"] == "system__conversation_history"
+
+
+def test_the_write_tool_description_explains_confirmation() -> None:
+    """The model learns the retry rule from the description, not a side channel."""
+    assert "confirmation_required" in CALL_SERVICE_DESCRIPTION
+    assert "confirmation_code" in CALL_SERVICE_DESCRIPTION
+
+
+async def test_conversation_id_and_history_carry_only_the_dynamic_variable(
+    hass,
+) -> None:
+    """
+    No description: a property cannot carry both.
+
+    SDK 2.51's LiteralJsonSchemaProperty makes description and dynamic_variable
+    mutually exclusive. A property carrying both either 422s on sync or lets the
+    platform's "description wins" behaviour hand the field back to the model,
+    defeating the gate. These two system-filled properties must carry only
+    type and dynamic_variable, exactly like the `tool` discriminator.
+    """
+    perms = Permissions(read=frozenset(), control=frozenset(), exceptions={})
+    config = build_call_service(
+        hass,
+        perms,
+        DESCRIPTIONS,
+        {},
+        "https://example/hook",
+        "sekrit",
+        20,
+        settings=AGENT_SETTING_DEFAULTS,
+        with_history=True,
+    )
+    properties = config["api_schema"]["request_body_schema"]["properties"]
+
+    assert properties["conversation_id"] == {
+        "type": "string",
+        "dynamic_variable": "system__conversation_id",
+    }
+    assert properties["conversation_history"] == {
+        "type": "string",
+        "dynamic_variable": "system__conversation_history",
+    }
+
+
+async def test_the_synced_definitions_carry_history_only_when_a_mark_confirms(
+    hass, setup_entry
+) -> None:
+    """async_build_definitions ties with_history to whether any mark confirms."""
+    without_marks = await async_build_definitions(hass, setup_entry)
+    schema = without_marks[TOOL_CALL_SERVICE]["api_schema"]["request_body_schema"]
+    assert "conversation_history" not in schema["properties"]
+
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_SENSITIVE: {"lock.front": {"confirm": True}}}
+    )
+
+    with_marks = await async_build_definitions(hass, setup_entry)
+    schema = with_marks[TOOL_CALL_SERVICE]["api_schema"]["request_body_schema"]
+    assert "conversation_history" in schema["properties"]

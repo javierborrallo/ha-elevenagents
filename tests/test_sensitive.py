@@ -6,6 +6,7 @@ import json
 from typing import Any
 from unittest.mock import patch
 
+from custom_components.elevenlabs_agent.const import EVENT_CONVERSATION_GRACE_SECONDS
 from custom_components.elevenlabs_agent.sensitive import (
     Gate,
     Mark,
@@ -182,7 +183,7 @@ def test_a_code_expires_after_the_window() -> None:
 
 def test_an_event_turn_is_refused_or_allowed() -> None:
     """An event turn is refused when refuse_automatic is on, allowed when off."""
-    gate = Gate(event_conversations={"ev1"})
+    gate = Gate(event_conversations={"ev1": None})
     refused = gate.check(
         ASK, conversation_id="ev1", history=None, code=None, now=0.0, **ARGS
     )
@@ -227,7 +228,7 @@ def test_old_codes_are_forgotten_when_a_new_one_is_issued() -> None:
 
 def test_a_mark_without_confirm_still_refuses_event_turns() -> None:
     """A mark that only refuses automatic runs still refuses an event turn."""
-    gate = Gate(event_conversations={"ev1"})
+    gate = Gate(event_conversations={"ev1": None})
     mark = Mark(confirm=False, refuse_automatic=True)
     result = gate.check(
         mark, conversation_id="ev1", history=None, code=None, now=0.0, **ARGS
@@ -304,6 +305,60 @@ def test_a_code_is_expired_when_the_clock_steps_back() -> None:
     )
     assert result is not None
     assert result["error"] == "confirmation_expired"
+
+
+def test_register_event_conversation_has_no_expiry_while_running() -> None:
+    """A conversation just registered has no expiry: the turn is still running."""
+    gate = Gate()
+    gate.register_event_conversation("ev1")
+    assert gate.event_conversations == {"ev1": None}
+
+
+def test_end_event_conversation_sets_a_grace_window() -> None:
+    """Ending a conversation starts its grace window instead of forgetting it."""
+    gate = Gate()
+    gate.register_event_conversation("ev1")
+    gate.end_event_conversation("ev1", now=100.0)
+    assert gate.event_conversations["ev1"] == 100.0 + EVENT_CONVERSATION_GRACE_SECONDS
+
+
+def test_end_event_conversation_ignores_an_unknown_id() -> None:
+    """Ending an id that was never registered (or already pruned) is a no-op."""
+    gate = Gate()
+    gate.end_event_conversation("ghost", now=100.0)
+    assert gate.event_conversations == {}
+
+
+def test_a_running_event_conversation_has_no_expiry_and_is_never_pruned() -> None:
+    """Expiry None means the turn is still running: check must never prune it."""
+    gate = Gate(event_conversations={"ev1": None})
+    result = gate.check(
+        ASK, conversation_id="ev1", history=None, code=None, now=10_000.0, **ARGS
+    )
+    assert result is not None
+    assert result["error"] == "not_allowed_without_a_person"
+    assert "ev1" in gate.event_conversations
+
+
+def test_an_event_conversation_stays_known_within_its_grace_window() -> None:
+    """An id kept with a future expiry still counts as automatic before then."""
+    gate = Gate(event_conversations={"ev1": 300.0})
+    result = gate.check(
+        ASK, conversation_id="ev1", history=None, code=None, now=299.0, **ARGS
+    )
+    assert result is not None
+    assert result["error"] == "not_allowed_without_a_person"
+
+
+def test_an_event_conversation_is_forgotten_once_its_grace_window_passes() -> None:
+    """Check prunes an id whose expiry has passed; it stops acting as automatic."""
+    gate = Gate(event_conversations={"ev1": 300.0})
+    result = gate.check(
+        ASK, conversation_id="ev1", history=None, code=None, now=301.0, **ARGS
+    )
+    assert result is not None
+    assert result["outcome"] == "confirmation_required"
+    assert "ev1" not in gate.event_conversations
 
 
 def test_ask_regenerates_a_colliding_code() -> None:

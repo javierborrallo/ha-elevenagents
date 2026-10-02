@@ -93,6 +93,8 @@ REASON_NO_CONFIRMATION_HEARD: Final = "no_confirmation_heard"
 REASON_CONVERSATION_UNKNOWN: Final = "conversation_unknown"
 # Seconds a confirmation code stays valid.
 CONFIRMATION_WINDOW_SECONDS: Final = 60.0
+# Seconds an event conversation id stays recognised after its turn ends.
+EVENT_CONVERSATION_GRACE_SECONDS: Final = 300.0
 
 # Attributes added to the projection per domain. A domain absent from
 # this mapping returns entity_id, name, area and state only.

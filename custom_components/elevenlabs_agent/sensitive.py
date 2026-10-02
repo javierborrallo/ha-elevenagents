@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Any
 
 from .const import (
     CONFIRMATION_WINDOW_SECONDS,
+    DOMAIN,
+    EVENT_CONVERSATION_GRACE_SECONDS,
     OPT_SENSITIVE,
     OUTCOME_CONFIRMATION_REQUIRED,
     OUTCOME_FAILED,
@@ -21,6 +23,8 @@ from .response import write_result
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+
+    from homeassistant.core import HomeAssistant
 
 
 @dataclass(frozen=True)
@@ -119,10 +123,35 @@ def heard_after(history: Any, code: str) -> bool:
 
 @dataclass
 class Gate:
-    """The pending confirmations of one entry and its open event conversations."""
+    """
+    The pending confirmations of one entry and its event conversations.
+
+    event_conversations maps a conversation id to its expiry: None while the
+    turn is still running, a wall-clock timestamp once it has ended. An id
+    past its expiry is pruned the next time check() runs.
+    """
 
     pending: dict[str, Pending] = field(default_factory=dict)
-    event_conversations: set[str] = field(default_factory=set)
+    event_conversations: dict[str, float | None] = field(default_factory=dict)
+
+    def register_event_conversation(self, conversation_id: str) -> None:
+        """Mark a conversation as an automatic turn that is still running."""
+        self.event_conversations[conversation_id] = None
+
+    def end_event_conversation(self, conversation_id: str, now: float) -> None:
+        """Start the grace window during which a finished turn's id still counts."""
+        if conversation_id in self.event_conversations:
+            self.event_conversations[conversation_id] = (
+                now + EVENT_CONVERSATION_GRACE_SECONDS
+            )
+
+    def _prune_event_conversations(self, now: float) -> None:
+        """Drop ended event conversations whose grace window has passed."""
+        self.event_conversations = {
+            conversation_id: expiry
+            for conversation_id, expiry in self.event_conversations.items()
+            if expiry is None or now < expiry
+        }
 
     def check(  # noqa: PLR0913 - every field is part of what a code binds to
         self,
@@ -140,6 +169,7 @@ class Gate:
         """Return the answer that replaces the action, or None when it may run."""
         if not isinstance(conversation_id, str) or not conversation_id:
             return _failed(entity_id, action, REASON_CONVERSATION_UNKNOWN)
+        self._prune_event_conversations(now)
         if conversation_id in self.event_conversations:
             if mark.refuse_automatic:
                 return _failed(entity_id, action, REASON_NOT_ALLOWED_WITHOUT_A_PERSON)
@@ -198,3 +228,21 @@ class Gate:
 def _failed(entity_id: str, action: str, reason: str) -> dict[str, Any]:
     """Return a failed write with one reason."""
     return write_result(OUTCOME_FAILED, entity_id, action, extra={"error": reason})
+
+
+def gate_for_entry(hass: HomeAssistant, entry_id: str) -> Gate:
+    """
+    Return this entry's Gate, creating one on first use.
+
+    The Gate lives in hass.data, not in RuntimeData, so a reload keeps its
+    pending confirmations and event conversations.
+    """
+    domain_data: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    gates: dict[str, Gate] = domain_data.setdefault("gates", {})
+    return gates.setdefault(entry_id, Gate())
+
+
+def discard_gate(hass: HomeAssistant, entry_id: str) -> None:
+    """Drop this entry's Gate. Call only when the entry is removed, not reloaded."""
+    domain_data: dict[str, Any] = hass.data.get(DOMAIN, {})
+    domain_data.get("gates", {}).pop(entry_id, None)

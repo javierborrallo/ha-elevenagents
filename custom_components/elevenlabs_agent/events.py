@@ -209,6 +209,12 @@ async def _deliver(
             else runtime.event_history.recent(now, window)
         )
         text = compose_message(call.data["message"], projection, recent, now)
+        started: list[str] = []
+
+        def _started(conversation_id: str) -> None:
+            runtime.gate.register_event_conversation(conversation_id)
+            started.append(conversation_id)
+
         try:
             turn = await async_run_turn(
                 hass,
@@ -216,6 +222,7 @@ async def _deliver(
                 entry.data[CONF_AGENT_ID],
                 text,
                 _variables(call),
+                on_started=_started,
             )
         except SessionError as err:
             _LOGGER.warning("An event could not reach the agent: %s", err.reason)
@@ -232,6 +239,10 @@ async def _deliver(
                 translation_key="event_failed",
                 translation_placeholders={"reason": err.reason},
             ) from err
+        finally:
+            end = dt_util.utcnow().timestamp()
+            for conversation_id in started:
+                runtime.gate.end_event_conversation(conversation_id, end)
         runtime.event_limiter.record(key, now)
         runtime.event_history.add(now, call.data["message"])
 

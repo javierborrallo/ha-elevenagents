@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
+import aiohttp
 import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestServer
@@ -15,6 +16,8 @@ from aiohttp.test_utils import TestServer
 from custom_components.elevenlabs_agent.agent_session import (
     SessionError,
     TurnResult,
+    _apply_frame,
+    _TurnState,
     async_run_turn,
 )
 from custom_components.elevenlabs_agent.const import CONF_AGENT_ID
@@ -612,3 +615,69 @@ async def test_a_stalled_connect_is_bounded_past_the_maximum(hass, setup_entry, 
 
     assert err.value.reason == "unreachable"
     assert elapsed < 10.0
+
+
+async def test_the_conversation_id_is_reported_before_the_user_message(
+    hass, setup_entry, fake
+):
+    """
+    The gate must know an event turn before the agent can act in it.
+
+    The probe runs on the client side, in the same coroutine as the code
+    under test: on_started and the real send_json are both intercepted
+    synchronously, so the recorded order reflects the statement order in
+    _apply_frame, not how fast the other side of a real socket reads. A
+    probe keyed to the server's own received count passed under either
+    order, since a client's await on send_json returns once its write is
+    flushed, not once the server has read it.
+    """
+    order: list[str] = []
+    real_send_json = aiohttp.ClientWebSocketResponse.send_json
+
+    async def spy_send_json(
+        self: aiohttp.ClientWebSocketResponse, data: Any, *args: Any, **kwargs: Any
+    ) -> None:
+        if data.get("type") == "user_message":
+            order.append("sent")
+        await real_send_json(self, data, *args, **kwargs)
+
+    async def behave(ws, received) -> None:
+        received.append(await ws.receive_json())
+        await ws.send_json(_metadata("conv_9"))
+        received.append(await ws.receive_json())
+        await ws.send_json(_response("Vale."))
+        await _hold(ws)
+
+    fake.behave = behave
+
+    with patch.object(aiohttp.ClientWebSocketResponse, "send_json", spy_send_json):
+        await async_run_turn(
+            hass,
+            setup_entry.runtime_data.client,
+            "agent_test",
+            "x",
+            {},
+            on_started=lambda _conversation_id: order.append("started"),
+        )
+
+    assert order == ["started", "sent"]
+
+
+async def test_on_started_runs_before_the_user_message_is_sent() -> None:
+    """A deterministic check: a real socket's timing cannot be trusted to order this."""
+    order: list[str] = []
+
+    class _FakeWs:
+        async def send_json(self, _payload: dict[str, Any]) -> None:
+            order.append("sent")
+
+    state = _TurnState(on_started=lambda _conversation_id: order.append("started"))
+    payload = {
+        "type": "conversation_initiation_metadata",
+        "conversation_initiation_metadata_event": {"conversation_id": "conv_x"},
+    }
+
+    ws = cast("aiohttp.ClientWebSocketResponse", _FakeWs())
+    await _apply_frame(ws, state, "hello", payload)
+
+    assert order == ["started", "sent"]

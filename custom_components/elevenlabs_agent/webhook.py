@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from aiohttp import web
 from homeassistant.components import webhook
 from homeassistant.helpers.service import async_get_all_descriptions
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_WEBHOOK_ID,
@@ -28,10 +29,12 @@ from .const import (
     OUTCOME_UNCONFIRMED,
     RATE_LIMIT_BURST,
     RATE_LIMIT_PER_SECOND,
+    REASON_CONVERSATION_UNKNOWN,
     SECRET_HEADER,
 )
-from .permissions import authorise_action, authorise_read, from_options
+from .permissions import authorise_action, authorise_read, from_options, permission_key
 from .response import error_fields, malformed, project, read_results, write_result
+from .sensitive import sensitive_mark
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -39,7 +42,7 @@ if TYPE_CHECKING:
     from aiohttp.web import Request
     from homeassistant.core import HomeAssistant
 
-    from . import ElevenLabsAgentConfigEntry
+    from . import ElevenLabsAgentConfigEntry, RuntimeData
 
 WEBHOOK_NAME = "ElevenAgents"
 
@@ -219,6 +222,50 @@ def _parsed_write_payload(
     return entity_id, action, service_data
 
 
+def _resolved_conversation_id(raw: Any) -> str | None:
+    """Return the conversation id, or None when missing or an unfilled template."""
+    if not isinstance(raw, str) or not raw or "{{" in raw:
+        return None
+    return raw
+
+
+def _sensitive_answer(
+    hass: HomeAssistant,
+    entry: ElevenLabsAgentConfigEntry,
+    payload: dict[str, Any],
+    target: tuple[str, str, dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Return the gate's answer for a sensitive entity, or None when it may run."""
+    entity_id, action, service_data = target
+    mark = sensitive_mark(entry.options, permission_key(hass, entity_id))
+    if mark is None:
+        return None
+    runtime: RuntimeData | None = getattr(entry, "runtime_data", None)
+    if runtime is None:
+        return write_result(
+            OUTCOME_FAILED,
+            entity_id,
+            action,
+            extra={"error": REASON_CONVERSATION_UNKNOWN},
+        )
+    state = hass.states.get(entity_id)
+    raw_name = (
+        entity_id if state is None else state.attributes.get("friendly_name", entity_id)
+    )
+    code = payload.get("confirmation_code")
+    return runtime.gate.check(
+        mark,
+        conversation_id=_resolved_conversation_id(payload.get("conversation_id")),
+        history=payload.get("conversation_history"),
+        code=str(code) if code else None,
+        entity_id=entity_id,
+        name=str(raw_name),
+        action=action,
+        service_data=service_data,
+        now=dt_util.utcnow().timestamp(),
+    )
+
+
 async def async_write(
     hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry, payload: dict[str, Any]
 ) -> dict[str, Any]:
@@ -240,6 +287,10 @@ async def async_write(
     error = authorise_action(hass, perms, entity_id, action, descriptions)
     if error is not None:
         return write_result(OUTCOME_FAILED, entity_id, action, extra={"error": error})
+
+    gated = _sensitive_answer(hass, entry, payload, (entity_id, action, service_data))
+    if gated is not None:
+        return gated
 
     before = hass.states.get(entity_id)
     before_updated = None if before is None else before.last_updated

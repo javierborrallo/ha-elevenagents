@@ -35,6 +35,7 @@ from .elevenlabs_client import (
 )
 from .permissions import entity_id_for, from_options, granted_services
 from .repairs import async_check_agent, async_check_timeouts
+from .sensitive import any_confirm
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -58,7 +59,10 @@ CALL_SERVICE_DESCRIPTION = (
     "Call it only when an entity in the catalogue matches the user's words and "
     "can do what they asked. Otherwise do not call it: tell the user. "
     "If a call returns an outcome of unconfirmed, call ha_get_state to check "
-    "the entity. Never repeat the action."
+    "the entity. Never repeat an action that returned unconfirmed."
+    " If the outcome is confirmation_required, nothing ran: ask the user to confirm "
+    "this action on this device. If the user confirms, call again with the same "
+    "entity_id, action and service_data, and the confirmation_code. If not, do nothing."
 )
 
 # Any selector kind absent from this table is not a scalar. Its key is omitted.
@@ -262,6 +266,7 @@ def build_call_service(  # noqa: PLR0913, PLR0917 - the plan fixes this exact si
     timeout: int,
     *,
     settings: dict[str, Any],
+    with_history: bool = False,
 ) -> dict[str, Any]:
     """Build the ha_call_service tool definition."""
     enum, catalogue = entity_catalogue(hass, perms.control)
@@ -276,7 +281,7 @@ def build_call_service(  # noqa: PLR0913, PLR0917 - the plan fixes this exact si
         actions |= granted_services(hass, perms, key, descriptions)
     properties = service_data_properties(descriptions, actions, translations)
 
-    return {
+    config: dict[str, Any] = {
         "name": TOOL_CALL_SERVICE,
         "type": "webhook",
         "description": CALL_SERVICE_DESCRIPTION,
@@ -318,10 +323,33 @@ def build_call_service(  # noqa: PLR0913, PLR0917 - the plan fixes this exact si
                         ),
                         "properties": properties,
                     },
+                    # No description: SDK 2.51 makes description and
+                    # dynamic_variable mutually exclusive on a property.
+                    "conversation_id": {
+                        "type": "string",
+                        "dynamic_variable": "system__conversation_id",
+                    },
+                    "confirmation_code": {
+                        "type": "string",
+                        "description": (
+                            "The code from a confirmation_required answer. Send it "
+                            "only when repeating an action the user confirmed."
+                        ),
+                    },
                 },
             },
         },
     }
+
+    if with_history:
+        schema = config["api_schema"]["request_body_schema"]
+        # No description here either; see conversation_id above.
+        schema["properties"]["conversation_history"] = {
+            "type": "string",
+            "dynamic_variable": "system__conversation_history",
+        }
+
+    return config
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
@@ -461,6 +489,7 @@ async def async_build_definitions(
             secret,
             timeout,
             settings=settings,
+            with_history=any_confirm(entry.options),
         ),
     }
 

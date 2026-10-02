@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -18,11 +18,17 @@ from custom_components.elevenlabs_agent.const import (
     EVENT_DROPPED,
     EVENT_FAILED,
     EVENT_REPLY,
+    OPT_CONTROL_ENTITIES,
     OPT_EVENT_CONTINUITY,
     OPT_EVENT_COOLDOWN,
     OPT_EVENT_HOURLY_LIMIT,
     OPT_READ_ENTITIES,
+    OPT_SENSITIVE,
 )
+from custom_components.elevenlabs_agent.webhook import async_write
+
+if TYPE_CHECKING:
+    from homeassistant.helpers import entity_registry as er
 
 pytestmark = pytest.mark.filterwarnings(
     "ignore::aiohttp.web_exceptions.NotAppKeyWarning"
@@ -309,7 +315,7 @@ async def test_nothing_secret_reaches_the_events(hass, setup_entry, turn, heard)
 async def test_two_events_at_once_are_serialised_not_lucky(hass, setup_entry, turn):
     """A real suspension inside the turn shows the lock, not luck, orders them."""
 
-    async def _slow(hass, client, agent_id, text, variables) -> TurnResult:
+    async def _slow(*args: object, on_started=None) -> TurnResult:
         await asyncio.sleep(0)
         return TurnResult(conversation_id="conv_1", responses=["ok"], tools=[])
 
@@ -383,3 +389,119 @@ async def test_a_call_queued_behind_the_lock_sees_the_entry_unload(
         await task
 
     turn.assert_not_awaited()
+
+
+async def test_an_event_turn_gets_its_grace_window_once_it_ends(
+    hass, setup_entry, turn
+):
+    """
+    The gate sees the conversation as running during the turn, then expiring.
+
+    A pending tool call ElevenLabs already dispatched can still land after the
+    turn returns, so the id is not discarded the instant async_run_turn ends:
+    it is given a grace window instead (see Gate.end_event_conversation).
+    """
+    during: list[bool] = []
+
+    async def run(*args: object, on_started=None, **kwargs: object) -> object:
+        on_started("ev_42")
+        gate = setup_entry.runtime_data.gate
+        during.append(gate.event_conversations.get("ev_42") is None)
+        return turn.return_value
+
+    turn.side_effect = run
+
+    await _send(hass, setup_entry, message="x")
+
+    assert during == [True]
+    gate = setup_entry.runtime_data.gate
+    assert "ev_42" in gate.event_conversations
+    assert gate.event_conversations["ev_42"] is not None
+
+
+async def _sensitive_lock(
+    hass, setup_entry, entity_registry, mark
+) -> tuple[er.RegistryEntry, list[object]]:
+    """Register a sensitive lock and return it with its recorded unlock calls."""
+    lock = entity_registry.async_get_or_create("lock", "demo", "front")
+    hass.states.async_set(lock.entity_id, "locked", {"friendly_name": "Puerta"})
+    calls: list[object] = []
+
+    async def unlock(call) -> None:
+        calls.append(call)
+        hass.states.async_set(lock.entity_id, "unlocked", {"friendly_name": "Puerta"})
+
+    hass.services.async_register("lock", "unlock", unlock)
+    hass.config_entries.async_update_entry(
+        setup_entry,
+        options={OPT_CONTROL_ENTITIES: [lock.id], OPT_SENSITIVE: {lock.id: mark}},
+    )
+    return lock, calls
+
+
+async def _run_sensitive_call_inside_the_turn(
+    hass, setup_entry, lock, turn
+) -> dict[str, Any]:
+    """
+    Drive a real async_write on `lock` from inside a mocked turn.
+
+    The side_effect calls on_started first, exactly as the real
+    async_run_turn does, then writes to the sensitive lock in that same
+    conversation, proving the gate recognises the id send_event itself
+    registered rather than one a test added by hand.
+    """
+    outcomes: list[dict[str, Any]] = []
+
+    async def run(*args: object, on_started=None, **kwargs: object) -> object:
+        on_started("ev_real")
+        outcomes.append(
+            await async_write(
+                hass,
+                setup_entry,
+                {
+                    "tool": "call_service",
+                    "entity_id": lock.entity_id,
+                    "action": "lock.unlock",
+                    "conversation_id": "ev_real",
+                },
+            )
+        )
+        return turn.return_value
+
+    turn.side_effect = run
+    await _send(hass, setup_entry, message="x")
+    return outcomes[0]
+
+
+async def test_send_event_registration_refuses_a_sensitive_call_when_set_to_refuse(
+    hass, setup_entry, entity_registry, turn
+):
+    """on_started's own registration is enough to refuse, with no hand-added id."""
+    lock, calls = await _sensitive_lock(
+        hass,
+        setup_entry,
+        entity_registry,
+        {"confirm": False, "refuse_automatic": True},
+    )
+
+    outcome = await _run_sensitive_call_inside_the_turn(hass, setup_entry, lock, turn)
+
+    assert calls == []
+    assert outcome["error"] == "not_allowed_without_a_person"
+
+
+async def test_send_event_registration_allows_a_sensitive_call_when_not_set_to_refuse(
+    hass, setup_entry, entity_registry, turn
+):
+    """on_started's own registration, with refuse_automatic off, lets it run."""
+    lock, calls = await _sensitive_lock(
+        hass,
+        setup_entry,
+        entity_registry,
+        {"confirm": False, "refuse_automatic": False},
+    )
+
+    outcome = await _run_sensitive_call_inside_the_turn(hass, setup_entry, lock, turn)
+
+    assert len(calls) == 1
+    assert outcome["outcome"] == "done"
