@@ -43,14 +43,72 @@ function bodyContainerFor(group) {
   return body;
 }
 
+// Return one checkbox with its label.
+function checkRow(text, checked) {
+  const row = document.createElement("label");
+  row.style.cssText = "display:flex;align-items:center;gap:8px;padding:2px 0";
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.checked = checked;
+  const label = document.createElement("span");
+  label.textContent = text;
+  row.append(input, label);
+  return { row, input };
+}
+
+// Return the sensitive checkbox and its two options for one entity.
+function sensitiveControls(t, entityId, state, report) {
+  const box = document.createElement("div");
+  box.style.cssText =
+    "display:flex;flex-direction:column;gap:2px;padding:4px 0 8px;" +
+    "border-bottom:1px solid var(--divider-color)";
+  const mark = state.sensitive[entityId] || { confirm: true, refuse_automatic: true };
+  const main = checkRow(t.sensitiveLabel, Boolean(state.sensitive[entityId]));
+  const subs = document.createElement("div");
+  subs.style.cssText = "display:flex;flex-direction:column;gap:2px;padding-left:24px";
+  const confirm = checkRow(t.sensitiveConfirm, mark.confirm);
+  const refuse = checkRow(t.sensitiveRefuse, mark.refuse_automatic);
+  const warning = document.createElement("small");
+  warning.style.cssText = "color:var(--warning-color)";
+  warning.textContent = t.sensitiveUnprotected;
+  subs.append(confirm.row, refuse.row, warning);
+
+  function paint() {
+    const on = main.input.checked;
+    subs.style.display = on ? "flex" : "none";
+    const bare = on && !confirm.input.checked && !refuse.input.checked;
+    warning.style.display = bare ? "" : "none";
+  }
+
+  function update() {
+    if (main.input.checked) {
+      state.sensitive[entityId] = {
+        confirm: confirm.input.checked,
+        refuse_automatic: refuse.input.checked,
+      };
+    } else {
+      delete state.sensitive[entityId];
+    }
+    paint();
+    report();
+  }
+
+  for (const input of [main.input, confirm.input, refuse.input]) {
+    input.addEventListener("change", update);
+  }
+  box.append(main.row, subs);
+  paint();
+  return box;
+}
+
 export function actionScreen(
   hass,
-  { controlled, exceptions, availableActions, onChange },
+  { controlled, exceptions, sensitive, availableActions, onChange, onSensitiveChange },
 ) {
   const t = strings(hass.language);
-  // Local copy of the mapping. Every toggle rewrites one key here, then the
-  // whole mapping is handed back through onChange.
-  const state = { exceptions: { ...exceptions } };
+  // Local copies of the exceptions and the sensitive marks. Every toggle rewrites
+  // one key, then the changed mapping goes back through onChange or onSensitiveChange.
+  const state = { exceptions: { ...exceptions }, sensitive: { ...(sensitive || {}) } };
 
   const host = document.createElement("div");
   host.style.cssText =
@@ -102,6 +160,11 @@ export function actionScreen(
       const row = collapsible(`${name} (${entityId})`);
       row.style.cssText = "border-top:1px solid var(--divider-color)";
       const rowBody = bodyContainerFor(row);
+      rowBody.appendChild(
+        sensitiveControls(t, entityId, state, () => {
+          if (onSensitiveChange) onSensitiveChange({ ...state.sensitive });
+        }),
+      );
 
       const services = availableActions[entityId] || [];
       if (!services.length) {

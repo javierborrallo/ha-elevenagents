@@ -32,3 +32,11 @@ def test_the_block_opens_with_how_to_choose_the_device() -> None:
 
     assert block.index("## Choosing the device") < block.index("## Using the tools")
     assert "Changing something the user did not ask for is worse than" in block
+
+
+def test_the_block_tells_the_agent_how_to_confirm() -> None:
+    """The new outcome is described where the agent reads the others."""
+    block = _readme_block()
+
+    assert "`confirmation_required`" in block
+    assert "`confirmation_code`" in block

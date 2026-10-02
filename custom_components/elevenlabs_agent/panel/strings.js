@@ -146,6 +146,10 @@ const EN = {
   actionsEmpty: "No controlled entities yet.",
   actionsRestrictedCount: "{restricted} of {total} restricted",
   actionsNoActions: "This entity currently offers no actions to restrict.",
+  sensitiveLabel: "Sensitive",
+  sensitiveConfirm: "Ask for confirmation in a conversation",
+  sensitiveRefuse: "Refuse in automatic runs (events)",
+  sensitiveUnprotected: "Marked as sensitive, but neither option protects it.",
 
   wizardProgress: "Step {step} of {total}",
   wizardStepRead: "What the agent may read",
@@ -308,6 +312,10 @@ const ES = {
   actionsEmpty: "Todavía no hay entidades controladas.",
   actionsRestrictedCount: "{restricted} de {total} restringidas",
   actionsNoActions: "Esta entidad no ofrece ninguna acción para restringir.",
+  sensitiveLabel: "Delicado",
+  sensitiveConfirm: "Pedir confirmación en una conversación",
+  sensitiveRefuse: "Rechazar en ejecuciones automáticas (eventos)",
+  sensitiveUnprotected: "Marcado como delicado, pero ninguna opción lo protege.",
 
   wizardProgress: "Paso {step} de {total}",
   wizardStepRead: "Qué puede leer el agente",

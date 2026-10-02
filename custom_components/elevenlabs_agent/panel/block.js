@@ -65,6 +65,9 @@ Every action comes back with an \`outcome\`. Decide what to say from that field:
 4. \`failed\` — nothing ran. Say the action did not go through and give the reason in your
    own words. When the reason is \`action_not_allowed\`, the entity is reachable but that
    action is not permitted. When it is \`not_found\`, follow the rule under *After a read*.
+5. \`confirmation_required\` — nothing ran. Ask the user to confirm this action on this device, in
+   their own words. If the user confirms, call \`ha_call_service\` again with the same entity,
+   action and data, and the \`confirmation_code\`. If not, do nothing.
 
 ## Anything else
 

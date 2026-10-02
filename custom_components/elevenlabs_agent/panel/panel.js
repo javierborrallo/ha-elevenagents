@@ -132,6 +132,7 @@ class ElevenLabsAgentPanel extends HTMLElement {
         read: this._config.read_entity_ids.slice(),
         control: this._config.control_entity_ids.slice(),
         exceptions: { ...this._config.exception_entity_ids },
+        sensitive: { ...(this._config.sensitive_entity_ids || {}) },
       };
     }
     this._paint();
@@ -290,6 +291,7 @@ class ElevenLabsAgentPanel extends HTMLElement {
   _openExceptions() {
     const t = this._t;
     let exceptions = { ...this._config.exception_entity_ids };
+    let sensitive = { ...(this._config.sensitive_entity_ids || {}) };
     openDialog(this.shadowRoot, {
       t,
       title: t.wizardStepActions,
@@ -298,15 +300,21 @@ class ElevenLabsAgentPanel extends HTMLElement {
         actionScreen(this._hass, {
           controlled: this._config.control_entity_ids,
           exceptions,
+          sensitive,
           availableActions: this._config.available_actions,
           onChange: (next) => {
             exceptions = next;
           },
+          onSensitiveChange: (next) => {
+            sensitive = next;
+          },
         }),
       onSave: async () => {
         const result = await this._saveConfig("exceptions", exceptions);
-        if (isAdvanceable(result)) await this._reload();
-        return result;
+        if (!isAdvanceable(result)) return result;
+        const marked = await this._saveConfig("sensitive", sensitive);
+        if (isAdvanceable(marked)) await this._reload();
+        return marked;
       },
     });
   }
@@ -653,14 +661,22 @@ class ElevenLabsAgentPanel extends HTMLElement {
           actionScreen(hass, {
             controlled: this._draft.control,
             exceptions: this._draft.exceptions,
+            sensitive: this._draft.sensitive,
             availableActions: this._config.available_actions,
             onChange: (exceptions) => {
               this._draft.exceptions = exceptions;
             },
+            onSensitiveChange: (next) => {
+              this._draft.sensitive = next;
+            },
           }),
         ),
       );
-      return () => this._saveConfig("exceptions", this._draft.exceptions);
+      return async () => {
+        const result = await this._saveConfig("exceptions", this._draft.exceptions);
+        if (!isAdvanceable(result)) return result;
+        return this._saveConfig("sensitive", this._draft.sensitive);
+      };
     }
 
     if (key === "prompt") {
