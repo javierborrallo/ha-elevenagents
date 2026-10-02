@@ -668,3 +668,39 @@ async def test_an_event_conversation_survives_an_entry_reload(
 
     assert body["error"] == "not_allowed_without_a_person"
     assert calls == []
+
+
+@pytest.mark.parametrize(
+    "key", ["entity_id", "device_id", "area_id", "floor_id", "label_id"]
+)
+async def test_service_data_cannot_retarget_the_call(
+    hass, config_entry, entity_registry, key
+):
+    """A target inside service_data would reach entities the agent may not control."""
+    allowed = entity_registry.async_get_or_create("light", "demo", "allowed")
+    other = entity_registry.async_get_or_create("light", "demo", "other")
+    for entry in (allowed, other):
+        hass.states.async_set(entry.entity_id, "off")
+    calls: list[object] = []
+
+    async def turn_on(call) -> None:
+        calls.append(call)
+
+    hass.services.async_register("light", "turn_on", turn_on)
+    hass.config_entries.async_update_entry(
+        config_entry, options={OPT_CONTROL_ENTITIES: [allowed.id]}
+    )
+
+    body = await async_write(
+        hass,
+        config_entry,
+        {
+            "tool": "call_service",
+            "entity_id": allowed.entity_id,
+            "action": "light.turn_on",
+            "service_data": {key: other.entity_id},
+        },
+    )
+
+    assert body["error"] == "malformed_request"
+    assert calls == []
