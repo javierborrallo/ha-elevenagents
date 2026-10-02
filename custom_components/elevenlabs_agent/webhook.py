@@ -197,6 +197,10 @@ async def async_read(
     return read_results(results)
 
 
+# Service call keys that choose the target. Only entity_id at the top level may do that.
+TARGET_KEYS = frozenset({"entity_id", "device_id", "area_id", "floor_id", "label_id"})
+
+
 def _parsed_write_payload(
     payload: dict[str, Any],
 ) -> tuple[str, str, dict[str, Any]] | dict[str, Any]:
@@ -216,6 +220,9 @@ def _parsed_write_payload(
     service_data = payload.get("service_data") or {}
     if not isinstance(service_data, dict):
         return malformed("service_data must be an object")
+    targets = TARGET_KEYS.intersection(service_data)
+    if targets:
+        return malformed(f"service_data cannot carry {', '.join(sorted(targets))}")
     return entity_id, action, service_data
 
 
@@ -248,7 +255,7 @@ async def async_write(
     task = entry.async_create_background_task(
         hass,
         hass.services.async_call(
-            domain, service, {"entity_id": entity_id, **service_data}, blocking=True
+            domain, service, {**service_data, "entity_id": entity_id}, blocking=True
         ),
         f"{DOMAIN} {action} {entity_id}",
     )
