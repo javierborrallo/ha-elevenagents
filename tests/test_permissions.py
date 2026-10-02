@@ -14,6 +14,7 @@ from custom_components.elevenlabs_agent.const import (
     OPT_CONTROL_ENTITIES,
     OPT_EXCEPTIONS,
     OPT_READ_ENTITIES,
+    OPT_SENSITIVE,
 )
 from custom_components.elevenlabs_agent.permissions import (
     Permissions,
@@ -22,6 +23,8 @@ from custom_components.elevenlabs_agent.permissions import (
     granted_services,
     is_missing,
     matches_supported_features,
+    permission_key,
+    rekey,
     removed_registry_keys,
     resolve_target,
     stored_keys,
@@ -380,3 +383,42 @@ def test_without_keys_drops_from_every_place_and_touches_nothing_else():
 def test_without_keys_leaves_an_absent_list_absent():
     """Writing an empty list where none existed changes the stored shape."""
     assert without_keys({OPT_CONFIRM_TIMEOUT: 8}, {"a"}) == {OPT_CONFIRM_TIMEOUT: 8}
+
+
+def test_stored_keys_include_the_sensitive_marks() -> None:
+    """A mark on a key keeps the key known."""
+    options = {OPT_SENSITIVE: {"abc": {"confirm": True, "refuse_automatic": True}}}
+
+    assert "abc" in stored_keys(options)
+
+
+def test_without_keys_drops_a_sensitive_mark() -> None:
+    """A deleted entity loses its mark with its permissions."""
+    options = {
+        OPT_SENSITIVE: {"abc": {"confirm": True, "refuse_automatic": True}, "def": {}}
+    }
+
+    assert without_keys(options, ["abc"])[OPT_SENSITIVE] == {"def": {}}
+
+
+def test_rekey_moves_a_sensitive_mark() -> None:
+    """The mark follows the entity to its registry id."""
+    options = {OPT_SENSITIVE: {"light.x": {"confirm": False, "refuse_automatic": True}}}
+
+    moved = rekey(options, "light.x", "reg1")
+
+    assert moved[OPT_SENSITIVE] == {
+        "reg1": {"confirm": False, "refuse_automatic": True}
+    }
+
+
+async def test_permission_key_is_the_registry_id_or_the_entity_id(
+    hass, entity_registry
+) -> None:
+    """The same key the permissions use."""
+    entry = entity_registry.async_get_or_create("lock", "demo", "front")
+    hass.states.async_set("lock.yaml_only", "locked")
+
+    assert permission_key(hass, entry.entity_id) == entry.id
+    assert permission_key(hass, "lock.yaml_only") == "lock.yaml_only"
+    assert permission_key(hass, "lock.nowhere") is None

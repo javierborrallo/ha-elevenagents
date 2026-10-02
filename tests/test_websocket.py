@@ -1441,3 +1441,38 @@ async def test_config_save_refuses_a_bad_event_number_instead_of_crashing(
     assert response["success"] is True
     assert response["result"] == {"outcome": "failed", "detail": "events_out_of_range"}
     assert "event_hourly_limit" not in setup_entry.options
+
+
+async def test_config_save_stores_sensitive_marks_by_key(
+    hass, setup_entry, entity_registry, hass_ws_client
+):
+    """Marks arrive by entity_id and are stored by permission key; the block syncs."""
+    lock = entity_registry.async_get_or_create("lock", "demo", "front")
+    hass.states.async_set(lock.entity_id, "locked")
+    client = await hass_ws_client(hass)
+    with patch(
+        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+    ) as sync:
+        await client.send_json_auto_id(
+            {
+                "type": "elevenlabs_agent/config/save",
+                "entry_id": setup_entry.entry_id,
+                "block": "sensitive",
+                "data": {lock.entity_id: {"confirm": True, "refuse_automatic": False}},
+            }
+        )
+        result = (await client.receive_json())["result"]
+
+    assert result["outcome"] == "ok"
+    assert setup_entry.options["sensitive"] == {
+        lock.id: {"confirm": True, "refuse_automatic": False}
+    }
+    sync.assert_awaited_once()
+
+    await client.send_json_auto_id(
+        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+    )
+    got = (await client.receive_json())["result"]
+    assert got["sensitive_entity_ids"] == {
+        lock.entity_id: {"confirm": True, "refuse_automatic": False}
+    }

@@ -25,6 +25,7 @@ from .const import (
     OPT_CONTROL_ENTITIES,
     OPT_EXCEPTIONS,
     OPT_READ_ENTITIES,
+    OPT_SENSITIVE,
 )
 
 if TYPE_CHECKING:
@@ -93,11 +94,12 @@ def entity_id_for(hass: HomeAssistant, key: str) -> str | None:
 
 
 def stored_keys(options: Mapping[str, Any]) -> set[str]:
-    """Return every permission key in the two lists and the exceptions."""
+    """Return every permission key in the lists, exceptions and marks."""
     return (
         set(options.get(OPT_READ_ENTITIES, ()))
         | set(options.get(OPT_CONTROL_ENTITIES, ()))
         | set(options.get(OPT_EXCEPTIONS, {}))
+        | set(options.get(OPT_SENSITIVE, {}))
     )
 
 
@@ -129,7 +131,7 @@ def removed_registry_keys(hass: HomeAssistant, options: Mapping[str, Any]) -> se
 
 
 def without_keys(options: Mapping[str, Any], keys: Iterable[str]) -> dict[str, Any]:
-    """Return a copy of options with keys dropped from both lists and the exceptions."""
+    """Return a copy of options with keys dropped from lists, exceptions and marks."""
     drop = set(keys)
     result = dict(options)
     for list_key in (OPT_READ_ENTITIES, OPT_CONTROL_ENTITIES):
@@ -141,12 +143,16 @@ def without_keys(options: Mapping[str, Any], keys: Iterable[str]) -> dict[str, A
             for key, services in result[OPT_EXCEPTIONS].items()
             if key not in drop
         }
+    if OPT_SENSITIVE in result:
+        result[OPT_SENSITIVE] = {
+            key: mark for key, mark in result[OPT_SENSITIVE].items() if key not in drop
+        }
     return result
 
 
 def rekey(options: Mapping[str, Any], old_key: str, new_key: str) -> dict[str, Any]:
     """
-    Return a copy of options with one key renamed in both lists and the exceptions.
+    Return a copy of options with one key renamed in lists, exceptions and marks.
 
     Used when an entity_id key gains a unique_id and enters the registry
     under a new id: the permission must follow the entity, not stay on a
@@ -162,6 +168,10 @@ def rekey(options: Mapping[str, Any], old_key: str, new_key: str) -> dict[str, A
         exceptions = dict(result[OPT_EXCEPTIONS])
         exceptions[new_key] = exceptions.pop(old_key)
         result[OPT_EXCEPTIONS] = exceptions
+    if OPT_SENSITIVE in result and old_key in result[OPT_SENSITIVE]:
+        marks = dict(result[OPT_SENSITIVE])
+        marks[new_key] = marks.pop(old_key)
+        result[OPT_SENSITIVE] = marks
     return result
 
 
@@ -176,6 +186,11 @@ def _key_for(hass: HomeAssistant, entity_id: str) -> str | None:
     if entry is not None:
         return entry.id
     return entity_id if hass.states.get(entity_id) is not None else None
+
+
+def permission_key(hass: HomeAssistant, entity_id: str) -> str | None:
+    """Return the permission key of an entity_id, or None when it has none."""
+    return _key_for(hass, entity_id)
 
 
 def granted_services(

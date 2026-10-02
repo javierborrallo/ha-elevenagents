@@ -59,7 +59,7 @@ SIGNAL_CHECK: Final = "elevenlabs_agent_check_{}"
 # Transport limits. The handler returns 401, 413, 415 and 429.
 # Every other outcome is HTTP 200 with a structured body.
 SECRET_HEADER: Final = "X-Elevenlabs-Agent-Secret"  # noqa: S105 - a header name
-MAX_BODY_BYTES: Final = 64 * 1024
+MAX_BODY_BYTES: Final = 256 * 1024
 RATE_LIMIT_BURST: Final = 10
 RATE_LIMIT_PER_SECOND: Final = 1.0
 
@@ -74,6 +74,7 @@ OUTCOME_DONE: Final = "done"
 OUTCOME_NO_CHANGE: Final = "no_change"
 OUTCOME_UNCONFIRMED: Final = "unconfirmed"
 OUTCOME_FAILED: Final = "failed"
+OUTCOME_CONFIRMATION_REQUIRED: Final = "confirmation_required"
 
 # Error codes this integration sends. A Home Assistant error passes
 # through under its own translation_key.
@@ -82,6 +83,16 @@ ERROR_ACTION_NOT_ALLOWED: Final = "action_not_allowed"
 ERROR_UNKNOWN_FIELD: Final = "unknown_field"
 ERROR_EXECUTION_FAILED: Final = "execution_failed"
 ERROR_MALFORMED_REQUEST: Final = "malformed_request"
+
+# Options the sensitive block writes.
+# permission key -> {"confirm": bool, "refuse_automatic": bool}.
+OPT_SENSITIVE: Final = "sensitive"
+REASON_NOT_ALLOWED_WITHOUT_A_PERSON: Final = "not_allowed_without_a_person"
+REASON_CONFIRMATION_EXPIRED: Final = "confirmation_expired"
+REASON_NO_CONFIRMATION_HEARD: Final = "no_confirmation_heard"
+REASON_CONVERSATION_UNKNOWN: Final = "conversation_unknown"
+# Seconds a confirmation code stays valid.
+CONFIRMATION_WINDOW_SECONDS: Final = 60.0
 
 # Attributes added to the projection per domain. A domain absent from
 # this mapping returns entity_id, name, area and state only.

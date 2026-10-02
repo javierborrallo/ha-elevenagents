@@ -39,6 +39,7 @@ from .const import (
     OPT_EVENT_HOURLY_LIMIT,
     OPT_EXCEPTIONS,
     OPT_READ_ENTITIES,
+    OPT_SENSITIVE,
     TOOL_GET_STATE,
 )
 from .elevenlabs_client import (
@@ -214,6 +215,9 @@ async def config_get(
             "control_entity_ids": _entity_ids(hass, control),
             "exceptions": exceptions,
             "exception_entity_ids": _exception_entity_ids(hass, exceptions),
+            "sensitive_entity_ids": _sensitive_entity_ids(
+                hass, dict(options.get(OPT_SENSITIVE, {}))
+            ),
             "available_actions": await _available_actions(hass, control),
             "missing": _missing(hass, options),
             "unregistered_entity_ids": _unregistered(hass),
@@ -244,8 +248,16 @@ async def config_get(
     )
 
 
-BLOCKS = ("entities", "exceptions", "settings", "auto_expose", "forget", "events")
-SYNCING_BLOCKS = ("entities", "exceptions", "settings", "forget")
+BLOCKS = (
+    "entities",
+    "exceptions",
+    "settings",
+    "auto_expose",
+    "forget",
+    "events",
+    "sensitive",
+)
+SYNCING_BLOCKS = ("entities", "exceptions", "settings", "forget", "sensitive")
 
 
 def _entities_block(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
@@ -268,6 +280,30 @@ def _exceptions_block(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, An
         for key in keys:
             exceptions[key] = sorted(services)
     return {OPT_EXCEPTIONS: exceptions}
+
+
+def _sensitive_block(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
+    """Key the sensitive marks by permission key, not by entity id."""
+    marks: dict[str, dict[str, bool]] = {}
+    for entity_id, flags in data.items():
+        for key in resolve_target(hass, {"entity_id": [entity_id]}):
+            marks[key] = {
+                "confirm": bool(flags.get("confirm", True)),
+                "refuse_automatic": bool(flags.get("refuse_automatic", True)),
+            }
+    return {OPT_SENSITIVE: marks}
+
+
+def _sensitive_entity_ids(
+    hass: HomeAssistant, marks: dict[str, Any]
+) -> dict[str, dict[str, bool]]:
+    """Key the sensitive marks by entity_id instead of by permission key."""
+    result: dict[str, dict[str, bool]] = {}
+    for key, mark in marks.items():
+        entity_id = entity_id_for(hass, key)
+        if entity_id is not None:
+            result[entity_id] = dict(mark)
+    return result
 
 
 def _events_block(data: dict[str, Any]) -> dict[str, Any] | None:
@@ -324,6 +360,7 @@ def _block_keys(
         "entities": _entities_block,
         "exceptions": _exceptions_block,
         "auto_expose": _auto_expose_block,
+        "sensitive": _sensitive_block,
     }
     if block in simple:
         return simple[block](hass, data)
