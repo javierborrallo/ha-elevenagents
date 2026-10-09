@@ -99,7 +99,7 @@ def _response(text: str) -> dict[str, Any]:
 def _tool(name: str) -> dict[str, Any]:
     return {
         "type": "agent_tool_response",
-        "agent_tool_response_event": {"tool_name": name, "is_error": False},
+        "agent_tool_response": {"tool_name": name, "is_error": False},
     }
 
 
@@ -322,7 +322,7 @@ async def test_a_pending_tool_keeps_the_turn_open_past_the_idle_time(
         await ws.send_json(
             {
                 "type": "agent_tool_request",
-                "agent_tool_request_event": {"tool_name": "ha_call_service"},
+                "agent_tool_request": {"tool_name": "ha_call_service"},
             }
         )
         await asyncio.sleep(0.5)
@@ -349,7 +349,7 @@ async def test_a_pending_tool_past_the_maximum_is_incomplete(hass, setup_entry, 
         await ws.send_json(
             {
                 "type": "agent_tool_request",
-                "agent_tool_request_event": {"tool_call_id": "call_1"},
+                "agent_tool_request": {"tool_call_id": "call_1"},
             }
         )
         await _hold(ws)
@@ -399,7 +399,7 @@ async def test_agent_response_complete_waits_for_a_pending_tool(
         await ws.send_json(
             {
                 "type": "agent_tool_request",
-                "agent_tool_request_event": {"tool_name": "ha_call_service"},
+                "agent_tool_request": {"tool_name": "ha_call_service"},
             }
         )
         await ws.send_json({"type": "agent_response_complete"})

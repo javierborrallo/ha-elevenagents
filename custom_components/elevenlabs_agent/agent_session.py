@@ -131,12 +131,12 @@ async def _apply_frame(
             )
             state.last_content = loop.time()
     elif kind == "agent_tool_request":
-        event = payload.get("agent_tool_request_event") or {}
+        event = payload.get("agent_tool_request") or {}
         tool_id = _tool_id(event)
         if tool_id is not None:
             state.pending_tools.add(tool_id)
     elif kind == "agent_tool_response":
-        event = payload.get("agent_tool_response_event") or {}
+        event = payload.get("agent_tool_response") or {}
         state.result.tools.append(
             {
                 "tool_name": event.get("tool_name"),
