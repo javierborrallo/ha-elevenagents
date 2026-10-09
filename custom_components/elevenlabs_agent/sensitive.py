@@ -91,8 +91,8 @@ def _entries(history: Any) -> list[Any]:
 
 
 def _carries(entry: Any, code: str) -> bool:
-    """Return True when a tool entry holds the code in one of its results."""
-    if not isinstance(entry, dict) or entry.get("role") != "tool":
+    """Return True when a non-user entry holds the code in one of its tool results."""
+    if not isinstance(entry, dict) or entry.get("role") == "user":
         return False
     results = entry.get("tool_results") or []
     return any(

@@ -29,7 +29,7 @@ def _history(code: str, *, user_after: bool) -> str:
         {"role": "user", "message": "Abre la puerta"},
         {"role": "agent", "tool_requests": [{"tool_name": "ha_call_service"}]},
         {
-            "role": "tool",
+            "role": "agent",
             "tool_results": [
                 {
                     "tool_name": "ha_call_service",
@@ -256,11 +256,80 @@ def test_a_non_string_conversation_id_fails_closed() -> None:
     assert result["error"] == "conversation_unknown"
 
 
+# The history of a live conversation, captured on 9 Oct 2026. The code is changed.
+LIVE_RESULT = {
+    "outcome": "confirmation_required",
+    "entity_id": "lock.openable_lock",
+    "action": "lock.unlock",
+    "name": "Openable Lock",
+    "confirmation_code": "ab12cd",
+}
+LIVE_CALL = {"entity_id": "lock.openable_lock", "action": "lock.unlock"}
+LIVE_HISTORY = json.dumps(
+    {
+        "x-elevenlabs-history": True,
+        "entries": [
+            {"role": "user", "message": "Desbloquea la cerradura Openable Lock."},
+            {
+                "role": "agent",
+                "tool_requests": [
+                    {
+                        "tool_name": "ha_call_service",
+                        "params_as_json": {
+                            **LIVE_CALL,
+                            "tool": "call_service",
+                            "conversation_id": "conv_1",
+                            "conversation_history": "[conversation_history (2 turns)]",
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "agent",
+                "tool_results": [
+                    {
+                        "tool_name": "ha_call_service",
+                        "result_value": json.dumps(LIVE_RESULT),
+                    }
+                ],
+            },
+            {"role": "agent", "message": "Necesito que confirmes la acción."},
+            {"role": "user", "message": "Sí, confirmo, desbloquéala."},
+            {
+                "role": "agent",
+                "tool_requests": [
+                    {
+                        "tool_name": "ha_call_service",
+                        "params_as_json": {**LIVE_CALL, "confirmation_code": "ab12cd"},
+                    }
+                ],
+            },
+        ],
+    }
+)
+
+
+def test_heard_after_reads_a_live_history() -> None:
+    """The tool result arrives in an agent entry. A user turn after it counts."""
+    assert heard_after(LIVE_HISTORY, "ab12cd") is True
+    assert heard_after(LIVE_HISTORY, "ffffff") is False
+
+
+def test_heard_after_ignores_a_code_in_a_user_entry() -> None:
+    """A code inside a user entry does not count as the question."""
+    entries = [
+        {"role": "user", "tool_results": [{"result_value": "ab12cd"}]},
+        {"role": "user", "message": "Sí"},
+    ]
+    history = json.dumps({"x-elevenlabs-history": True, "entries": entries})
+    assert heard_after(history, "ab12cd") is False
+
+
 def test_heard_after_ignores_a_user_entry_without_text() -> None:
     """A user entry with a null or missing message does not count as heard."""
     entries = [
         {
-            "role": "tool",
+            "role": "agent",
             "tool_results": [
                 {
                     "tool_name": "ha_call_service",

@@ -522,7 +522,10 @@ async def test_a_sensitive_action_asks_first_and_runs_after_the_user_confirms(
     history = json.dumps(
         {
             "entries": [
-                {"role": "tool", "tool_results": [{"result_value": json.dumps(first)}]},
+                {
+                    "role": "agent",
+                    "tool_results": [{"result_value": json.dumps(first)}],
+                },
                 {"role": "user", "message": "sí"},
             ]
         }
