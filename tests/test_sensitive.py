@@ -6,6 +6,8 @@ import json
 from typing import Any
 from unittest.mock import patch
 
+import pytest
+
 from custom_components.elevenlabs_agent.const import EVENT_CONVERSATION_GRACE_SECONDS
 from custom_components.elevenlabs_agent.sensitive import (
     Gate,
@@ -313,6 +315,25 @@ def test_heard_after_reads_a_live_history() -> None:
     """The tool result arrives in an agent entry. A user turn after it counts."""
     assert heard_after(LIVE_HISTORY, "ab12cd") is True
     assert heard_after(LIVE_HISTORY, "ffffff") is False
+
+
+@pytest.mark.parametrize(
+    "result_value",
+    [
+        '{"outcome": "done", "name": "ab12cd"}',
+        '{"outcome": "confirmation_required", "confirmation_code": "ab12cdef"}',
+        "ab12cd",
+        '["ab12cd"]',
+    ],
+)
+def test_heard_after_needs_the_exact_code_field(result_value: str) -> None:
+    """Only a confirmation_code field equal to the code marks the question."""
+    entries = [
+        {"role": "agent", "tool_results": [{"result_value": result_value}]},
+        {"role": "user", "message": "Sí"},
+    ]
+    history = json.dumps({"x-elevenlabs-history": True, "entries": entries})
+    assert heard_after(history, "ab12cd") is False
 
 
 def test_heard_after_ignores_a_code_in_a_user_entry() -> None:

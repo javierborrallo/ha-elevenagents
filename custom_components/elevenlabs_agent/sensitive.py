@@ -90,15 +90,28 @@ def _entries(history: Any) -> list[Any]:
     return entries if isinstance(entries, list) else []
 
 
+def _result_code(result: Any) -> str | None:
+    """Return the confirmation_code field of one tool result, or None."""
+    if not isinstance(result, dict):
+        return None
+    value = result.get("result_value")
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return None
+    if not isinstance(value, dict):
+        return None
+    code = value.get("confirmation_code")
+    return code if isinstance(code, str) else None
+
+
 def _carries(entry: Any, code: str) -> bool:
-    """Return True when a non-user entry holds the code in one of its tool results."""
+    """Return True when a non-user entry has a tool result with this exact code."""
     if not isinstance(entry, dict) or entry.get("role") == "user":
         return False
     results = entry.get("tool_results") or []
-    return any(
-        isinstance(result, dict) and code in str(result.get("result_value", ""))
-        for result in results
-    )
+    return any(_result_code(result) == code for result in results)
 
 
 def _is_user_turn(entry: Any) -> bool:
