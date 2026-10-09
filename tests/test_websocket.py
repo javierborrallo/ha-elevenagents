@@ -1199,6 +1199,42 @@ async def test_config_get_lists_missing_keys_with_where_they_are_stored(
     ]
 
 
+async def test_config_get_shows_a_key_a_registry_entity_took_as_missing(
+    hass, setup_entry, entity_registry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The panel must not show the new entity as granted, nor send it back."""
+    taken = entity_registry.async_get_or_create(
+        "lock", "demo", "garage", suggested_object_id="garage"
+    )
+    hass.states.async_set(taken.entity_id, "locked")
+    hass.config_entries.async_update_entry(
+        setup_entry,
+        options={
+            OPT_CONTROL_ENTITIES: ["lock.garage"],
+            OPT_EXCEPTIONS: {"lock.garage": ["lock.open"]},
+        },
+    )
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+    )
+    result = (await client.receive_json())["result"]
+
+    assert result["control_entity_ids"] == []
+    assert result["exception_entity_ids"] == {}
+    assert result["available_actions"] == {}
+    assert result["missing"] == [
+        {
+            "key": "lock.garage",
+            "entity_id": "lock.garage",
+            "read": False,
+            "control": True,
+            "restricted": True,
+        }
+    ]
+
+
 async def test_config_get_names_the_entities_outside_the_registry(
     hass, setup_entry, entity_registry, hass_ws_client: WebSocketGenerator
 ) -> None:

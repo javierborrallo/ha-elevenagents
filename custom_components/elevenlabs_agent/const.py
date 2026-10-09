@@ -84,6 +84,11 @@ ERROR_UNKNOWN_FIELD: Final = "unknown_field"
 ERROR_EXECUTION_FAILED: Final = "execution_failed"
 ERROR_MALFORMED_REQUEST: Final = "malformed_request"
 
+# Services that write a file. The agent never gets them.
+FILE_WRITING_SERVICES: Final = frozenset(
+    {"camera.snapshot", "camera.record", "image.snapshot"}
+)
+
 # Options the sensitive block writes.
 # permission key -> {"confirm": bool, "refuse_automatic": bool}.
 OPT_SENSITIVE: Final = "sensitive"

@@ -28,7 +28,6 @@ from custom_components.elevenlabs_agent.const import (
 )
 from custom_components.elevenlabs_agent.expose import _synchronise
 from custom_components.elevenlabs_agent.permissions import (
-    authorise_action,
     authorise_read,
     from_options,
 )
@@ -705,33 +704,26 @@ async def test_a_reload_inside_the_debounce_raises_nothing(
     assert _missing_issue(hass) is None
 
 
-async def test_an_entity_gaining_a_unique_id_migrates_its_permission(
+async def test_a_registry_entity_never_inherits_an_entity_id_key(
     hass, setup_entry, entity_registry, freezer, mock_sync_tools
 ) -> None:
-    """The README advises adding a unique_id; the permission must follow it."""
+    """A registry entity that takes a stored entity_id gets nothing."""
     hass.config_entries.async_update_entry(
         setup_entry, options={OPT_CONTROL_ENTITIES: ["sensor.yaml_only"]}
     )
     _record_catalogue(hass, setup_entry)
-    before = entity_catalogue(hass, from_options(setup_entry.options).control)
 
     new_entry = entity_registry.async_get_or_create(
         "sensor", "demo", "yaml_only", suggested_object_id="yaml_only"
     )
-    await hass.async_block_till_done()
+    await _settle(hass, freezer)
 
     assert new_entry.entity_id == "sensor.yaml_only"
-    assert setup_entry.options[OPT_CONTROL_ENTITIES] == [new_entry.id]
-
+    assert setup_entry.options[OPT_CONTROL_ENTITIES] == ["sensor.yaml_only"]
     perms = from_options(setup_entry.options)
-    assert authorise_read(hass, perms, "sensor.yaml_only") is None
-    assert (
-        authorise_action(hass, perms, "sensor.yaml_only", "sensor.turn_on", {})
-        != ERROR_NOT_FOUND
-    )
-
-    after = entity_catalogue(hass, perms.control)
-    assert after == before
+    assert authorise_read(hass, perms, "sensor.yaml_only") == ERROR_NOT_FOUND
+    assert entity_catalogue(hass, perms.control)[0] == []
+    assert _missing_issue(hass) is not None
 
 
 async def test_nothing_moves_when_no_key_matches(

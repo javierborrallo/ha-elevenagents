@@ -20,11 +20,11 @@ from custom_components.elevenlabs_agent.permissions import (
     Permissions,
     authorise_action,
     authorise_read,
+    entity_id_for,
     granted_services,
     is_missing,
     matches_supported_features,
     permission_key,
-    rekey,
     removed_registry_keys,
     resolve_target,
     stored_keys,
@@ -220,6 +220,35 @@ async def test_a_service_without_an_entity_target_is_never_granted(
     assert "script.reload" not in granted
 
 
+@pytest.mark.parametrize(
+    ("domain", "service"),
+    [("camera", "snapshot"), ("camera", "record"), ("image", "snapshot")],
+)
+async def test_a_service_that_writes_a_file_is_never_granted(
+    hass, entity_registry, domain: str, service: str
+):
+    """A controlled camera or image never gets a service that writes a file."""
+    entry = entity_registry.async_get_or_create(domain, "demo", "porch")
+    hass.states.async_set(entry.entity_id, "idle", {"supported_features": 0})
+    descriptions = {
+        domain: {
+            service: {"target": {"entity": [{"domain": [domain]}]}},
+            "turn_on": {"target": {"entity": [{"domain": [domain]}]}},
+        }
+    }
+    perms = Permissions(read=frozenset(), control=frozenset({entry.id}), exceptions={})
+
+    assert granted_services(hass, perms, entry.id, descriptions) == {
+        f"{domain}.turn_on"
+    }
+    assert (
+        authorise_action(
+            hass, perms, entry.entity_id, f"{domain}.{service}", descriptions
+        )
+        == ERROR_ACTION_NOT_ALLOWED
+    )
+
+
 async def test_unselected_entity_is_not_found_whatever_was_asked(hass, entity_registry):
     """An unselected entity never reveals that it exists."""
     lock = entity_registry.async_get_or_create("lock", "demo", "front")
@@ -345,6 +374,39 @@ async def test_an_entity_id_key_is_missing_without_a_state(hass):
     assert is_missing(hass, "sensor.never_there")
 
 
+async def test_an_entity_id_key_is_missing_once_a_registry_entity_takes_its_name(
+    hass, entity_registry
+):
+    """A registry entity with the same entity_id is a different entity."""
+    taken = entity_registry.async_get_or_create(
+        "lock", "demo", "garage", suggested_object_id="garage"
+    )
+    hass.states.async_set(taken.entity_id, "locked")
+
+    assert taken.entity_id == "lock.garage"
+    assert is_missing(hass, "lock.garage")
+    assert entity_id_for(hass, "lock.garage") is None
+
+
+async def test_a_stale_entity_id_key_grants_nothing_to_a_registry_entity(
+    hass, entity_registry
+):
+    """The new registry entity is looked up by its own registry id."""
+    entry = entity_registry.async_get_or_create(
+        "lock", "demo", "garage", suggested_object_id="garage"
+    )
+    hass.states.async_set(entry.entity_id, "locked")
+    perms = Permissions(
+        read=frozenset(), control=frozenset({"lock.garage"}), exceptions={}
+    )
+
+    assert authorise_read(hass, perms, "lock.garage") == ERROR_NOT_FOUND
+    assert (
+        authorise_action(hass, perms, "lock.garage", "lock.unlock", {})
+        == ERROR_NOT_FOUND
+    )
+
+
 async def test_removed_registry_keys_never_names_an_entity_id_key(
     hass, entity_registry
 ):
@@ -399,17 +461,6 @@ def test_without_keys_drops_a_sensitive_mark() -> None:
     }
 
     assert without_keys(options, ["abc"])[OPT_SENSITIVE] == {"def": {}}
-
-
-def test_rekey_moves_a_sensitive_mark() -> None:
-    """The mark follows the entity to its registry id."""
-    options = {OPT_SENSITIVE: {"light.x": {"confirm": False, "refuse_automatic": True}}}
-
-    moved = rekey(options, "light.x", "reg1")
-
-    assert moved[OPT_SENSITIVE] == {
-        "reg1": {"confirm": False, "refuse_automatic": True}
-    }
 
 
 async def test_permission_key_is_the_registry_id_or_the_entity_id(
