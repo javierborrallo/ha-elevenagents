@@ -143,6 +143,21 @@ def entity_catalogue(hass: HomeAssistant, keys: Iterable[str]) -> tuple[list[str
     return [entity_id for entity_id, _ in resolved], "\n".join(lines)
 
 
+def service_data_keys(
+    descriptions: Mapping[str, Mapping[str, Any]], action: str
+) -> frozenset[str]:
+    """Return the scalar service_data keys one action declares."""
+    domain, _, service = action.partition(".")
+    fields = _flatten_fields(
+        descriptions.get(domain, {}).get(service, {}).get("fields", {})
+    )
+    return frozenset(
+        key
+        for key, field in fields.items()
+        if next(iter(field.get("selector") or {}), None) in _SELECTOR_TYPES
+    )
+
+
 def service_data_properties(
     descriptions: Mapping[str, Mapping[str, Any]],
     actions: Iterable[str],

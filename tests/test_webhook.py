@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers.service import async_set_service_schema
 from homeassistant.util import dt as dt_util
 from homeassistant.util.aiohttp import MockRequest
 
@@ -368,6 +369,7 @@ async def test_write_that_changes_only_an_attribute_is_still_done(
         )
 
     hass.services.async_register("climate", "set_temperature", set_temperature)
+    async_set_service_schema(hass, "climate", "set_temperature", TEMPERATURE_SCHEMA)
     hass.config_entries.async_update_entry(
         config_entry, options={OPT_CONTROL_ENTITIES: [thermostat.id]}
     )
@@ -437,6 +439,7 @@ async def test_write_validation_error_relays_the_translation_key(
         )
 
     hass.services.async_register("climate", "set_temperature", set_temperature)
+    async_set_service_schema(hass, "climate", "set_temperature", TEMPERATURE_SCHEMA)
     hass.config_entries.async_update_entry(
         config_entry, options={OPT_CONTROL_ENTITIES: [thermostat.id]}
     )
@@ -707,3 +710,94 @@ async def test_service_data_cannot_retarget_the_call(
 
     assert body["error"] == "malformed_request"
     assert calls == []
+
+
+TEMPERATURE_SCHEMA = {
+    "target": {"entity": [{"domain": ["climate"]}]},
+    "fields": {"temperature": {"selector": {"number": {}}}},
+}
+
+
+async def _granted_light(hass, config_entry, entity_registry) -> tuple[str, list]:
+    """Register one controlled light with a described turn_on and return its calls."""
+    light = entity_registry.async_get_or_create("light", "demo", "granted")
+    hass.states.async_set(light.entity_id, "off")
+    calls: list[object] = []
+
+    async def turn_on(call) -> None:
+        calls.append(call)
+
+    hass.services.async_register("light", "turn_on", turn_on)
+    async_set_service_schema(
+        hass,
+        "light",
+        "turn_on",
+        {
+            "target": {"entity": [{"domain": ["light"]}]},
+            "fields": {
+                "brightness": {"selector": {"number": {}}},
+                "group_members": {"selector": {"entity": {}}},
+            },
+        },
+    )
+    hass.config_entries.async_update_entry(
+        config_entry, options={OPT_CONTROL_ENTITIES: [light.id]}
+    )
+    return light.entity_id, calls
+
+
+def _turn_on(entity_id: str, service_data: dict[str, object]) -> dict[str, object]:
+    return {
+        "tool": "call_service",
+        "entity_id": entity_id,
+        "action": "light.turn_on",
+        "service_data": service_data,
+    }
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "{{ states('lock.front') }}",
+        "{% if true %}x{% endif %}",
+        "{# note #}",
+        ["{{ 1 }}"],
+        {"nested": "{{ 1 }}"},
+    ],
+)
+async def test_service_data_cannot_carry_a_template(
+    hass, config_entry, entity_registry, value
+):
+    """Home Assistant would render a template with every state in reach."""
+    entity_id, calls = await _granted_light(hass, config_entry, entity_registry)
+
+    body = await async_write(
+        hass, config_entry, _turn_on(entity_id, {"brightness": value})
+    )
+
+    assert body["error"] == "malformed_request"
+    assert calls == []
+
+
+async def test_service_data_keys_must_be_declared_scalars(
+    hass, config_entry, entity_registry
+):
+    """A key the tool schema does not declare is refused before the call."""
+    entity_id, calls = await _granted_light(hass, config_entry, entity_registry)
+
+    body = await async_write(
+        hass,
+        config_entry,
+        _turn_on(entity_id, {"group_members": ["light.other"]}),
+    )
+    assert body["error"] == "malformed_request"
+
+    body = await async_write(hass, config_entry, _turn_on(entity_id, {"spare": 1}))
+    assert body["error"] == "malformed_request"
+    assert calls == []
+
+    body = await async_write(
+        hass, config_entry, _turn_on(entity_id, {"brightness": 120})
+    )
+    assert body["outcome"] != "failed"
+    assert len(calls) == 1

@@ -35,6 +35,7 @@ from .const import (
 from .permissions import authorise_action, authorise_read, from_options, permission_key
 from .response import error_fields, malformed, project, read_results, write_result
 from .sensitive import sensitive_mark
+from .tool_sync import service_data_keys
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -43,6 +44,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
     from . import ElevenLabsAgentConfigEntry, RuntimeData
+    from .permissions import Permissions
 
 WEBHOOK_NAME = "ElevenAgents"
 
@@ -203,6 +205,20 @@ async def async_read(
 # Service call keys that choose the target. Only entity_id at the top level may do that.
 TARGET_KEYS = frozenset({"entity_id", "device_id", "area_id", "floor_id", "label_id"})
 
+# Markers that open a Home Assistant template.
+TEMPLATE_MARKERS = ("{{", "{%", "{#")
+
+
+def _has_template(value: Any) -> bool:
+    """Return True when a value, or any value nested in it, holds a template marker."""
+    if isinstance(value, str):
+        return any(marker in value for marker in TEMPLATE_MARKERS)
+    if isinstance(value, dict):
+        return any(_has_template(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_has_template(item) for item in value)
+    return False
+
 
 def _parsed_write_payload(
     payload: dict[str, Any],
@@ -226,6 +242,8 @@ def _parsed_write_payload(
     targets = TARGET_KEYS.intersection(service_data)
     if targets:
         return malformed(f"service_data cannot carry {', '.join(sorted(targets))}")
+    if _has_template(service_data):
+        return malformed("service_data cannot carry a template")
     return entity_id, action, service_data
 
 
@@ -273,6 +291,23 @@ def _sensitive_answer(
     )
 
 
+def _refusal(
+    hass: HomeAssistant,
+    perms: Permissions,
+    descriptions: dict[str, dict[str, Any]],
+    call: tuple[str, str, dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Return the answer that refuses the call, or None when it may go on."""
+    entity_id, action, service_data = call
+    error = authorise_action(hass, perms, entity_id, action, descriptions)
+    if error is not None:
+        return write_result(OUTCOME_FAILED, entity_id, action, extra={"error": error})
+    undeclared = set(service_data) - service_data_keys(descriptions, action)
+    if undeclared:
+        return malformed(f"service_data cannot carry {', '.join(sorted(undeclared))}")
+    return None
+
+
 async def async_write(
     hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry, payload: dict[str, Any]
 ) -> dict[str, Any]:
@@ -291,9 +326,9 @@ async def async_write(
     perms = from_options(entry.options)
     descriptions = await async_get_all_descriptions(hass)
 
-    error = authorise_action(hass, perms, entity_id, action, descriptions)
-    if error is not None:
-        return write_result(OUTCOME_FAILED, entity_id, action, extra={"error": error})
+    refused = _refusal(hass, perms, descriptions, (entity_id, action, service_data))
+    if refused is not None:
+        return refused
 
     gated = _sensitive_answer(hass, entry, payload, (entity_id, action, service_data))
     if gated is not None:
