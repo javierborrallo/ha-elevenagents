@@ -577,6 +577,47 @@ async def test_attaching_preserves_tools_the_user_added(hass, setup_entry, tool_
     assert set(setup_entry.data[CONF_TOOL_IDS].values()) <= set(attached)
 
 
+def _agent_with_events(events: list[str] | None) -> SimpleNamespace:
+    return SimpleNamespace(
+        platform_settings=None,
+        conversation_config=SimpleNamespace(
+            agent=SimpleNamespace(prompt=SimpleNamespace(tool_ids=[])),
+            conversation=SimpleNamespace(client_events=events),
+        ),
+    )
+
+
+async def test_attaching_adds_the_tool_events_to_the_agent(
+    hass, setup_entry, tool_calls
+):
+    """The PATCH keeps the agent's client events and adds the two tool events."""
+    tool_calls.get_agent.return_value = _agent_with_events(
+        ["audio", "agent_response", "agent_tool_response"]
+    )
+
+    await async_sync_tools(hass, setup_entry, _CLIENT)
+
+    conversation_config = tool_calls.patch_agent.call_args.kwargs["conversation_config"]
+    assert conversation_config["conversation"]["client_events"] == [
+        "audio",
+        "agent_response",
+        "agent_tool_response",
+        "agent_tool_request",
+    ]
+
+
+async def test_attaching_leaves_client_events_alone_without_a_list(
+    hass, setup_entry, tool_calls
+):
+    """An agent without a client event list keeps the platform default."""
+    tool_calls.get_agent.return_value = _agent_with_events(None)
+
+    await async_sync_tools(hass, setup_entry, _CLIENT)
+
+    conversation_config = tool_calls.patch_agent.call_args.kwargs["conversation_config"]
+    assert "conversation" not in conversation_config
+
+
 async def test_attaching_never_drops_a_tool_this_integration_synced_before(
     hass, setup_entry, tool_calls
 ):

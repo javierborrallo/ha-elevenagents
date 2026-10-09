@@ -48,6 +48,9 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+# Client events that report a tool call on the WebSocket.
+TOOL_CLIENT_EVENTS: Final = ("agent_tool_request", "agent_tool_response")
+
 GET_STATE_DESCRIPTION = (
     "Read the current state of one or more Home Assistant entities. "
     "Call this before answering any question about state. "
@@ -449,11 +452,28 @@ async def _attach(
         if tool_id not in attached:
             attached.append(tool_id)
 
-    await async_patch_agent(
-        client,
-        agent_id,
-        conversation_config={"agent": {"prompt": {"tool_ids": attached}}},
-    )
+    conversation_config: dict[str, Any] = {"agent": {"prompt": {"tool_ids": attached}}}
+    events = _client_events(agent.conversation_config)
+    if events is not None:
+        conversation_config["conversation"] = {"client_events": events}
+    await async_patch_agent(client, agent_id, conversation_config=conversation_config)
+
+
+def _client_events(conversation_config: Any) -> list[str] | None:
+    """
+    Return the agent's client events plus the tool events, or None.
+
+    None means the agent has no client event list. The platform default stays.
+    """
+    conversation = getattr(conversation_config, "conversation", None)
+    events = getattr(conversation, "client_events", None)
+    if events is None:
+        return None
+    merged = list(events)
+    for event in TOOL_CLIENT_EVENTS:
+        if event not in merged:
+            merged.append(event)
+    return merged
 
 
 async def async_build_definitions(
