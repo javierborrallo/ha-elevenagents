@@ -255,6 +255,9 @@ the agent asked. A code the agent invents, reuses or carries to another device i
 
 A device that requires confirmation with both options off is not protected. The panel warns you.
 
+If you stop letting the agent control a device, its confirmation setting is kept. The agent cannot
+touch the device anyway, and the setting is back in place if you give control again.
+
 The mark belongs to one entity. If the agent controls a script, scene or group that moves a marked
 device, a call to that script, scene or group runs without asking. Mark it too, or do not give the
 agent control of it.
