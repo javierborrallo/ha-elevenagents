@@ -72,6 +72,25 @@ async def test_resolve_target_keys_an_unregistered_entity_by_entity_id(hass):
     assert resolved == {"light.unregistered"}
 
 
+async def test_resolve_target_drops_a_group_member_that_does_not_exist(hass):
+    """A group member with no state and no registry entry gets no key."""
+    hass.states.async_set("light.present", "on")
+    hass.states.async_set(
+        "group.downstairs", "on", {"entity_id": ["light.present", "light.ghost"]}
+    )
+
+    resolved = resolve_target(hass, {"entity_id": ["group.downstairs"]})
+
+    assert resolved == {"light.present"}
+
+
+async def test_resolve_target_keeps_a_selected_entity_id_that_holds_no_state(hass):
+    """The panel sends back a missing entity_id key; it stays stored."""
+    resolved = resolve_target(hass, {"entity_id": ["sensor.yaml_gone"]})
+
+    assert resolved == {"sensor.yaml_gone"}
+
+
 async def test_an_unregistered_entity_can_be_read_and_controlled(hass):
     """The two key forms reach the same authorisation path."""
     hass.states.async_set("lock.yaml_lock", "locked")

@@ -490,6 +490,8 @@ async def test_saving_exceptions_fans_out_to_every_key_a_group_resolves_to(
     hass, setup_entry, hass_ws_client: WebSocketGenerator
 ) -> None:
     """A group in the exceptions target gives the same exception to every member."""
+    hass.states.async_set("light.a", "on")
+    hass.states.async_set("light.b", "on")
     hass.states.async_set(
         "group.demo_group", "on", {"entity_id": ["light.a", "light.b"]}
     )

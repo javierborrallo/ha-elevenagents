@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.target import (
     TargetSelection,
@@ -57,14 +58,24 @@ def from_options(options: Mapping[str, Any]) -> Permissions:
 
 
 def resolve_target(hass: HomeAssistant, target: dict[str, Any]) -> set[str]:
-    """Resolve a target selector value to permission keys."""
+    """
+    Resolve a target selector value to permission keys.
+
+    A group gives the keys of its members. A member with no state and no
+    registry entry gives no key. A selected entity_id gives its key even
+    when it holds no state.
+    """
     selected = async_extract_referenced_entity_ids(hass, TargetSelection(target))
     entities = er.async_get(hass)
+    requested = set(cv.ensure_list(target.get("entity_id")))
 
     resolved: set[str] = set()
     for entity_id in selected.referenced | selected.indirectly_referenced:
         entry = entities.async_get(entity_id)
-        resolved.add(entity_id if entry is None else entry.id)
+        if entry is not None:
+            resolved.add(entry.id)
+        elif entity_id in requested or hass.states.get(entity_id) is not None:
+            resolved.add(entity_id)
     return resolved
 
 
