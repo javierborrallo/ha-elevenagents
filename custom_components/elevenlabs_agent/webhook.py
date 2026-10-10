@@ -119,6 +119,19 @@ def _authenticated_entry(
     return entry
 
 
+async def _body(request: Request) -> bytes | None:
+    """Read the body to its end. Return None when it passes MAX_BODY_BYTES."""
+    stream = request.content
+    pieces: list[bytes] = []
+    size = 0
+    while piece := await stream.read(MAX_BODY_BYTES + 1 - size):
+        size += len(piece)
+        if size > MAX_BODY_BYTES:
+            return None
+        pieces.append(piece)
+    return b"".join(pieces)
+
+
 async def _parsed_json_body(request: Request) -> dict[str, Any] | web.Response:
     """
     Validate the content type and size, then parse the JSON body.
@@ -134,8 +147,8 @@ async def _parsed_json_body(request: Request) -> dict[str, Any] | web.Response:
     if content_length is not None and int(content_length) > MAX_BODY_BYTES:
         return web.Response(status=413)
 
-    body = await request.content.read(MAX_BODY_BYTES + 1)
-    if len(body) > MAX_BODY_BYTES:
+    body = await _body(request)
+    if body is None:
         return web.Response(status=413)
 
     try:

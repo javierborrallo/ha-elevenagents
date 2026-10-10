@@ -40,6 +40,8 @@ from custom_components.elevenlabs_agent.webhook import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
     from homeassistant.helpers import entity_registry as er
 
 # homeassistant 2026.9.1's http server sets self.app["hass"] as a plain key.
@@ -193,6 +195,53 @@ async def test_oversized_body_is_413(hass, hass_client_no_auth, setup_entry):
             "Content-Type": "application/json",
         },
         data=b"x" * (MAX_BODY_BYTES + 1),
+    )
+
+    assert response.status == 413
+
+
+async def _pieces(body: bytes, size: int) -> AsyncIterator[bytes]:
+    """Yield the body in pieces, with a pause between them."""
+    for start in range(0, len(body), size):
+        yield body[start : start + size]
+        await asyncio.sleep(0.05)
+
+
+async def test_a_body_that_arrives_in_pieces_is_read_whole(
+    hass, hass_client_no_auth, setup_entry
+):
+    """The webhook reads to the end of the body, not the first piece."""
+    client = await hass_client_no_auth()
+    body = json.dumps({"tool": "nonsense", "padding": "x" * 20_000}).encode()
+
+    response = await client.post(
+        f"/api/webhook/{setup_entry.data[CONF_WEBHOOK_ID]}",
+        headers={
+            SECRET_HEADER: setup_entry.data[CONF_WEBHOOK_SECRET],
+            "Content-Type": "application/json",
+        },
+        data=_pieces(body, 4096),
+    )
+
+    assert response.status == 200
+    detail = json.loads(await response.text())["detail"]
+    assert detail != "body is not valid JSON"
+
+
+async def test_an_oversized_body_in_pieces_is_413(
+    hass, hass_client_no_auth, setup_entry
+):
+    """A body without Content-Length is refused once it passes the limit."""
+    client = await hass_client_no_auth()
+    body = b"x" * (MAX_BODY_BYTES + 1)
+
+    response = await client.post(
+        f"/api/webhook/{setup_entry.data[CONF_WEBHOOK_ID]}",
+        headers={
+            SECRET_HEADER: setup_entry.data[CONF_WEBHOOK_SECRET],
+            "Content-Type": "application/json",
+        },
+        data=_pieces(body, 64 * 1024),
     )
 
     assert response.status == 413
