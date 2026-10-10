@@ -529,6 +529,7 @@ async def test_a_sensitive_action_asks_first_and_runs_after_the_user_confirms(
                     "role": "agent",
                     "tool_results": [{"result_value": json.dumps(first)}],
                 },
+                {"role": "agent", "message": "¿Abro la puerta?"},
                 {"role": "user", "message": "sí"},
             ]
         }

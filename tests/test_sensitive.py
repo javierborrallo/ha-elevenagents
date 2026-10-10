@@ -330,6 +330,7 @@ def test_heard_after_needs_the_exact_code_field(result_value: str) -> None:
     """Only a confirmation_code field equal to the code marks the question."""
     entries = [
         {"role": "agent", "tool_results": [{"result_value": result_value}]},
+        {"role": "agent", "message": "¿Seguro?"},
         {"role": "user", "message": "Sí"},
     ]
     history = json.dumps({"x-elevenlabs-history": True, "entries": entries})
@@ -346,6 +347,48 @@ def test_heard_after_ignores_a_code_in_a_user_entry() -> None:
     assert heard_after(history, "ab12cd") is False
 
 
+def _entries_after_code(*after: dict[str, Any]) -> str:
+    entries: list[dict[str, Any]] = [
+        {
+            "role": "agent",
+            "tool_results": [
+                {
+                    "tool_name": "ha_call_service",
+                    "result_value": '{"confirmation_code": "ab12cd"}',
+                }
+            ],
+        },
+        *after,
+    ]
+    return json.dumps({"x-elevenlabs-history": True, "entries": entries})
+
+
+def test_heard_after_needs_the_agent_to_ask_before_the_user_answers() -> None:
+    """A user turn between the code and the agent's question does not count."""
+    before_question = _entries_after_code(
+        {"role": "user", "message": "y enciende la luz"},
+    )
+    question_after = _entries_after_code(
+        {"role": "user", "message": "y enciende la luz"},
+        {"role": "agent", "message": "¿Abro la puerta?"},
+    )
+    agent_without_text = _entries_after_code(
+        {"role": "agent", "tool_requests": [{"tool_name": "ha_call_service"}]},
+        {"role": "agent", "message": "  "},
+        {"role": "user", "message": "Sí"},
+    )
+    asked_then_answered = _entries_after_code(
+        {"role": "user", "message": "y enciende la luz"},
+        {"role": "agent", "message": "¿Abro la puerta?"},
+        {"role": "user", "message": "Sí"},
+    )
+
+    assert heard_after(before_question, "ab12cd") is False
+    assert heard_after(question_after, "ab12cd") is False
+    assert heard_after(agent_without_text, "ab12cd") is False
+    assert heard_after(asked_then_answered, "ab12cd") is True
+
+
 def test_heard_after_ignores_a_user_entry_without_text() -> None:
     """A user entry with a null or missing message does not count as heard."""
     entries = [
@@ -358,6 +401,7 @@ def test_heard_after_ignores_a_user_entry_without_text() -> None:
                 }
             ],
         },
+        {"role": "agent", "message": "¿Seguro?"},
         {"role": "user", "message": None},
         {"role": "user"},
     ]

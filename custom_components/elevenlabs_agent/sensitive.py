@@ -114,24 +114,40 @@ def _carries(entry: Any, code: str) -> bool:
     return any(_result_code(result) == code for result in results)
 
 
-def _is_user_turn(entry: Any) -> bool:
-    """Return True when an entry is a user turn that carries spoken text."""
-    if not isinstance(entry, dict) or entry.get("role") != "user":
+def _is_turn(entry: Any, role: str) -> bool:
+    """Return True when an entry has this role and carries text."""
+    if not isinstance(entry, dict) or entry.get("role") != role:
         return False
     message = entry.get("message")
     return isinstance(message, str) and bool(message.strip())
 
 
+def _first_index(entries: list[Any], start: int, role: str) -> int | None:
+    """Return the index of the first turn of this role from start, or None."""
+    for index in range(start, len(entries)):
+        if _is_turn(entries[index], role):
+            return index
+    return None
+
+
 def heard_after(history: Any, code: str) -> bool:
-    """Return True when a user entry follows the last tool entry that holds the code."""
+    """
+    Return True when the agent asked and the user answered after the code.
+
+    The order is: the last tool entry that holds the code, then an agent
+    message, then a user message.
+    """
     entries = _entries(history)
-    asked = None
+    holder = None
     for index, entry in enumerate(entries):
         if _carries(entry, code):
-            asked = index
+            holder = index
+    if holder is None:
+        return False
+    asked = _first_index(entries, holder + 1, "agent")
     if asked is None:
         return False
-    return any(_is_user_turn(entry) for entry in entries[asked + 1 :])
+    return _first_index(entries, asked + 1, "user") is not None
 
 
 @dataclass
