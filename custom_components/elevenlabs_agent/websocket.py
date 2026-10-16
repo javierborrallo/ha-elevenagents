@@ -58,6 +58,7 @@ from .permissions import (
     without_keys,
 )
 from .repairs import async_check_missing
+from .sensitive import Mark
 from .status import async_record_check
 from .tool_sync import AGENT_SETTING_DEFAULTS, ToolSyncError, async_sync_tools
 from .webhook import WEBHOOK_NAME, async_handle_webhook
@@ -288,10 +289,11 @@ def _sensitive_block(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any
     """Key the sensitive marks by permission key, not by entity id."""
     marks: dict[str, dict[str, bool]] = {}
     for entity_id, flags in data.items():
+        mark = Mark.from_raw(flags)
         for key in resolve_target(hass, {"entity_id": [entity_id]}):
             marks[key] = {
-                "confirm": bool(flags.get("confirm", True)),
-                "refuse_automatic": bool(flags.get("refuse_automatic", True)),
+                "confirm": mark.confirm,
+                "refuse_automatic": mark.refuse_automatic,
             }
     return {OPT_SENSITIVE: marks}
 

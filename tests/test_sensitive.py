@@ -56,6 +56,17 @@ def _ask(gate: Gate, now: float = 0.0, conversation: str = "c1") -> str:
     return str(answer["confirmation_code"])
 
 
+def test_mark_from_raw_defaults_both_options_to_true() -> None:
+    """from_raw is the one place the confirm and refuse defaults live."""
+    assert Mark.from_raw({}) == Mark(confirm=True, refuse_automatic=True)
+    assert Mark.from_raw({"confirm": False}) == Mark(
+        confirm=False, refuse_automatic=True
+    )
+    assert Mark.from_raw({"refuse_automatic": False}) == Mark(
+        confirm=True, refuse_automatic=False
+    )
+
+
 def test_marks_are_read_with_both_options_on_by_default() -> None:
     """A mark defaults both options to True. A missing key is not sensitive."""
     options: dict[str, Any] = {"sensitive": {"k": {}}}

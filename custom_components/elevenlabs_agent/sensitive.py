@@ -34,6 +34,14 @@ class Mark:
     confirm: bool
     refuse_automatic: bool
 
+    @classmethod
+    def from_raw(cls, raw: Mapping[str, Any]) -> Mark:
+        """Build a mark from stored flags. Both options default to True."""
+        return cls(
+            confirm=bool(raw.get("confirm", True)),
+            refuse_automatic=bool(raw.get("refuse_automatic", True)),
+        )
+
 
 @dataclass(frozen=True)
 class Call:
@@ -60,17 +68,13 @@ def sensitive_mark(options: Mapping[str, Any], key: str | None) -> Mark | None:
     raw = options.get(OPT_SENSITIVE, {}).get(key)
     if raw is None:
         return None
-    return Mark(
-        confirm=bool(raw.get("confirm", True)),
-        refuse_automatic=bool(raw.get("refuse_automatic", True)),
-    )
+    return Mark.from_raw(raw)
 
 
 def any_confirm(options: Mapping[str, Any]) -> bool:
     """Return True when at least one mark asks for confirmation."""
     return any(
-        bool(raw.get("confirm", True))
-        for raw in options.get(OPT_SENSITIVE, {}).values()
+        Mark.from_raw(raw).confirm for raw in options.get(OPT_SENSITIVE, {}).values()
     )
 
 
