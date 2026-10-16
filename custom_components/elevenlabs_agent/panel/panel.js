@@ -501,6 +501,7 @@ class ElevenLabsAgentPanel extends HTMLElement {
           if (item.read) where.push(t.missingRead);
           if (item.control) where.push(t.missingControl);
           if (item.restricted) where.push(t.missingRestricted);
+          if (item.sensitive) where.push(t.missingSensitive);
           name.appendChild(el("span", "eid", where.join(" · ")));
           row.appendChild(name);
           list.appendChild(row);

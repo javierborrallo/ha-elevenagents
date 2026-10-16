@@ -138,6 +138,7 @@ def _missing(hass: HomeAssistant, options: Mapping[str, Any]) -> list[dict[str, 
     read = set(options.get(OPT_READ_ENTITIES, ()))
     control = set(options.get(OPT_CONTROL_ENTITIES, ()))
     restricted = set(options.get(OPT_EXCEPTIONS, {}))
+    sensitive = set(options.get(OPT_SENSITIVE, {}))
     return [
         {
             "key": key,
@@ -145,6 +146,7 @@ def _missing(hass: HomeAssistant, options: Mapping[str, Any]) -> list[dict[str, 
             "read": key in read,
             "control": key in control,
             "restricted": key in restricted,
+            "sensitive": key in sensitive,
         }
         for key in sorted(stored_keys(options))
         if is_missing(hass, key)

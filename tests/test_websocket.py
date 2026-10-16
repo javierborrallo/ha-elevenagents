@@ -28,6 +28,7 @@ from custom_components.elevenlabs_agent.const import (
     OPT_CONTROL_ENTITIES,
     OPT_EXCEPTIONS,
     OPT_READ_ENTITIES,
+    OPT_SENSITIVE,
     TOOL_GET_STATE,
 )
 from custom_components.elevenlabs_agent.elevenlabs_client import (
@@ -1190,6 +1191,7 @@ async def test_config_get_lists_missing_keys_with_where_they_are_stored(
             "read": False,
             "control": True,
             "restricted": True,
+            "sensitive": False,
         },
         {
             "key": "sensor.yaml_gone",
@@ -1197,7 +1199,39 @@ async def test_config_get_lists_missing_keys_with_where_they_are_stored(
             "read": True,
             "control": False,
             "restricted": False,
+            "sensitive": False,
         },
+    ]
+
+
+async def test_config_get_shows_a_key_that_only_has_a_mark(
+    hass, setup_entry, entity_registry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """A confirmation mark whose entity is gone must be removable from the panel."""
+    hass.config_entries.async_update_entry(
+        setup_entry,
+        options={
+            OPT_SENSITIVE: {
+                "lock.yaml_gone": {"confirm": True, "refuse_automatic": True}
+            }
+        },
+    )
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+    )
+    result = (await client.receive_json())["result"]
+
+    assert result["missing"] == [
+        {
+            "key": "lock.yaml_gone",
+            "entity_id": "lock.yaml_gone",
+            "read": False,
+            "control": False,
+            "restricted": False,
+            "sensitive": True,
+        }
     ]
 
 
@@ -1233,6 +1267,7 @@ async def test_config_get_shows_a_key_a_registry_entity_took_as_missing(
             "read": False,
             "control": True,
             "restricted": True,
+            "sensitive": False,
         }
     ]
 
