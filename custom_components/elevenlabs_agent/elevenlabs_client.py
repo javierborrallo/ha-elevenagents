@@ -69,6 +69,18 @@ def async_get_client(hass: HomeAssistant, api_key: str) -> AsyncElevenLabs:
     return AsyncElevenLabs(api_key=api_key, httpx_client=get_async_client(hass))
 
 
+def _import_type_adapter() -> None:
+    """Resolve pydantic.TypeAdapter to cache it in pydantic's namespace."""
+    import pydantic  # noqa: PLC0415
+
+    pydantic.TypeAdapter  # noqa: B018
+
+
+async def async_warm_up(hass: HomeAssistant) -> None:
+    """Resolve the SDK's lazy pydantic import off the event loop, once per process."""
+    await hass.async_add_executor_job(_import_type_adapter)
+
+
 async def async_get_signed_url(client: AsyncElevenLabs, agent_id: str) -> str:
     """Return a signed WebSocket URL for one conversation with the agent."""
     try:
