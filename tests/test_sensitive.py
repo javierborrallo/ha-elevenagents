@@ -463,6 +463,19 @@ def test_end_event_conversation_ignores_an_unknown_id() -> None:
     assert gate.event_conversations == {}
 
 
+def test_ending_an_event_conversation_prunes_expired_ones() -> None:
+    """A finished turn clears ids past their grace window, even with no marks."""
+    gate = Gate()
+    gate.register_event_conversation("old")
+    gate.end_event_conversation("old", now=100.0)
+    gate.register_event_conversation("new")
+    gate.end_event_conversation(
+        "new", now=100.0 + EVENT_CONVERSATION_GRACE_SECONDS + 1.0
+    )
+    assert "old" not in gate.event_conversations
+    assert "new" in gate.event_conversations
+
+
 def test_a_running_event_conversation_has_no_expiry_and_is_never_pruned() -> None:
     """Expiry None means the turn is still running: check must never prune it."""
     gate = Gate(event_conversations={"ev1": None})

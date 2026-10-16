@@ -168,11 +168,16 @@ class Gate:
         self.event_conversations[conversation_id] = None
 
     def end_event_conversation(self, conversation_id: str, now: float) -> None:
-        """Start the grace window during which a finished turn's id still counts."""
+        """
+        Start the grace window during which a finished turn's id still counts.
+
+        Drop ended ids whose grace window has passed.
+        """
         if conversation_id in self.event_conversations:
             self.event_conversations[conversation_id] = (
                 now + EVENT_CONVERSATION_GRACE_SECONDS
             )
+        self._prune_event_conversations(now)
 
     def _prune_event_conversations(self, now: float) -> None:
         """Drop ended event conversations whose grace window has passed."""
