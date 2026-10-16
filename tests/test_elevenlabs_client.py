@@ -15,6 +15,7 @@ from custom_components.elevenlabs_agent.elevenlabs_client import (
     ElevenLabsError,
     ElevenLabsNotFoundError,
     ElevenLabsScopeError,
+    _import_type_adapter,
     async_create_tool,
     async_delete_tool,
     async_get_agent,
@@ -25,6 +26,7 @@ from custom_components.elevenlabs_agent.elevenlabs_client import (
     async_list_tools,
     async_patch_agent,
     async_update_tool,
+    async_warm_up,
 )
 
 _TOOL_CONFIG = {
@@ -214,3 +216,21 @@ async def test_get_signed_url_translates_a_refused_key() -> None:
 
     with pytest.raises(ElevenLabsAuthError):
         await async_get_signed_url(cast("Any", client), "agent_1")
+
+
+def test_import_type_adapter_caches_the_lazy_attribute() -> None:
+    """The warm-up caches TypeAdapter so a later access runs no import."""
+    import pydantic
+
+    vars(pydantic).pop("TypeAdapter", None)
+    _import_type_adapter()
+    assert "TypeAdapter" in vars(pydantic)
+
+
+async def test_warm_up_caches_the_lazy_attribute(hass) -> None:
+    """async_warm_up caches TypeAdapter off the event loop."""
+    import pydantic
+
+    vars(pydantic).pop("TypeAdapter", None)
+    await async_warm_up(hass)
+    assert "TypeAdapter" in vars(pydantic)

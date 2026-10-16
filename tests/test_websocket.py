@@ -28,6 +28,7 @@ from custom_components.elevenlabs_agent.const import (
     OPT_CONTROL_ENTITIES,
     OPT_EXCEPTIONS,
     OPT_READ_ENTITIES,
+    OPT_SENSITIVE,
     TOOL_GET_STATE,
 )
 from custom_components.elevenlabs_agent.elevenlabs_client import (
@@ -490,6 +491,8 @@ async def test_saving_exceptions_fans_out_to_every_key_a_group_resolves_to(
     hass, setup_entry, hass_ws_client: WebSocketGenerator
 ) -> None:
     """A group in the exceptions target gives the same exception to every member."""
+    hass.states.async_set("light.a", "on")
+    hass.states.async_set("light.b", "on")
     hass.states.async_set(
         "group.demo_group", "on", {"entity_id": ["light.a", "light.b"]}
     )
@@ -1188,6 +1191,7 @@ async def test_config_get_lists_missing_keys_with_where_they_are_stored(
             "read": False,
             "control": True,
             "restricted": True,
+            "sensitive": False,
         },
         {
             "key": "sensor.yaml_gone",
@@ -1195,7 +1199,76 @@ async def test_config_get_lists_missing_keys_with_where_they_are_stored(
             "read": True,
             "control": False,
             "restricted": False,
+            "sensitive": False,
         },
+    ]
+
+
+async def test_config_get_shows_a_key_that_only_has_a_mark(
+    hass, setup_entry, entity_registry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """A confirmation mark whose entity is gone must be removable from the panel."""
+    hass.config_entries.async_update_entry(
+        setup_entry,
+        options={
+            OPT_SENSITIVE: {
+                "lock.yaml_gone": {"confirm": True, "refuse_automatic": True}
+            }
+        },
+    )
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+    )
+    result = (await client.receive_json())["result"]
+
+    assert result["missing"] == [
+        {
+            "key": "lock.yaml_gone",
+            "entity_id": "lock.yaml_gone",
+            "read": False,
+            "control": False,
+            "restricted": False,
+            "sensitive": True,
+        }
+    ]
+
+
+async def test_config_get_shows_a_key_a_registry_entity_took_as_missing(
+    hass, setup_entry, entity_registry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The panel must not show the new entity as granted, nor send it back."""
+    taken = entity_registry.async_get_or_create(
+        "lock", "demo", "garage", suggested_object_id="garage"
+    )
+    hass.states.async_set(taken.entity_id, "locked")
+    hass.config_entries.async_update_entry(
+        setup_entry,
+        options={
+            OPT_CONTROL_ENTITIES: ["lock.garage"],
+            OPT_EXCEPTIONS: {"lock.garage": ["lock.open"]},
+        },
+    )
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+    )
+    result = (await client.receive_json())["result"]
+
+    assert result["control_entity_ids"] == []
+    assert result["exception_entity_ids"] == {}
+    assert result["available_actions"] == {}
+    assert result["missing"] == [
+        {
+            "key": "lock.garage",
+            "entity_id": "lock.garage",
+            "read": False,
+            "control": True,
+            "restricted": True,
+            "sensitive": False,
+        }
     ]
 
 
@@ -1441,3 +1514,38 @@ async def test_config_save_refuses_a_bad_event_number_instead_of_crashing(
     assert response["success"] is True
     assert response["result"] == {"outcome": "failed", "detail": "events_out_of_range"}
     assert "event_hourly_limit" not in setup_entry.options
+
+
+async def test_config_save_stores_sensitive_marks_by_key(
+    hass, setup_entry, entity_registry, hass_ws_client
+):
+    """Marks arrive by entity_id and are stored by permission key; the block syncs."""
+    lock = entity_registry.async_get_or_create("lock", "demo", "front")
+    hass.states.async_set(lock.entity_id, "locked")
+    client = await hass_ws_client(hass)
+    with patch(
+        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+    ) as sync:
+        await client.send_json_auto_id(
+            {
+                "type": "elevenlabs_agent/config/save",
+                "entry_id": setup_entry.entry_id,
+                "block": "sensitive",
+                "data": {lock.entity_id: {"confirm": True, "refuse_automatic": False}},
+            }
+        )
+        result = (await client.receive_json())["result"]
+
+    assert result["outcome"] == "ok"
+    assert setup_entry.options["sensitive"] == {
+        lock.id: {"confirm": True, "refuse_automatic": False}
+    }
+    sync.assert_awaited_once()
+
+    await client.send_json_auto_id(
+        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+    )
+    got = (await client.receive_json())["result"]
+    assert got["sensitive_entity_ids"] == {
+        lock.entity_id: {"confirm": True, "refuse_automatic": False}
+    }

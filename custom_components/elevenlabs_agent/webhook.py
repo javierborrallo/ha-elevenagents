@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from aiohttp import web
 from homeassistant.components import webhook
 from homeassistant.helpers.service import async_get_all_descriptions
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_WEBHOOK_ID,
@@ -28,10 +29,13 @@ from .const import (
     OUTCOME_UNCONFIRMED,
     RATE_LIMIT_BURST,
     RATE_LIMIT_PER_SECOND,
+    REASON_CONVERSATION_UNKNOWN,
     SECRET_HEADER,
 )
-from .permissions import authorise_action, authorise_read, from_options
+from .permissions import authorise_action, authorise_read, from_options, permission_key
 from .response import error_fields, malformed, project, read_results, write_result
+from .sensitive import sensitive_mark
+from .tool_sync import service_data_keys
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -39,7 +43,8 @@ if TYPE_CHECKING:
     from aiohttp.web import Request
     from homeassistant.core import HomeAssistant
 
-    from . import ElevenLabsAgentConfigEntry
+    from . import ElevenLabsAgentConfigEntry, RuntimeData
+    from .permissions import Permissions
 
 WEBHOOK_NAME = "ElevenAgents"
 
@@ -114,6 +119,19 @@ def _authenticated_entry(
     return entry
 
 
+async def _body(request: Request) -> bytes | None:
+    """Read the body to its end. Return None when it passes MAX_BODY_BYTES."""
+    stream = request.content
+    pieces: list[bytes] = []
+    size = 0
+    while piece := await stream.read(MAX_BODY_BYTES + 1 - size):
+        size += len(piece)
+        if size > MAX_BODY_BYTES:
+            return None
+        pieces.append(piece)
+    return b"".join(pieces)
+
+
 async def _parsed_json_body(request: Request) -> dict[str, Any] | web.Response:
     """
     Validate the content type and size, then parse the JSON body.
@@ -129,8 +147,8 @@ async def _parsed_json_body(request: Request) -> dict[str, Any] | web.Response:
     if content_length is not None and int(content_length) > MAX_BODY_BYTES:
         return web.Response(status=413)
 
-    body = await request.content.read(MAX_BODY_BYTES + 1)
-    if len(body) > MAX_BODY_BYTES:
+    body = await _body(request)
+    if body is None:
         return web.Response(status=413)
 
     try:
@@ -200,6 +218,20 @@ async def async_read(
 # Service call keys that choose the target. Only entity_id at the top level may do that.
 TARGET_KEYS = frozenset({"entity_id", "device_id", "area_id", "floor_id", "label_id"})
 
+# Markers that open a Home Assistant template.
+TEMPLATE_MARKERS = ("{{", "{%", "{#")
+
+
+def _has_template(value: Any) -> bool:
+    """Return True when a value, or any value nested in it, holds a template marker."""
+    if isinstance(value, str):
+        return any(marker in value for marker in TEMPLATE_MARKERS)
+    if isinstance(value, dict):
+        return any(_has_template(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_has_template(item) for item in value)
+    return False
+
 
 def _parsed_write_payload(
     payload: dict[str, Any],
@@ -223,7 +255,70 @@ def _parsed_write_payload(
     targets = TARGET_KEYS.intersection(service_data)
     if targets:
         return malformed(f"service_data cannot carry {', '.join(sorted(targets))}")
+    if _has_template(service_data):
+        return malformed("service_data cannot carry a template")
     return entity_id, action, service_data
+
+
+def _resolved_conversation_id(raw: Any) -> str | None:
+    """Return the conversation id, or None when missing or an unfilled template."""
+    if not isinstance(raw, str) or not raw or "{{" in raw:
+        return None
+    return raw
+
+
+def _sensitive_answer(
+    hass: HomeAssistant,
+    entry: ElevenLabsAgentConfigEntry,
+    payload: dict[str, Any],
+    target: tuple[str, str, dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Return the gate's answer for a sensitive entity, or None when it may run."""
+    entity_id, action, service_data = target
+    mark = sensitive_mark(entry.options, permission_key(hass, entity_id))
+    if mark is None:
+        return None
+    runtime: RuntimeData | None = getattr(entry, "runtime_data", None)
+    if runtime is None:
+        return write_result(
+            OUTCOME_FAILED,
+            entity_id,
+            action,
+            extra={"error": REASON_CONVERSATION_UNKNOWN},
+        )
+    state = hass.states.get(entity_id)
+    raw_name = (
+        entity_id if state is None else state.attributes.get("friendly_name", entity_id)
+    )
+    code = payload.get("confirmation_code")
+    return runtime.gate.check(
+        mark,
+        conversation_id=_resolved_conversation_id(payload.get("conversation_id")),
+        history=payload.get("conversation_history"),
+        code=str(code) if code else None,
+        entity_id=entity_id,
+        name=str(raw_name),
+        action=action,
+        service_data=service_data,
+        now=dt_util.utcnow().timestamp(),
+    )
+
+
+def _refusal(
+    hass: HomeAssistant,
+    perms: Permissions,
+    descriptions: dict[str, dict[str, Any]],
+    call: tuple[str, str, dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Return the answer that refuses the call, or None when it may go on."""
+    entity_id, action, service_data = call
+    error = authorise_action(hass, perms, entity_id, action, descriptions)
+    if error is not None:
+        return write_result(OUTCOME_FAILED, entity_id, action, extra={"error": error})
+    undeclared = set(service_data) - service_data_keys(descriptions, action)
+    if undeclared:
+        return malformed(f"service_data cannot carry {', '.join(sorted(undeclared))}")
+    return None
 
 
 async def async_write(
@@ -244,9 +339,13 @@ async def async_write(
     perms = from_options(entry.options)
     descriptions = await async_get_all_descriptions(hass)
 
-    error = authorise_action(hass, perms, entity_id, action, descriptions)
-    if error is not None:
-        return write_result(OUTCOME_FAILED, entity_id, action, extra={"error": error})
+    refused = _refusal(hass, perms, descriptions, (entity_id, action, service_data))
+    if refused is not None:
+        return refused
+
+    gated = _sensitive_answer(hass, entry, payload, (entity_id, action, service_data))
+    if gated is not None:
+        return gated
 
     before = hass.states.get(entity_id)
     before_updated = None if before is None else before.last_updated

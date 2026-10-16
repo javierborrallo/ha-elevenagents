@@ -23,10 +23,12 @@ from .elevenlabs_client import (
     async_get_agent,
     async_get_client,
     async_patch_agent,
+    async_warm_up,
 )
 from .events import EventHistory, EventLimiter
 from .expose import async_track_new_entities
 from .panel import async_register_panel
+from .sensitive import Gate, discard_gate, gate_for_entry
 from .services import async_setup_services
 from .status import async_create_check_debouncer
 from .tool_sync import ToolSyncError, async_sync_tools
@@ -61,6 +63,7 @@ class RuntimeData:
     event_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     event_limiter: EventLimiter = field(default_factory=EventLimiter)
     event_history: EventHistory = field(default_factory=EventHistory)
+    gate: Gate = field(default_factory=Gate)
 
 
 type ElevenLabsAgentConfigEntry = ConfigEntry[RuntimeData]
@@ -95,9 +98,13 @@ async def async_setup_entry(
         raise ConfigEntryNotReady from err
 
     client = async_get_client(hass, entry.data[CONF_API_KEY])
+    await async_warm_up(hass)
     debouncer = async_create_check_debouncer(hass, entry)
     entry.runtime_data = RuntimeData(
-        bucket=TokenBucket(), client=client, check_debouncer=debouncer
+        bucket=TokenBucket(),
+        client=client,
+        check_debouncer=debouncer,
+        gate=gate_for_entry(hass, entry.entry_id),
     )
     entry.async_on_unload(debouncer.async_shutdown)
 
@@ -139,6 +146,7 @@ async def async_remove_entry(
     Both steps are best effort and logged. A failure in either one does
     not block the entry from being removed.
     """
+    discard_gate(hass, entry.entry_id)
     stored: dict[str, str] = dict(entry.data.get(CONF_TOOL_IDS, {}))
     if not stored:
         return

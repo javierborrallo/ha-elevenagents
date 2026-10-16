@@ -5,19 +5,26 @@ from __future__ import annotations
 import asyncio
 import hmac
 import json
-from typing import Never
+from datetime import timedelta
+from typing import TYPE_CHECKING, Never
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers.service import async_set_service_schema
+from homeassistant.util import dt as dt_util
 from homeassistant.util.aiohttp import MockRequest
 
 from custom_components.elevenlabs_agent.const import (
     CONF_WEBHOOK_ID,
     CONF_WEBHOOK_SECRET,
+    EVENT_CONVERSATION_GRACE_SECONDS,
     MAX_BODY_BYTES,
     OPT_CONFIRM_TIMEOUT,
     OPT_CONTROL_ENTITIES,
     OPT_READ_ENTITIES,
+    OPT_SENSITIVE,
+    OUTCOME_CONFIRMATION_REQUIRED,
     OUTCOME_DONE,
     OUTCOME_FAILED,
     OUTCOME_NO_CHANGE,
@@ -32,12 +39,32 @@ from custom_components.elevenlabs_agent.webhook import (
     async_write,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
+    from homeassistant.helpers import entity_registry as er
+
 # homeassistant 2026.9.1's http server sets self.app["hass"] as a plain key.
 # aiohttp 3.14.3 raises NotAppKeyWarning for that pattern. pyproject.toml
 # turns every warning into an error, so this module ignores this one category.
 pytestmark = pytest.mark.filterwarnings(
     "ignore::aiohttp.web_exceptions.NotAppKeyWarning"
 )
+
+
+@pytest.fixture
+def no_network_sync():
+    """
+    Keep a debounced registry sync off the network.
+
+    A test that jumps the clock far enough can make the registry's own
+    debounced sync (triggered by creating an entity) look due. Nothing in
+    this module needs that sync to run.
+    """
+    with patch(
+        "custom_components.elevenlabs_agent.expose.async_sync_tools", AsyncMock()
+    ):
+        yield
 
 
 def test_token_bucket_allows_the_burst_then_refuses():
@@ -168,6 +195,53 @@ async def test_oversized_body_is_413(hass, hass_client_no_auth, setup_entry):
             "Content-Type": "application/json",
         },
         data=b"x" * (MAX_BODY_BYTES + 1),
+    )
+
+    assert response.status == 413
+
+
+async def _pieces(body: bytes, size: int) -> AsyncIterator[bytes]:
+    """Yield the body in pieces, with a pause between them."""
+    for start in range(0, len(body), size):
+        yield body[start : start + size]
+        await asyncio.sleep(0.05)
+
+
+async def test_a_body_that_arrives_in_pieces_is_read_whole(
+    hass, hass_client_no_auth, setup_entry
+):
+    """The webhook reads to the end of the body, not the first piece."""
+    client = await hass_client_no_auth()
+    body = json.dumps({"tool": "nonsense", "padding": "x" * 20_000}).encode()
+
+    response = await client.post(
+        f"/api/webhook/{setup_entry.data[CONF_WEBHOOK_ID]}",
+        headers={
+            SECRET_HEADER: setup_entry.data[CONF_WEBHOOK_SECRET],
+            "Content-Type": "application/json",
+        },
+        data=_pieces(body, 4096),
+    )
+
+    assert response.status == 200
+    detail = json.loads(await response.text())["detail"]
+    assert detail != "body is not valid JSON"
+
+
+async def test_an_oversized_body_in_pieces_is_413(
+    hass, hass_client_no_auth, setup_entry
+):
+    """A body without Content-Length is refused once it passes the limit."""
+    client = await hass_client_no_auth()
+    body = b"x" * (MAX_BODY_BYTES + 1)
+
+    response = await client.post(
+        f"/api/webhook/{setup_entry.data[CONF_WEBHOOK_ID]}",
+        headers={
+            SECRET_HEADER: setup_entry.data[CONF_WEBHOOK_SECRET],
+            "Content-Type": "application/json",
+        },
+        data=_pieces(body, 64 * 1024),
     )
 
     assert response.status == 413
@@ -344,6 +418,7 @@ async def test_write_that_changes_only_an_attribute_is_still_done(
         )
 
     hass.services.async_register("climate", "set_temperature", set_temperature)
+    async_set_service_schema(hass, "climate", "set_temperature", TEMPERATURE_SCHEMA)
     hass.config_entries.async_update_entry(
         config_entry, options={OPT_CONTROL_ENTITIES: [thermostat.id]}
     )
@@ -413,6 +488,7 @@ async def test_write_validation_error_relays_the_translation_key(
         )
 
     hass.services.async_register("climate", "set_temperature", set_temperature)
+    async_set_service_schema(hass, "climate", "set_temperature", TEMPERATURE_SCHEMA)
     hass.config_entries.async_update_entry(
         config_entry, options={OPT_CONTROL_ENTITIES: [thermostat.id]}
     )
@@ -451,6 +527,205 @@ async def test_write_to_an_unselected_entity_is_failed_not_found(
     assert body["error"] == "not_found"
 
 
+async def _sensitive_lock(
+    hass, setup_entry, entity_registry, mark
+) -> tuple[er.RegistryEntry, list[object]]:
+    """Register a sensitive lock and return it with its recorded unlock calls."""
+    lock = entity_registry.async_get_or_create("lock", "demo", "front")
+    hass.states.async_set(lock.entity_id, "locked", {"friendly_name": "Puerta"})
+    calls: list[object] = []
+
+    async def unlock(call) -> None:
+        calls.append(call)
+        hass.states.async_set(lock.entity_id, "unlocked", {"friendly_name": "Puerta"})
+
+    hass.services.async_register("lock", "unlock", unlock)
+    hass.config_entries.async_update_entry(
+        setup_entry,
+        options={OPT_CONTROL_ENTITIES: [lock.id], OPT_SENSITIVE: {lock.id: mark}},
+    )
+    return lock, calls
+
+
+def _payload(entity_id: str, **extra: object) -> dict[str, object]:
+    return {
+        "tool": "call_service",
+        "entity_id": entity_id,
+        "action": "lock.unlock",
+        **extra,
+    }
+
+
+async def test_a_sensitive_action_asks_first_and_runs_after_the_user_confirms(
+    hass, setup_entry, entity_registry
+):
+    """A confirmed action runs once the user's own turn carries the code back."""
+    lock, calls = await _sensitive_lock(
+        hass, setup_entry, entity_registry, {"confirm": True, "refuse_automatic": True}
+    )
+
+    first = await async_write(
+        hass, setup_entry, _payload(lock.entity_id, conversation_id="c1")
+    )
+    assert first["outcome"] == OUTCOME_CONFIRMATION_REQUIRED
+    assert calls == []
+
+    code = first["confirmation_code"]
+    history = json.dumps(
+        {
+            "entries": [
+                {
+                    "role": "agent",
+                    "tool_results": [{"result_value": json.dumps(first)}],
+                },
+                {"role": "agent", "message": "¿Abro la puerta?"},
+                {"role": "user", "message": "sí"},
+            ]
+        }
+    )
+    second = await async_write(
+        hass,
+        setup_entry,
+        _payload(
+            lock.entity_id,
+            conversation_id="c1",
+            conversation_history=history,
+            confirmation_code=code,
+        ),
+    )
+    assert second["outcome"] == OUTCOME_DONE
+    assert len(calls) == 1
+
+
+async def test_a_sensitive_action_without_a_conversation_id_is_refused(
+    hass, setup_entry, entity_registry
+):
+    """Tools not synced yet carry no conversation_id, so the action is refused."""
+    lock, calls = await _sensitive_lock(
+        hass, setup_entry, entity_registry, {"confirm": True, "refuse_automatic": True}
+    )
+
+    body = await async_write(hass, setup_entry, _payload(lock.entity_id))
+
+    assert body["error"] == "conversation_unknown"
+    assert calls == []
+
+
+async def test_an_ordinary_entity_needs_no_conversation_id(
+    hass, setup_entry, entity_registry
+):
+    """A non-sensitive entity is untouched by the missing conversation_id."""
+    lock, _calls = await _sensitive_lock(
+        hass, setup_entry, entity_registry, {"confirm": True, "refuse_automatic": True}
+    )
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_CONTROL_ENTITIES: [lock.id]}
+    )
+
+    body = await async_write(hass, setup_entry, _payload(lock.entity_id))
+
+    assert body["outcome"] == OUTCOME_DONE
+
+
+async def test_an_event_turn_is_refused_on_a_sensitive_entity(
+    hass, setup_entry, entity_registry
+):
+    """An automatic turn may not act on a sensitive entity when refuse is on."""
+    lock, calls = await _sensitive_lock(
+        hass, setup_entry, entity_registry, {"confirm": True, "refuse_automatic": True}
+    )
+    setup_entry.runtime_data.gate.register_event_conversation("ev1")
+
+    body = await async_write(
+        hass, setup_entry, _payload(lock.entity_id, conversation_id="ev1")
+    )
+
+    assert body["error"] == "not_allowed_without_a_person"
+    assert calls == []
+
+
+async def test_an_unresolved_conversation_id_placeholder_is_unknown(
+    hass, setup_entry, entity_registry
+):
+    """A template the platform failed to fill must not pass as a real conversation."""
+    lock, calls = await _sensitive_lock(
+        hass, setup_entry, entity_registry, {"confirm": True, "refuse_automatic": True}
+    )
+
+    body = await async_write(
+        hass,
+        setup_entry,
+        _payload(lock.entity_id, conversation_id="{{system__conversation_id}}"),
+    )
+
+    assert body["error"] == "conversation_unknown"
+    assert calls == []
+
+
+async def test_a_tool_call_shortly_after_the_turn_is_still_an_event_turn(
+    hass, setup_entry, entity_registry, freezer, no_network_sync
+):
+    """The grace window keeps a finished event turn's id recognised briefly."""
+    lock, calls = await _sensitive_lock(
+        hass, setup_entry, entity_registry, {"confirm": True, "refuse_automatic": True}
+    )
+    gate = setup_entry.runtime_data.gate
+    gate.register_event_conversation("ev1")
+    gate.end_event_conversation("ev1", dt_util.utcnow().timestamp())
+
+    freezer.tick(timedelta(seconds=10))
+
+    body = await async_write(
+        hass, setup_entry, _payload(lock.entity_id, conversation_id="ev1")
+    )
+
+    assert body["error"] == "not_allowed_without_a_person"
+    assert calls == []
+
+
+async def test_a_tool_call_past_the_grace_window_is_no_longer_an_event_turn(
+    hass, setup_entry, entity_registry, freezer, no_network_sync
+):
+    """Past the grace window the id is pruned and the usual rules apply."""
+    lock, calls = await _sensitive_lock(
+        hass, setup_entry, entity_registry, {"confirm": True, "refuse_automatic": True}
+    )
+    gate = setup_entry.runtime_data.gate
+    gate.register_event_conversation("ev1")
+    gate.end_event_conversation("ev1", dt_util.utcnow().timestamp())
+
+    freezer.tick(timedelta(seconds=EVENT_CONVERSATION_GRACE_SECONDS + 1))
+
+    body = await async_write(
+        hass, setup_entry, _payload(lock.entity_id, conversation_id="ev1")
+    )
+
+    assert body["outcome"] == OUTCOME_CONFIRMATION_REQUIRED
+    assert calls == []
+    assert "ev1" not in gate.event_conversations
+
+
+async def test_an_event_conversation_survives_an_entry_reload(
+    hass, setup_entry, entity_registry
+):
+    """The gate lives outside RuntimeData, so a reload does not forget it."""
+    lock, calls = await _sensitive_lock(
+        hass, setup_entry, entity_registry, {"confirm": False, "refuse_automatic": True}
+    )
+    setup_entry.runtime_data.gate.register_event_conversation("ev1")
+
+    with patch("custom_components.elevenlabs_agent.async_sync_tools", AsyncMock()):
+        assert await hass.config_entries.async_reload(setup_entry.entry_id)
+        await hass.async_block_till_done()
+
+    body = await async_write(
+        hass, setup_entry, _payload(lock.entity_id, conversation_id="ev1")
+    )
+
+    assert body["error"] == "not_allowed_without_a_person"
+    assert calls == []
+
+
 @pytest.mark.parametrize(
     "key", ["entity_id", "device_id", "area_id", "floor_id", "label_id"]
 )
@@ -485,3 +760,94 @@ async def test_service_data_cannot_retarget_the_call(
 
     assert body["error"] == "malformed_request"
     assert calls == []
+
+
+TEMPERATURE_SCHEMA = {
+    "target": {"entity": [{"domain": ["climate"]}]},
+    "fields": {"temperature": {"selector": {"number": {}}}},
+}
+
+
+async def _granted_light(hass, config_entry, entity_registry) -> tuple[str, list]:
+    """Register one controlled light with a described turn_on and return its calls."""
+    light = entity_registry.async_get_or_create("light", "demo", "granted")
+    hass.states.async_set(light.entity_id, "off")
+    calls: list[object] = []
+
+    async def turn_on(call) -> None:
+        calls.append(call)
+
+    hass.services.async_register("light", "turn_on", turn_on)
+    async_set_service_schema(
+        hass,
+        "light",
+        "turn_on",
+        {
+            "target": {"entity": [{"domain": ["light"]}]},
+            "fields": {
+                "brightness": {"selector": {"number": {}}},
+                "group_members": {"selector": {"entity": {}}},
+            },
+        },
+    )
+    hass.config_entries.async_update_entry(
+        config_entry, options={OPT_CONTROL_ENTITIES: [light.id]}
+    )
+    return light.entity_id, calls
+
+
+def _turn_on(entity_id: str, service_data: dict[str, object]) -> dict[str, object]:
+    return {
+        "tool": "call_service",
+        "entity_id": entity_id,
+        "action": "light.turn_on",
+        "service_data": service_data,
+    }
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "{{ states('lock.front') }}",
+        "{% if true %}x{% endif %}",
+        "{# note #}",
+        ["{{ 1 }}"],
+        {"nested": "{{ 1 }}"},
+    ],
+)
+async def test_service_data_cannot_carry_a_template(
+    hass, config_entry, entity_registry, value
+):
+    """Home Assistant would render a template with every state in reach."""
+    entity_id, calls = await _granted_light(hass, config_entry, entity_registry)
+
+    body = await async_write(
+        hass, config_entry, _turn_on(entity_id, {"brightness": value})
+    )
+
+    assert body["error"] == "malformed_request"
+    assert calls == []
+
+
+async def test_service_data_keys_must_be_declared_scalars(
+    hass, config_entry, entity_registry
+):
+    """A key the tool schema does not declare is refused before the call."""
+    entity_id, calls = await _granted_light(hass, config_entry, entity_registry)
+
+    body = await async_write(
+        hass,
+        config_entry,
+        _turn_on(entity_id, {"group_members": ["light.other"]}),
+    )
+    assert body["error"] == "malformed_request"
+
+    body = await async_write(hass, config_entry, _turn_on(entity_id, {"spare": 1}))
+    assert body["error"] == "malformed_request"
+    assert calls == []
+
+    body = await async_write(
+        hass, config_entry, _turn_on(entity_id, {"brightness": 120})
+    )
+    assert body["outcome"] != "failed"
+    assert len(calls) == 1

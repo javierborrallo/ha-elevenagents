@@ -61,7 +61,7 @@ before anything else happens, and your agent, picked from the list read back fro
 account.
 
 Nothing is exposed yet. The closing message links to the configuration panel, which is also
-what **Configure** opens on the integration page. The first time, the panel walks six steps:
+what **Configure** opens on the integration page. The first time, the panel walks seven steps:
 
 1. **Agent settings** — the opening line, how long an action waits to be confirmed, and
    whether the agent speaks before it acts.
@@ -70,10 +70,12 @@ what **Configure** opens on the integration page. The first time, the panel walk
 3. **Read** — the entities the agent may read.
 4. **Control** — the entities it may act on.
 5. **Restrictions** — actions to take back from a controlled entity. Skippable.
-6. **Automatic exposure** — what happens to entities you add to Home Assistant later.
+6. **Confirm actions** — devices the agent must not move without a confirmation. Skippable. See
+   [Sensitive devices](#sensitive-devices).
+7. **Automatic exposure** — what happens to entities you add to Home Assistant later.
 
 Afterwards the panel opens on a page of cards instead of the wizard: the agent's prompt,
-settings and rotations, and the four entity screens, each behind its own row.
+settings and rotations, and the five entity screens, each behind its own row.
 
 The integration creates two tools in your agent, `ha_get_state` and `ha_call_service`, and
 keeps their schemas aligned with your selection. Both point at one webhook, secured with a
@@ -106,7 +108,9 @@ shows it.
 selected for control. It accepts several entities in one call.
 
 `ha_call_service` acts. It carries only the entities you selected for control, and only the
-actions those entities accept, minus anything you removed.
+actions those entities accept, minus anything you removed. Actions that write a file —
+`camera.snapshot`, `camera.record` and `image.snapshot` — are never offered: Home Assistant
+can write them to the `www` folder, which anyone can download from without a password.
 
 An entity you did not select does not appear in either schema, and the server answers
 `not_found` if the agent asks for it anyway — the same answer it gives for an entity that
@@ -145,13 +149,16 @@ the agent to read the state instead of repeating the command.
 **An entity outside the entity registry is identified by its `entity_id`.** Entities from
 YAML, from templates and from groups enter the registry only when they declare a `unique_id`.
 Without one, a rename is a deletion followed by a new entity: the permission stays on the old
-name, and any entity that later takes that name receives it. The panel marks these entities
-**No unique_id**.
+name, and any entity outside the registry that later takes that name receives it. An entity
+inside the registry never does. The panel marks these entities **No unique_id**.
 
 When one disappears, the integration cannot tell a deletion from a reload, so it removes nothing
 by itself. If the entity is still gone ten seconds later, a repair issue lists it, and the panel
 shows it under **Missing entities**, where you remove its permissions. Ignore the issue to keep
-them. Add a `unique_id` and the entity is followed like any other.
+them.
+
+Add a `unique_id` and the entity enters the registry as a new entity. Its old permissions show
+under **Missing entities**; grant it again and it is followed like any other.
 
 ## The recommended prompt block
 
@@ -224,6 +231,9 @@ Every action comes back with an `outcome`. Decide what to say from that field:
 4. `failed` — nothing ran. Say the action did not go through and give the reason in your
    own words. When the reason is `action_not_allowed`, the entity is reachable but that
    action is not permitted. When it is `not_found`, follow the rule under *After a read*.
+5. `confirmation_required` — nothing ran. Ask the user to confirm this action on this device, in
+   their own words. If the user confirms, call `ha_call_service` again with the same entity,
+   action and data, and the `confirmation_code`. If not, do nothing.
 
 ## Anything else
 
@@ -231,6 +241,35 @@ A response carrying `"error": "malformed_request"` means the request itself was 
 Tell the user it could not be understood, and move on. The `detail` field is for
 diagnosis; keep it to yourself.
 ```
+
+## Sensitive devices
+
+Some devices should not move on a misheard word: a lock, an alarm, a garage door. In the panel,
+**Confirm actions** lists every device the agent controls. Tick **Requires confirmation** on such a
+device. Two options appear, both on by default.
+
+- **In conversations, ask before acting.** The first call to act on the device runs nothing.
+  The agent hears back `confirmation_required` and a code, and asks you to confirm. If you confirm,
+  it repeats the call with the code and the action runs.
+- **In automatic events, refuse.** A turn started by `send_event` has no person in it, so
+  nobody can confirm. With this option on, the agent cannot act on the device from an event.
+
+The agent asks, but Home Assistant decides. The repeated call runs only if it comes from the same
+conversation, within 60 seconds, for the same device, action and data, and only if you spoke after
+the agent asked. A code the agent invents, reuses or carries to another device is refused.
+
+A device that requires confirmation with both options off is not protected. The panel warns you.
+
+If you stop letting the agent control a device, its confirmation setting is kept. The agent cannot
+touch the device anyway, and the setting is back in place if you give control again.
+
+The mark belongs to one entity. If the agent controls a script, scene or group that moves a marked
+device, a call to that script, scene or group runs without asking. Mark it too, or do not give the
+agent control of it.
+
+While any device asks for confirmation, every action the agent takes sends the conversation so far
+to Home Assistant, which reads it to check that you spoke. Home Assistant refuses a request larger
+than 256 KiB, so in a very long conversation every action fails until a new conversation starts.
 
 ## Events
 

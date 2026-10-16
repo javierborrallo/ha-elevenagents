@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.target import (
     TargetSelection,
@@ -22,9 +23,11 @@ from homeassistant.helpers.target import (
 from .const import (
     ERROR_ACTION_NOT_ALLOWED,
     ERROR_NOT_FOUND,
+    FILE_WRITING_SERVICES,
     OPT_CONTROL_ENTITIES,
     OPT_EXCEPTIONS,
     OPT_READ_ENTITIES,
+    OPT_SENSITIVE,
 )
 
 if TYPE_CHECKING:
@@ -55,14 +58,24 @@ def from_options(options: Mapping[str, Any]) -> Permissions:
 
 
 def resolve_target(hass: HomeAssistant, target: dict[str, Any]) -> set[str]:
-    """Resolve a target selector value to permission keys."""
+    """
+    Resolve a target selector value to permission keys.
+
+    A group gives the keys of its members. A member with no state and no
+    registry entry gives no key. A selected entity_id gives its key even
+    when it holds no state.
+    """
     selected = async_extract_referenced_entity_ids(hass, TargetSelection(target))
     entities = er.async_get(hass)
+    requested = set(cv.ensure_list(target.get("entity_id")))
 
     resolved: set[str] = set()
     for entity_id in selected.referenced | selected.indirectly_referenced:
         entry = entities.async_get(entity_id)
-        resolved.add(entity_id if entry is None else entry.id)
+        if entry is not None:
+            resolved.add(entry.id)
+        elif entity_id in requested or hass.states.get(entity_id) is not None:
+            resolved.add(entity_id)
     return resolved
 
 
@@ -83,21 +96,25 @@ def entity_id_for(hass: HomeAssistant, key: str) -> str | None:
     """
     Return the entity_id a permission key points to.
 
-    A registry key whose entry is gone returns None. A key that is itself
-    an entity_id returns unchanged.
+    A registry key whose entry is gone returns None. An entity_id key
+    returns unchanged, or None when a registry entity has that entity_id.
     """
-    entry = er.async_get(hass).entities.get_entry(key)
+    registry = er.async_get(hass)
+    entry = registry.entities.get_entry(key)
     if entry is not None:
         return entry.entity_id
-    return key if "." in key else None
+    if "." not in key or registry.async_get(key) is not None:
+        return None
+    return key
 
 
 def stored_keys(options: Mapping[str, Any]) -> set[str]:
-    """Return every permission key in the two lists and the exceptions."""
+    """Return every permission key in the lists, exceptions and marks."""
     return (
         set(options.get(OPT_READ_ENTITIES, ()))
         | set(options.get(OPT_CONTROL_ENTITIES, ()))
         | set(options.get(OPT_EXCEPTIONS, {}))
+        | set(options.get(OPT_SENSITIVE, {}))
     )
 
 
@@ -106,11 +123,13 @@ def is_missing(hass: HomeAssistant, key: str) -> bool:
     Return True when the entity a permission key names does not exist now.
 
     A registry key is missing when its registry entry is gone. An entity_id
-    key is missing when it holds no state.
+    key is missing when it holds no state or a registry entity has that
+    entity_id.
     """
+    registry = er.async_get(hass)
     if "." in key:
-        return hass.states.get(key) is None
-    return er.async_get(hass).entities.get_entry(key) is None
+        return hass.states.get(key) is None or registry.async_get(key) is not None
+    return registry.entities.get_entry(key) is None
 
 
 def missing_keys(hass: HomeAssistant, options: Mapping[str, Any]) -> set[str]:
@@ -129,7 +148,7 @@ def removed_registry_keys(hass: HomeAssistant, options: Mapping[str, Any]) -> se
 
 
 def without_keys(options: Mapping[str, Any], keys: Iterable[str]) -> dict[str, Any]:
-    """Return a copy of options with keys dropped from both lists and the exceptions."""
+    """Return a copy of options with keys dropped from lists, exceptions and marks."""
     drop = set(keys)
     result = dict(options)
     for list_key in (OPT_READ_ENTITIES, OPT_CONTROL_ENTITIES):
@@ -141,27 +160,10 @@ def without_keys(options: Mapping[str, Any], keys: Iterable[str]) -> dict[str, A
             for key, services in result[OPT_EXCEPTIONS].items()
             if key not in drop
         }
-    return result
-
-
-def rekey(options: Mapping[str, Any], old_key: str, new_key: str) -> dict[str, Any]:
-    """
-    Return a copy of options with one key renamed in both lists and the exceptions.
-
-    Used when an entity_id key gains a unique_id and enters the registry
-    under a new id: the permission must follow the entity, not stay on a
-    name it no longer answers to.
-    """
-    result = dict(options)
-    for list_key in (OPT_READ_ENTITIES, OPT_CONTROL_ENTITIES):
-        if list_key in result and old_key in result[list_key]:
-            result[list_key] = sorted(
-                {new_key if key == old_key else key for key in result[list_key]}
-            )
-    if OPT_EXCEPTIONS in result and old_key in result[OPT_EXCEPTIONS]:
-        exceptions = dict(result[OPT_EXCEPTIONS])
-        exceptions[new_key] = exceptions.pop(old_key)
-        result[OPT_EXCEPTIONS] = exceptions
+    if OPT_SENSITIVE in result:
+        result[OPT_SENSITIVE] = {
+            key: mark for key, mark in result[OPT_SENSITIVE].items() if key not in drop
+        }
     return result
 
 
@@ -178,6 +180,11 @@ def _key_for(hass: HomeAssistant, entity_id: str) -> str | None:
     return entity_id if hass.states.get(entity_id) is not None else None
 
 
+def permission_key(hass: HomeAssistant, entity_id: str) -> str | None:
+    """Return the permission key of an entity_id, or None when it has none."""
+    return _key_for(hass, entity_id)
+
+
 def granted_services(
     hass: HomeAssistant,
     perms: Permissions,
@@ -188,7 +195,8 @@ def granted_services(
     Return the services a controlled entity accepts, less its exceptions.
 
     Only services of the entity's own domain are considered. Cross-domain
-    services such as homeassistant.turn_off are never offered.
+    services such as homeassistant.turn_off are never offered. Services
+    that write a file are never offered.
     """
     entity_id = entity_id_for(hass, key)
     if entity_id is None:
@@ -209,7 +217,7 @@ def granted_services(
         if any(matches_supported_features(features, one) for one in filters):
             granted.add(f"{domain}.{service}")
 
-    return granted - set(perms.exceptions.get(key, ()))
+    return granted - FILE_WRITING_SERVICES - set(perms.exceptions.get(key, ()))
 
 
 def authorise_read(

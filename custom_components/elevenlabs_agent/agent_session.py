@@ -19,6 +19,8 @@ from .elevenlabs_client import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from elevenlabs import AsyncElevenLabs
     from homeassistant.core import HomeAssistant
 
@@ -81,6 +83,7 @@ class _TurnState:
     sent: bool = False
     last_content: float | None = None
     pending_tools: set[str] = field(default_factory=set)
+    on_started: Callable[[str], None] | None = None
 
 
 def _idle_wait(state: _TurnState, remaining: float, now: float) -> float:
@@ -110,7 +113,14 @@ async def _apply_frame(
         )
     elif kind == "conversation_initiation_metadata":
         event = payload.get("conversation_initiation_metadata_event", {})
-        state.result.conversation_id = event.get("conversation_id")
+        conversation_id = event.get("conversation_id")
+        # A start frame without an id ends the turn before the user message.
+        if not isinstance(conversation_id, str) or not conversation_id:
+            reason = "protocol"
+            raise SessionError(reason)
+        state.result.conversation_id = conversation_id
+        if state.on_started is not None:
+            state.on_started(conversation_id)
         if not state.sent:
             await ws.send_json({"type": "user_message", "text": text})
             state.sent = True
@@ -121,12 +131,12 @@ async def _apply_frame(
             )
             state.last_content = loop.time()
     elif kind == "agent_tool_request":
-        event = payload.get("agent_tool_request_event") or {}
+        event = payload.get("agent_tool_request") or {}
         tool_id = _tool_id(event)
         if tool_id is not None:
             state.pending_tools.add(tool_id)
     elif kind == "agent_tool_response":
-        event = payload.get("agent_tool_response_event") or {}
+        event = payload.get("agent_tool_response") or {}
         state.result.tools.append(
             {
                 "tool_name": event.get("tool_name"),
@@ -140,11 +150,15 @@ async def _apply_frame(
     return False
 
 
-async def _collect(ws: aiohttp.ClientWebSocketResponse, text: str) -> TurnResult:
+async def _collect(
+    ws: aiohttp.ClientWebSocketResponse,
+    text: str,
+    on_started: Callable[[str], None] | None,
+) -> TurnResult:
     """Send the user message after the metadata, then read until the turn ends."""
     loop = asyncio.get_running_loop()
     deadline = loop.time() + TURN_MAX_SECONDS
-    state = _TurnState()
+    state = _TurnState(on_started=on_started)
     while True:
         remaining = deadline - loop.time()
         if remaining <= 0:
@@ -181,18 +195,21 @@ def _handshake_reason(err: aiohttp.WSServerHandshakeError) -> str:
     return "unreachable"
 
 
-async def async_run_turn(
+async def async_run_turn(  # noqa: PLR0913 - each argument is part of one turn
     hass: HomeAssistant,
     client: AsyncElevenLabs,
     agent_id: str,
     text: str,
     dynamic_variables: dict[str, Any],
+    *,
+    on_started: Callable[[str], None] | None = None,
 ) -> TurnResult:
     """
     Open a text-only conversation, send one user message, return the turn.
 
     Raise SessionError when the conversation cannot start or closes before
-    the agent answers.
+    the agent answers. on_started, when given, is called with the
+    conversation id as soon as it is known, before the user message is sent.
     """
     try:
         url = await async_get_signed_url(client, agent_id)
@@ -214,7 +231,7 @@ async def async_run_turn(
                     "dynamic_variables": dynamic_variables,
                 }
             )
-            return await _collect(ws, text)
+            return await _collect(ws, text, on_started)
     except TimeoutError as err:
         reason = "unreachable"
         raise SessionError(reason) from err

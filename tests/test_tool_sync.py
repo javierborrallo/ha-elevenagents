@@ -20,6 +20,7 @@ from custom_components.elevenlabs_agent.const import (
     OPT_AGENT_SETTINGS,
     OPT_CONFIRM_TIMEOUT,
     OPT_READ_ENTITIES,
+    OPT_SENSITIVE,
     TOOL_CALL_SERVICE,
     TOOL_GET_STATE,
 )
@@ -35,7 +36,9 @@ from custom_components.elevenlabs_agent.tool_sync import (
     ToolSyncError,
     _check_readback,
     _flatten_fields,
+    _scalar_fields,
     agent_settings,
+    async_build_definitions,
     async_sync_tools,
     build_call_service,
     build_get_state,
@@ -221,6 +224,22 @@ def test_field_description_comes_from_translations_not_the_field():
     properties = service_data_properties(descriptions, {"light.turn_on"}, translations)
 
     assert properties["brightness_pct"]["description"] == "Brightness percentage"
+
+
+def test_scalar_fields_keys_each_scalar_to_its_json_type():
+    """One helper decides which fields are scalar and their JSON type."""
+    description = {
+        "fields": {
+            "temperature": {"selector": {"number": {}}},
+            "mode": {"selector": {"select": {}}},
+            "target": {"selector": {"entity": {}}},
+            "note": {"description": "no selector"},
+        }
+    }
+    assert _scalar_fields(description) == {
+        "temperature": "number",
+        "mode": "string",
+    }
 
 
 def test_flatten_fields_descends_into_a_section():
@@ -575,6 +594,47 @@ async def test_attaching_preserves_tools_the_user_added(hass, setup_entry, tool_
     assert set(setup_entry.data[CONF_TOOL_IDS].values()) <= set(attached)
 
 
+def _agent_with_events(events: list[str] | None) -> SimpleNamespace:
+    return SimpleNamespace(
+        platform_settings=None,
+        conversation_config=SimpleNamespace(
+            agent=SimpleNamespace(prompt=SimpleNamespace(tool_ids=[])),
+            conversation=SimpleNamespace(client_events=events),
+        ),
+    )
+
+
+async def test_attaching_adds_the_tool_events_to_the_agent(
+    hass, setup_entry, tool_calls
+):
+    """The PATCH keeps the agent's client events and adds the two tool events."""
+    tool_calls.get_agent.return_value = _agent_with_events(
+        ["audio", "agent_response", "agent_tool_response"]
+    )
+
+    await async_sync_tools(hass, setup_entry, _CLIENT)
+
+    conversation_config = tool_calls.patch_agent.call_args.kwargs["conversation_config"]
+    assert conversation_config["conversation"]["client_events"] == [
+        "audio",
+        "agent_response",
+        "agent_tool_response",
+        "agent_tool_request",
+    ]
+
+
+async def test_attaching_leaves_client_events_alone_without_a_list(
+    hass, setup_entry, tool_calls
+):
+    """An agent without a client event list keeps the platform default."""
+    tool_calls.get_agent.return_value = _agent_with_events(None)
+
+    await async_sync_tools(hass, setup_entry, _CLIENT)
+
+    conversation_config = tool_calls.patch_agent.call_args.kwargs["conversation_config"]
+    assert "conversation" not in conversation_config
+
+
 async def test_attaching_never_drops_a_tool_this_integration_synced_before(
     hass, setup_entry, tool_calls
 ):
@@ -686,7 +746,8 @@ def test_the_write_tool_description_carries_the_never_repeat_rule() -> None:
     """
     assert "unconfirmed" in CALL_SERVICE_DESCRIPTION
     assert "ha_get_state" in CALL_SERVICE_DESCRIPTION
-    assert "Never repeat the action." in CALL_SERVICE_DESCRIPTION
+    rule = "Never repeat an action that returned unconfirmed."
+    assert rule in CALL_SERVICE_DESCRIPTION
 
 
 def test_the_read_tool_description_forbids_inventing_an_entity() -> None:
@@ -920,3 +981,109 @@ def test_action_and_service_data_state_their_limits(hass) -> None:
         "can ignore one it does not support without an error"
         in properties["service_data"]["description"]
     )
+
+
+# --- Task 3 (0.5): confirmation wiring in the tool schema -------------------
+
+
+async def test_call_service_carries_the_conversation_id_and_the_code(hass) -> None:
+    """The platform fills conversation_id; the model fills the code."""
+    perms = Permissions(read=frozenset(), control=frozenset(), exceptions={})
+    config = build_call_service(
+        hass,
+        perms,
+        DESCRIPTIONS,
+        {},
+        "https://example/hook",
+        "sekrit",
+        20,
+        settings=AGENT_SETTING_DEFAULTS,
+    )
+    properties = config["api_schema"]["request_body_schema"]["properties"]
+    conversation_id = properties["conversation_id"]
+
+    assert conversation_id["dynamic_variable"] == "system__conversation_id"
+    assert "confirmation_code" in properties
+    assert "conversation_history" not in properties
+    required = config["api_schema"]["request_body_schema"]["required"]
+    assert "confirmation_code" not in required
+    assert "conversation_id" not in required
+
+
+async def test_call_service_carries_the_history_only_when_asked(hass) -> None:
+    """conversation_history is a property only when some mark asks for confirmation."""
+    perms = Permissions(read=frozenset(), control=frozenset(), exceptions={})
+    config = build_call_service(
+        hass,
+        perms,
+        DESCRIPTIONS,
+        {},
+        "https://example/hook",
+        "sekrit",
+        20,
+        settings=AGENT_SETTING_DEFAULTS,
+        with_history=True,
+    )
+    properties = config["api_schema"]["request_body_schema"]["properties"]
+
+    history = properties["conversation_history"]
+    assert history["dynamic_variable"] == "system__conversation_history"
+
+
+def test_the_write_tool_description_explains_confirmation() -> None:
+    """The model learns the retry rule from the description, not a side channel."""
+    assert "confirmation_required" in CALL_SERVICE_DESCRIPTION
+    assert "confirmation_code" in CALL_SERVICE_DESCRIPTION
+
+
+async def test_conversation_id_and_history_carry_only_the_dynamic_variable(
+    hass,
+) -> None:
+    """
+    No description: a property cannot carry both.
+
+    SDK 2.51's LiteralJsonSchemaProperty makes description and dynamic_variable
+    mutually exclusive. A property carrying both either 422s on sync or lets the
+    platform's "description wins" behaviour hand the field back to the model,
+    defeating the gate. These two system-filled properties must carry only
+    type and dynamic_variable, exactly like the `tool` discriminator.
+    """
+    perms = Permissions(read=frozenset(), control=frozenset(), exceptions={})
+    config = build_call_service(
+        hass,
+        perms,
+        DESCRIPTIONS,
+        {},
+        "https://example/hook",
+        "sekrit",
+        20,
+        settings=AGENT_SETTING_DEFAULTS,
+        with_history=True,
+    )
+    properties = config["api_schema"]["request_body_schema"]["properties"]
+
+    assert properties["conversation_id"] == {
+        "type": "string",
+        "dynamic_variable": "system__conversation_id",
+    }
+    assert properties["conversation_history"] == {
+        "type": "string",
+        "dynamic_variable": "system__conversation_history",
+    }
+
+
+async def test_the_synced_definitions_carry_history_only_when_a_mark_confirms(
+    hass, setup_entry
+) -> None:
+    """async_build_definitions ties with_history to whether any mark confirms."""
+    without_marks = await async_build_definitions(hass, setup_entry)
+    schema = without_marks[TOOL_CALL_SERVICE]["api_schema"]["request_body_schema"]
+    assert "conversation_history" not in schema["properties"]
+
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_SENSITIVE: {"lock.front": {"confirm": True}}}
+    )
+
+    with_marks = await async_build_definitions(hass, setup_entry)
+    schema = with_marks[TOOL_CALL_SERVICE]["api_schema"]["request_body_schema"]
+    assert "conversation_history" in schema["properties"]

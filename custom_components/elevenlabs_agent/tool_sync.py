@@ -35,6 +35,7 @@ from .elevenlabs_client import (
 )
 from .permissions import entity_id_for, from_options, granted_services
 from .repairs import async_check_agent, async_check_timeouts
+from .sensitive import any_confirm
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -47,6 +48,9 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+# Client events that report a tool call on the WebSocket.
+TOOL_CLIENT_EVENTS: Final = ("agent_tool_request", "agent_tool_response")
+
 GET_STATE_DESCRIPTION = (
     "Read the current state of one or more Home Assistant entities. "
     "Call this before answering any question about state. "
@@ -58,7 +62,10 @@ CALL_SERVICE_DESCRIPTION = (
     "Call it only when an entity in the catalogue matches the user's words and "
     "can do what they asked. Otherwise do not call it: tell the user. "
     "If a call returns an outcome of unconfirmed, call ha_get_state to check "
-    "the entity. Never repeat the action."
+    "the entity. Never repeat an action that returned unconfirmed."
+    " If the outcome is confirmation_required, nothing ran: ask the user to confirm "
+    "this action on this device. If the user confirms, call again with the same "
+    "entity_id, action and service_data, and the confirmation_code. If not, do nothing."
 )
 
 # Any selector kind absent from this table is not a scalar. Its key is omitted.
@@ -136,6 +143,25 @@ def entity_catalogue(hass: HomeAssistant, keys: Iterable[str]) -> tuple[list[str
     return [entity_id for entity_id, _ in resolved], "\n".join(lines)
 
 
+def _scalar_fields(description: Mapping[str, Any]) -> dict[str, str]:
+    """Return each scalar field of one service, keyed to its JSON type."""
+    result: dict[str, str] = {}
+    for key, field in _flatten_fields(description.get("fields", {})).items():
+        selector_kind = next(iter(field.get("selector") or {}), None)
+        json_type = _SELECTOR_TYPES.get(selector_kind) if selector_kind else None
+        if json_type is not None:
+            result[key] = json_type
+    return result
+
+
+def service_data_keys(
+    descriptions: Mapping[str, Mapping[str, Any]], action: str
+) -> frozenset[str]:
+    """Return the scalar service_data keys one action declares."""
+    domain, _, service = action.partition(".")
+    return frozenset(_scalar_fields(descriptions.get(domain, {}).get(service, {})))
+
+
 def service_data_properties(
     descriptions: Mapping[str, Mapping[str, Any]],
     actions: Iterable[str],
@@ -156,17 +182,8 @@ def service_data_properties(
     for action in actions:
         domain, _, service = action.partition(".")
         service_description = descriptions.get(domain, {}).get(service, {})
-        fields = _flatten_fields(service_description.get("fields", {}))
 
-        for key, field in fields.items():
-            selector = field.get("selector") or {}
-            selector_kind = next(iter(selector), None)
-            if selector_kind is None:
-                continue
-            json_type = _SELECTOR_TYPES.get(selector_kind)
-            if json_type is None:
-                continue
-
+        for key, json_type in _scalar_fields(service_description).items():
             previous_type = types_seen.get(key)
             if previous_type is not None and previous_type != json_type:
                 omitted.add(key)
@@ -252,7 +269,7 @@ def build_get_state(  # noqa: PLR0913 - a keyword-only settings argument joins t
     }
 
 
-def build_call_service(  # noqa: PLR0913, PLR0917 - the plan fixes this exact signature
+def build_call_service(  # noqa: PLR0913, PLR0917 - each argument is part of the tool
     hass: HomeAssistant,
     perms: Permissions,
     descriptions: Mapping[str, Mapping[str, Any]],
@@ -262,6 +279,7 @@ def build_call_service(  # noqa: PLR0913, PLR0917 - the plan fixes this exact si
     timeout: int,
     *,
     settings: dict[str, Any],
+    with_history: bool = False,
 ) -> dict[str, Any]:
     """Build the ha_call_service tool definition."""
     enum, catalogue = entity_catalogue(hass, perms.control)
@@ -276,7 +294,7 @@ def build_call_service(  # noqa: PLR0913, PLR0917 - the plan fixes this exact si
         actions |= granted_services(hass, perms, key, descriptions)
     properties = service_data_properties(descriptions, actions, translations)
 
-    return {
+    config: dict[str, Any] = {
         "name": TOOL_CALL_SERVICE,
         "type": "webhook",
         "description": CALL_SERVICE_DESCRIPTION,
@@ -318,10 +336,32 @@ def build_call_service(  # noqa: PLR0913, PLR0917 - the plan fixes this exact si
                         ),
                         "properties": properties,
                     },
+                    # The platform fills this property. It carries no description.
+                    "conversation_id": {
+                        "type": "string",
+                        "dynamic_variable": "system__conversation_id",
+                    },
+                    "confirmation_code": {
+                        "type": "string",
+                        "description": (
+                            "The code from a confirmation_required answer. Send it "
+                            "only when repeating an action the user confirmed."
+                        ),
+                    },
                 },
             },
         },
     }
+
+    if with_history:
+        schema = config["api_schema"]["request_body_schema"]
+        # The platform fills this property. It carries no description.
+        schema["properties"]["conversation_history"] = {
+            "type": "string",
+            "dynamic_variable": "system__conversation_history",
+        }
+
+    return config
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
@@ -422,11 +462,28 @@ async def _attach(
         if tool_id not in attached:
             attached.append(tool_id)
 
-    await async_patch_agent(
-        client,
-        agent_id,
-        conversation_config={"agent": {"prompt": {"tool_ids": attached}}},
-    )
+    conversation_config: dict[str, Any] = {"agent": {"prompt": {"tool_ids": attached}}}
+    events = _client_events(agent.conversation_config)
+    if events is not None:
+        conversation_config["conversation"] = {"client_events": events}
+    await async_patch_agent(client, agent_id, conversation_config=conversation_config)
+
+
+def _client_events(conversation_config: Any) -> list[str] | None:
+    """
+    Return the agent's client events plus the tool events, or None.
+
+    None means the agent has no client event list. The platform default stays.
+    """
+    conversation = getattr(conversation_config, "conversation", None)
+    events = getattr(conversation, "client_events", None)
+    if events is None:
+        return None
+    merged = list(events)
+    for event in TOOL_CLIENT_EVENTS:
+        if event not in merged:
+            merged.append(event)
+    return merged
 
 
 async def async_build_definitions(
@@ -461,6 +518,7 @@ async def async_build_definitions(
             secret,
             timeout,
             settings=settings,
+            with_history=any_confirm(entry.options),
         ),
     }
 
