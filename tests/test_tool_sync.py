@@ -36,6 +36,7 @@ from custom_components.elevenlabs_agent.tool_sync import (
     ToolSyncError,
     _check_readback,
     _flatten_fields,
+    _scalar_fields,
     agent_settings,
     async_build_definitions,
     async_sync_tools,
@@ -223,6 +224,22 @@ def test_field_description_comes_from_translations_not_the_field():
     properties = service_data_properties(descriptions, {"light.turn_on"}, translations)
 
     assert properties["brightness_pct"]["description"] == "Brightness percentage"
+
+
+def test_scalar_fields_keys_each_scalar_to_its_json_type():
+    """One helper decides which fields are scalar and their JSON type."""
+    description = {
+        "fields": {
+            "temperature": {"selector": {"number": {}}},
+            "mode": {"selector": {"select": {}}},
+            "target": {"selector": {"entity": {}}},
+            "note": {"description": "no selector"},
+        }
+    }
+    assert _scalar_fields(description) == {
+        "temperature": "number",
+        "mode": "string",
+    }
 
 
 def test_flatten_fields_descends_into_a_section():

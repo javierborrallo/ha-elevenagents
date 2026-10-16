@@ -143,19 +143,23 @@ def entity_catalogue(hass: HomeAssistant, keys: Iterable[str]) -> tuple[list[str
     return [entity_id for entity_id, _ in resolved], "\n".join(lines)
 
 
+def _scalar_fields(description: Mapping[str, Any]) -> dict[str, str]:
+    """Return each scalar field of one service, keyed to its JSON type."""
+    result: dict[str, str] = {}
+    for key, field in _flatten_fields(description.get("fields", {})).items():
+        selector_kind = next(iter(field.get("selector") or {}), None)
+        json_type = _SELECTOR_TYPES.get(selector_kind) if selector_kind else None
+        if json_type is not None:
+            result[key] = json_type
+    return result
+
+
 def service_data_keys(
     descriptions: Mapping[str, Mapping[str, Any]], action: str
 ) -> frozenset[str]:
     """Return the scalar service_data keys one action declares."""
     domain, _, service = action.partition(".")
-    fields = _flatten_fields(
-        descriptions.get(domain, {}).get(service, {}).get("fields", {})
-    )
-    return frozenset(
-        key
-        for key, field in fields.items()
-        if next(iter(field.get("selector") or {}), None) in _SELECTOR_TYPES
-    )
+    return frozenset(_scalar_fields(descriptions.get(domain, {}).get(service, {})))
 
 
 def service_data_properties(
@@ -178,17 +182,8 @@ def service_data_properties(
     for action in actions:
         domain, _, service = action.partition(".")
         service_description = descriptions.get(domain, {}).get(service, {})
-        fields = _flatten_fields(service_description.get("fields", {}))
 
-        for key, field in fields.items():
-            selector = field.get("selector") or {}
-            selector_kind = next(iter(selector), None)
-            if selector_kind is None:
-                continue
-            json_type = _SELECTOR_TYPES.get(selector_kind)
-            if json_type is None:
-                continue
-
+        for key, json_type in _scalar_fields(service_description).items():
             previous_type = types_seen.get(key)
             if previous_type is not None and previous_type != json_type:
                 omitted.add(key)
