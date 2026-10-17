@@ -23,7 +23,6 @@ from .elevenlabs_client import (
     async_get_agent,
     async_get_client,
     async_patch_agent,
-    async_warm_up,
 )
 from .events import EventHistory, EventLimiter
 from .expose import async_track_new_entities
@@ -98,7 +97,6 @@ async def async_setup_entry(
         raise ConfigEntryNotReady from err
 
     client = async_get_client(hass, entry.data[CONF_API_KEY])
-    await async_warm_up(hass)
     debouncer = async_create_check_debouncer(hass, entry)
     entry.runtime_data = RuntimeData(
         bucket=TokenBucket(),

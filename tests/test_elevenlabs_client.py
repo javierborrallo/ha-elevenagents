@@ -26,7 +26,6 @@ from custom_components.elevenagents.elevenlabs_client import (
     async_list_tools,
     async_patch_agent,
     async_update_tool,
-    async_warm_up,
 )
 
 _TOOL_CONFIG = {
@@ -218,19 +217,28 @@ async def test_get_signed_url_translates_a_refused_key() -> None:
         await async_get_signed_url(cast("Any", client), "agent_1")
 
 
+def test_importing_the_client_module_caches_the_lazy_attribute() -> None:
+    """Importing the module caches TypeAdapter. HA imports it in an executor."""
+    import importlib.util
+
+    import pydantic
+
+    from custom_components.elevenagents import elevenlabs_client
+
+    vars(pydantic).pop("TypeAdapter", None)
+    spec = importlib.util.spec_from_file_location(
+        "elevenlabs_client_fresh_copy", elevenlabs_client.__file__
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    spec.loader.exec_module(importlib.util.module_from_spec(spec))
+    assert "TypeAdapter" in vars(pydantic)
+
+
 def test_import_type_adapter_caches_the_lazy_attribute() -> None:
     """The warm-up caches TypeAdapter so a later access runs no import."""
     import pydantic
 
     vars(pydantic).pop("TypeAdapter", None)
     _import_type_adapter()
-    assert "TypeAdapter" in vars(pydantic)
-
-
-async def test_warm_up_caches_the_lazy_attribute(hass) -> None:
-    """async_warm_up caches TypeAdapter off the event loop."""
-    import pydantic
-
-    vars(pydantic).pop("TypeAdapter", None)
-    await async_warm_up(hass)
     assert "TypeAdapter" in vars(pydantic)
