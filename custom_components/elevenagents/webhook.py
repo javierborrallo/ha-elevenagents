@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import json
+import logging
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -21,6 +22,7 @@ from .const import (
     DISCRIMINATOR_GET_STATE,
     DOMAIN,
     ERROR_NOT_FOUND,
+    EVENT_ACTION,
     MAX_BODY_BYTES,
     OPT_CONFIRM_TIMEOUT,
     OUTCOME_DONE,
@@ -45,6 +47,8 @@ if TYPE_CHECKING:
 
     from . import ElevenAgentsConfigEntry, RuntimeData
     from .permissions import Permissions
+
+_LOGGER = logging.getLogger(__name__)
 
 WEBHOOK_NAME = "ElevenAgents"
 
@@ -173,9 +177,11 @@ async def async_handle_webhook(
     """
     entry = _authenticated_entry(hass, webhook_id, request)
     if entry is None:
+        _LOGGER.debug("The webhook refused a request: authentication failed")
         return web.Response(status=401)
 
     if not entry.runtime_data.bucket.take():
+        _LOGGER.debug("The webhook refused a request: rate limit reached")
         return web.Response(status=429)
 
     result = await _parsed_json_body(request)
@@ -187,8 +193,30 @@ async def async_handle_webhook(
     if tool == DISCRIMINATOR_GET_STATE:
         return web.json_response(await async_read(hass, entry, payload))
     if tool == DISCRIMINATOR_CALL_SERVICE:
-        return web.json_response(await async_write(hass, entry, payload))
+        response = await async_write(hass, entry, payload)
+        _fire_action_event(hass, payload, response)
+        return web.json_response(response)
     return web.json_response(malformed(f"unknown tool: {tool!r}"))
+
+
+def _fire_action_event(
+    hass: HomeAssistant, payload: dict[str, Any], result: dict[str, Any]
+) -> None:
+    """Fire EVENT_ACTION with five fields, each picked by name."""
+    entity_id = payload.get("entity_id")
+    action = payload.get("action")
+    hass.bus.async_fire(
+        EVENT_ACTION,
+        {
+            "entity_id": entity_id if isinstance(entity_id, str) else None,
+            "action": action if isinstance(action, str) else None,
+            "outcome": result.get("outcome"),
+            "error": result.get("error"),
+            "conversation_id": _resolved_conversation_id(
+                payload.get("conversation_id")
+            ),
+        },
+    )
 
 
 async def async_read(
@@ -212,6 +240,11 @@ async def async_read(
         projected = project(hass, entity_id)
         results.append(projected or {"entity_id": entity_id, "error": ERROR_NOT_FOUND})
 
+    _LOGGER.debug(
+        "The agent read %s; %d returned an error",
+        [str(entity_id) for entity_id in entity_ids],
+        sum(1 for item in results if "error" in item),
+    )
     return read_results(results)
 
 

@@ -297,6 +297,22 @@ a limit per hour (20; nothing skips it), and a memory window (30 minutes) during
 travel with the next one. A dropped event fires `elevenagents_event_dropped`; one that could not
 be delivered fires `elevenagents_event_failed` and fails the action with the reason.
 
+Every action the agent asks for fires `elevenagents_action` and shows in the logbook as
+"ElevenAgents". The event carries `entity_id`, `action`, `outcome`, `error` and `conversation_id`.
+Reads do not fire it. `service_data` and confirmation codes are never included.
+
+```yaml
+triggers:
+  - trigger: event
+    event_type: elevenagents_action
+    event_data:
+      action: lock.unlock
+actions:
+  - action: notify.notify
+    data:
+      message: "The agent asked to unlock {{ trigger.event.data.entity_id }}: {{ trigger.event.data.outcome }}."
+```
+
 ## Uninstalling
 
 Removing the integration detaches its two tools from your agent and then deletes them from

@@ -18,10 +18,12 @@ from homeassistant.util.aiohttp import MockRequest
 from custom_components.elevenagents.const import (
     CONF_WEBHOOK_ID,
     CONF_WEBHOOK_SECRET,
+    EVENT_ACTION,
     EVENT_CONVERSATION_GRACE_SECONDS,
     MAX_BODY_BYTES,
     OPT_CONFIRM_TIMEOUT,
     OPT_CONTROL_ENTITIES,
+    OPT_EXCEPTIONS,
     OPT_READ_ENTITIES,
     OPT_SENSITIVE,
     OUTCOME_CONFIRMATION_REQUIRED,
@@ -849,3 +851,218 @@ async def test_service_data_keys_must_be_declared_scalars(
     )
     assert body["outcome"] != "failed"
     assert len(calls) == 1
+
+
+ACTION_KEYS = {"entity_id", "action", "outcome", "error", "conversation_id"}
+
+
+def _listen_for_actions(hass) -> list[dict[str, object]]:
+    """Record the data of every elevenagents_action event."""
+    heard: list[dict[str, object]] = []
+    hass.bus.async_listen(EVENT_ACTION, lambda event: heard.append(dict(event.data)))
+    return heard
+
+
+async def _post(hass, client, entry, payload, supplied=None) -> None:
+    """Post one payload to the webhook and let the event bus settle."""
+    await client.post(
+        f"/api/webhook/{entry.data[CONF_WEBHOOK_ID]}",
+        headers={SECRET_HEADER: supplied or entry.data[CONF_WEBHOOK_SECRET]},
+        json=payload,
+    )
+    await hass.async_block_till_done()
+
+
+async def test_a_permitted_action_fires_one_action_event(
+    hass, hass_client_no_auth, setup_entry, entity_registry
+):
+    """The event carries exactly five fields."""
+    light = entity_registry.async_get_or_create("light", "demo", "one")
+    hass.states.async_set(light.entity_id, "off", {"friendly_name": "One"})
+
+    async def turn_on(call) -> None:
+        hass.states.async_set(light.entity_id, "on", {"friendly_name": "One"})
+
+    hass.services.async_register("light", "turn_on", turn_on)
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_CONTROL_ENTITIES: [light.id]}
+    )
+    heard = _listen_for_actions(hass)
+
+    await _post(
+        hass,
+        await hass_client_no_auth(),
+        setup_entry,
+        {
+            "tool": "call_service",
+            "entity_id": light.entity_id,
+            "action": "light.turn_on",
+            "conversation_id": "c1",
+        },
+    )
+
+    assert heard == [
+        {
+            "entity_id": light.entity_id,
+            "action": "light.turn_on",
+            "outcome": OUTCOME_DONE,
+            "error": None,
+            "conversation_id": "c1",
+        }
+    ]
+
+
+async def test_a_refused_action_fires_an_action_event_with_the_error(
+    hass, hass_client_no_auth, setup_entry, entity_registry
+):
+    """A refusal is recorded as failed, with its reason."""
+    lock = entity_registry.async_get_or_create("lock", "demo", "front")
+    hass.states.async_set(lock.entity_id, "locked", {"supported_features": 0})
+    hass.config_entries.async_update_entry(
+        setup_entry,
+        options={
+            OPT_CONTROL_ENTITIES: [lock.id],
+            OPT_EXCEPTIONS: {lock.id: ["lock.unlock"]},
+        },
+    )
+    heard = _listen_for_actions(hass)
+
+    await _post(
+        hass,
+        await hass_client_no_auth(),
+        setup_entry,
+        {"tool": "call_service", "entity_id": lock.entity_id, "action": "lock.unlock"},
+    )
+
+    assert len(heard) == 1
+    assert heard[0]["outcome"] == OUTCOME_FAILED
+    assert heard[0]["error"] == "action_not_allowed"
+    assert set(heard[0]) == ACTION_KEYS
+
+
+async def test_the_action_event_never_carries_service_data(
+    hass, hass_client_no_auth, setup_entry, entity_registry
+):
+    """No key and no value of service_data reaches the event."""
+    light = entity_registry.async_get_or_create("light", "demo", "one")
+    hass.states.async_set(light.entity_id, "off", {"friendly_name": "One"})
+    hass.services.async_register("light", "turn_on", AsyncMock())
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_CONTROL_ENTITIES: [light.id]}
+    )
+    heard = _listen_for_actions(hass)
+
+    await _post(
+        hass,
+        await hass_client_no_auth(),
+        setup_entry,
+        {
+            "tool": "call_service",
+            "entity_id": light.entity_id,
+            "action": "light.turn_on",
+            "service_data": {"brightness": 4242, "code": "s3cr3t-code"},
+        },
+    )
+
+    assert len(heard) == 1
+    assert set(heard[0]) == ACTION_KEYS
+    assert "service_data" not in heard[0]
+    text = json.dumps(heard[0])
+    assert "4242" not in text
+    assert "s3cr3t-code" not in text
+
+
+async def test_the_action_event_never_carries_the_confirmation_code(
+    hass, hass_client_no_auth, setup_entry, entity_registry
+):
+    """A confirmation_required answer carries a code. The event does not."""
+    lock, _ = await _sensitive_lock(
+        hass, setup_entry, entity_registry, {"confirm": True, "refuse_automatic": True}
+    )
+    heard = _listen_for_actions(hass)
+    client = await hass_client_no_auth()
+    response = await client.post(
+        f"/api/webhook/{setup_entry.data[CONF_WEBHOOK_ID]}",
+        headers={SECRET_HEADER: setup_entry.data[CONF_WEBHOOK_SECRET]},
+        json=_payload(lock.entity_id, conversation_id="c1"),
+    )
+    code = (await response.json())["confirmation_code"]
+    await hass.async_block_till_done()
+
+    assert len(heard) == 1
+    assert heard[0]["outcome"] == OUTCOME_CONFIRMATION_REQUIRED
+    assert set(heard[0]) == ACTION_KEYS
+    assert all(code not in str(value) for value in heard[0].values())
+
+
+async def test_a_malformed_write_fires_an_action_event_without_outcome(
+    hass, hass_client_no_auth, setup_entry
+):
+    """A malformed request has no outcome."""
+    heard = _listen_for_actions(hass)
+
+    await _post(
+        hass,
+        await hass_client_no_auth(),
+        setup_entry,
+        {"tool": "call_service", "entity_id": "light.one"},
+    )
+
+    assert heard == [
+        {
+            "entity_id": "light.one",
+            "action": None,
+            "outcome": None,
+            "error": "malformed_request",
+            "conversation_id": None,
+        }
+    ]
+
+
+async def test_a_read_fires_no_action_event(hass, hass_client_no_auth, setup_entry):
+    """Reads would flood the logbook."""
+    heard = _listen_for_actions(hass)
+
+    await _post(
+        hass,
+        await hass_client_no_auth(),
+        setup_entry,
+        {"tool": "get_state", "entity_id": ["light.one"]},
+    )
+
+    assert heard == []
+
+
+async def test_a_wrong_secret_fires_no_action_event(
+    hass, hass_client_no_auth, setup_entry
+):
+    """A 401 stays out of the logbook."""
+    heard = _listen_for_actions(hass)
+
+    await _post(
+        hass,
+        await hass_client_no_auth(),
+        setup_entry,
+        {"tool": "call_service", "entity_id": "light.one", "action": "light.turn_on"},
+        supplied="wrong",
+    )
+
+    assert heard == []
+
+
+async def test_an_exhausted_bucket_fires_no_action_event(
+    hass, hass_client_no_auth, setup_entry
+):
+    """A 429 stays out of the logbook."""
+    while setup_entry.runtime_data.bucket.take():
+        pass
+    heard = _listen_for_actions(hass)
+
+    await _post(
+        hass,
+        await hass_client_no_auth(),
+        setup_entry,
+        {"tool": "call_service", "entity_id": "light.one", "action": "light.turn_on"},
+    )
+
+    assert heard == []

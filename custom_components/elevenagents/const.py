@@ -49,6 +49,7 @@ TURN_IDLE_SECONDS: Final = 3.0
 TURN_MAX_SECONDS: Final = 60.0
 
 EVENT_REPLY: Final = "elevenagents_reply"
+EVENT_ACTION: Final = "elevenagents_action"
 EVENT_DROPPED: Final = "elevenagents_event_dropped"
 EVENT_FAILED: Final = "elevenagents_event_failed"
 
