@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
     from homeassistant.core import HomeAssistant
 
-    from . import ElevenLabsAgentConfigEntry, RuntimeData
+    from . import ElevenAgentsConfigEntry, RuntimeData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ def check_signal(entry_id: str) -> str:
 
 
 async def async_record_check(
-    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry
+    hass: HomeAssistant, entry: ElevenAgentsConfigEntry
 ) -> dict[str, Any]:
     """
     Run the connection check and return its result.
@@ -47,7 +47,7 @@ async def async_record_check(
 
 
 def async_create_check_debouncer(
-    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry
+    hass: HomeAssistant, entry: ElevenAgentsConfigEntry
 ) -> Debouncer[Coroutine[Any, Any, None]]:
     """Return the debouncer that runs the connection check after a sync."""
 

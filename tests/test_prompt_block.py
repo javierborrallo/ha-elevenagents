@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 README = Path("README.md")
-BLOCK_JS = Path("custom_components/elevenlabs_agent/panel/block.js")
+BLOCK_JS = Path("custom_components/elevenagents/panel/block.js")
 
 
 def _readme_block() -> str:

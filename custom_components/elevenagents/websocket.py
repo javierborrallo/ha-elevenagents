@@ -68,7 +68,7 @@ if TYPE_CHECKING:
 
     from homeassistant.config_entries import ConfigEntry
 
-    from . import ElevenLabsAgentConfigEntry
+    from . import ElevenAgentsConfigEntry
 
 
 def _entry(hass: HomeAssistant, entry_id: str) -> ConfigEntry | None:
@@ -164,7 +164,7 @@ def _unregistered(hass: HomeAssistant) -> list[str]:
     )
 
 
-def _unsynced(entry: ElevenLabsAgentConfigEntry) -> list[str]:
+def _unsynced(entry: ElevenAgentsConfigEntry) -> list[str]:
     """Return the entity_ids the last check found missing on the agent."""
     runtime = getattr(entry, "runtime_data", None)
     result = None if runtime is None else runtime.last_check
@@ -178,7 +178,7 @@ def _unsynced(entry: ElevenLabsAgentConfigEntry) -> list[str]:
 
 @websocket_api.websocket_command(
     {
-        vol.Required("type"): "elevenlabs_agent/config/get",
+        vol.Required("type"): "elevenagents/config/get",
         vol.Optional("entry_id"): str,
     }
 )
@@ -343,7 +343,7 @@ def _auto_expose_block(_hass: HomeAssistant, data: dict[str, Any]) -> dict[str, 
 
 def _block_keys(
     hass: HomeAssistant,
-    entry: ElevenLabsAgentConfigEntry,
+    entry: ElevenAgentsConfigEntry,
     block: str,
     data: dict[str, Any],
 ) -> dict[str, Any] | str:
@@ -377,7 +377,7 @@ def _block_keys(
 
 @websocket_api.websocket_command(
     {
-        vol.Required("type"): "elevenlabs_agent/config/save",
+        vol.Required("type"): "elevenagents/config/save",
         vol.Required("entry_id"): str,
         vol.Required("block"): vol.In(BLOCKS),
         vol.Required("data"): dict,
@@ -427,7 +427,7 @@ async def config_save(
 
 @websocket_api.websocket_command(
     {
-        vol.Required("type"): "elevenlabs_agent/agent/get",
+        vol.Required("type"): "elevenagents/agent/get",
         vol.Required("entry_id"): str,
     }
 )
@@ -485,7 +485,7 @@ async def agent_get(
 
 @websocket_api.websocket_command(
     {
-        vol.Required("type"): "elevenlabs_agent/agent/save",
+        vol.Required("type"): "elevenagents/agent/save",
         vol.Required("entry_id"): str,
         vol.Optional("prompt"): str,
         vol.Optional("first_message"): str,
@@ -532,7 +532,7 @@ async def agent_save(
 
 @websocket_api.websocket_command(
     {
-        vol.Required("type"): "elevenlabs_agent/rotate",
+        vol.Required("type"): "elevenagents/rotate",
         vol.Required("entry_id"): str,
         vol.Required("what"): vol.In(("secret", "webhook")),
     }
@@ -609,7 +609,7 @@ async def rotate(
 @callback
 @websocket_api.websocket_command(
     {
-        vol.Required("type"): "elevenlabs_agent/check",
+        vol.Required("type"): "elevenagents/check",
         vol.Required("entry_id"): str,
     }
 )

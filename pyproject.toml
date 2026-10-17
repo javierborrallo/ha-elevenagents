@@ -4,12 +4,12 @@
 # scaffold. Keeping a single source for ruff avoids two configs disagreeing.
 
 [project]
-name = "elevenlabs_agent"
+name = "elevenagents"
 version = "0.0.0"              # The real version is managed in manifest.json only
 requires-python = ">=3.14"
 
 [tool.setuptools]
-packages = ["custom_components.elevenlabs_agent"]
+packages = ["custom_components.elevenagents"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -31,7 +31,7 @@ filterwarnings = [
 ]
 
 [tool.coverage.run]
-source = ["custom_components/elevenlabs_agent"]
+source = ["custom_components/elevenagents"]
 omit = ["tests/*"]
 
 [tool.coverage.report]

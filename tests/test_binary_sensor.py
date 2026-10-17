@@ -16,10 +16,10 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
-from custom_components.elevenlabs_agent.binary_sensor import OVERALL, CheckSensor
-from custom_components.elevenlabs_agent.check import CHECKS
-from custom_components.elevenlabs_agent.const import DOMAIN
-from custom_components.elevenlabs_agent.status import check_signal
+from custom_components.elevenagents.binary_sensor import OVERALL, CheckSensor
+from custom_components.elevenagents.check import CHECKS
+from custom_components.elevenagents.const import DOMAIN
+from custom_components.elevenagents.status import check_signal
 
 # homeassistant 2026.9.1's http server sets self.app["hass"] as a plain key.
 # aiohttp 3.14.3 raises NotAppKeyWarning for that pattern. pyproject.toml

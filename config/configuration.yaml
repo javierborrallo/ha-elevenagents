@@ -9,7 +9,7 @@ homeassistant:
 logger:
   default: info
   logs:
-    custom_components.elevenlabs_agent: debug
+    custom_components.elevenagents: debug
 
 # --- Development fixtures ---------------------------------------------------
 # The demo integration provides fake lights, switches, climate, covers, locks

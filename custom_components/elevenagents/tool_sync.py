@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from elevenlabs import AsyncElevenLabs
     from homeassistant.core import HomeAssistant
 
-    from . import ElevenLabsAgentConfigEntry
+    from . import ElevenAgentsConfigEntry
     from .permissions import Permissions
 
 _LOGGER = logging.getLogger(__name__)
@@ -441,7 +441,7 @@ def _check_readback(name: str, sent: dict[str, Any], got: Any) -> None:
 
 async def _attach(
     hass: HomeAssistant,
-    entry: ElevenLabsAgentConfigEntry,
+    entry: ElevenAgentsConfigEntry,
     client: AsyncElevenLabs,
     stored: dict[str, str],
 ) -> None:
@@ -487,7 +487,7 @@ def _client_events(conversation_config: Any) -> list[str] | None:
 
 
 async def async_build_definitions(
-    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry
+    hass: HomeAssistant, entry: ElevenAgentsConfigEntry
 ) -> dict[str, dict[str, Any]]:
     """Build the two tool definitions a sync sends now, keyed by tool name."""
     perms = from_options(entry.options)
@@ -524,7 +524,7 @@ async def async_build_definitions(
 
 
 async def _sync(
-    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry, client: AsyncElevenLabs
+    hass: HomeAssistant, entry: ElevenAgentsConfigEntry, client: AsyncElevenLabs
 ) -> None:
     """
     Create or update each tool, store its id, then attach both to the agent.
@@ -567,7 +567,7 @@ async def _sync(
 
 
 async def async_sync_tools(
-    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry, client: AsyncElevenLabs
+    hass: HomeAssistant, entry: ElevenAgentsConfigEntry, client: AsyncElevenLabs
 ) -> None:
     """
     Synchronise the two tool definitions and attach them to the agent.

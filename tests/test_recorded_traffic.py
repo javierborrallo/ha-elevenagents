@@ -9,14 +9,14 @@ from __future__ import annotations
 
 import pytest
 
-from custom_components.elevenlabs_agent.const import (
+from custom_components.elevenagents.const import (
     OPT_CONTROL_ENTITIES,
     OPT_EXCEPTIONS,
     OPT_READ_ENTITIES,
     OUTCOME_DONE,
     OUTCOME_FAILED,
 )
-from custom_components.elevenlabs_agent.webhook import async_read, async_write
+from custom_components.elevenagents.webhook import async_read, async_write
 
 RECORDED_READ_ONE = {"tool": "get_state", "entity_id": ["light.kitchen_lights"]}
 

@@ -9,7 +9,7 @@ import pytest
 from homeassistant.config_entries import ConfigEntryState
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.elevenlabs_agent.const import (
+from custom_components.elevenagents.const import (
     CONF_AGENT_ID,
     CONF_API_KEY,
     CONF_TOOL_IDS,
@@ -63,7 +63,7 @@ async def setup_entry(hass, config_entry) -> AsyncGenerator[MockConfigEntry]:
     or calls tool_sync.async_sync_tools directly. The entry is unloaded at
     teardown, which cancels the check that a sync schedules.
     """
-    with patch("custom_components.elevenlabs_agent.async_sync_tools", AsyncMock()):
+    with patch("custom_components.elevenagents.async_sync_tools", AsyncMock()):
         assert await hass.config_entries.async_setup(config_entry.entry_id)
         await hass.async_block_till_done()
     yield config_entry

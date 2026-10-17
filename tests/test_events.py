@@ -12,8 +12,8 @@ from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
-from custom_components.elevenlabs_agent.agent_session import SessionError, TurnResult
-from custom_components.elevenlabs_agent.const import (
+from custom_components.elevenagents.agent_session import SessionError, TurnResult
+from custom_components.elevenagents.const import (
     DOMAIN,
     EVENT_DROPPED,
     EVENT_FAILED,
@@ -25,7 +25,7 @@ from custom_components.elevenlabs_agent.const import (
     OPT_READ_ENTITIES,
     OPT_SENSITIVE,
 )
-from custom_components.elevenlabs_agent.webhook import async_write
+from custom_components.elevenagents.webhook import async_write
 
 if TYPE_CHECKING:
     from homeassistant.helpers import entity_registry as er
@@ -34,15 +34,13 @@ pytestmark = pytest.mark.filterwarnings(
     "ignore::aiohttp.web_exceptions.NotAppKeyWarning"
 )
 
-RUN = "custom_components.elevenlabs_agent.events.async_run_turn"
+RUN = "custom_components.elevenagents.events.async_run_turn"
 
 
 @pytest.fixture(autouse=True)
 def mock_sync_tools():
     """Keep the registry listener's debounced sync off the network."""
-    with patch(
-        "custom_components.elevenlabs_agent.expose.async_sync_tools", AsyncMock()
-    ):
+    with patch("custom_components.elevenagents.expose.async_sync_tools", AsyncMock()):
         yield
 
 

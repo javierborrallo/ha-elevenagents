@@ -10,7 +10,7 @@ import httpx
 import pytest
 from elevenlabs.core import ApiError
 
-from custom_components.elevenlabs_agent.elevenlabs_client import (
+from custom_components.elevenagents.elevenlabs_client import (
     ElevenLabsAuthError,
     ElevenLabsError,
     ElevenLabsNotFoundError,
@@ -40,7 +40,7 @@ _TOOL_CONFIG = {
 async def test_client_uses_the_shared_home_assistant_httpx_client(hass):
     """No second connection pool is created."""
     with patch(
-        "custom_components.elevenlabs_agent.elevenlabs_client.get_async_client"
+        "custom_components.elevenagents.elevenlabs_client.get_async_client"
     ) as shared:
         async_get_client(hass, "sk_test")
 

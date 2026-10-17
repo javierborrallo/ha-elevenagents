@@ -80,11 +80,11 @@ settings and rotations, and the five entity screens, each behind its own row.
 The integration creates two tools in your agent, `ha_get_state` and `ha_call_service`, and
 keeps their schemas aligned with your selection. Both point at one webhook, secured with a
 shared secret. You can re-run the synchronisation at any time with the
-`elevenlabs_agent.sync_tools` action, and rotate either the secret or the webhook address
+`elevenagents.sync_tools` action, and rotate either the secret or the webhook address
 from the panel.
 
 **Check that everything works** by clicking the status card at the top of the panel, or with
-the `elevenlabs_agent.check` action. It confirms that the integration is loaded, that
+the `elevenagents.check` action. It confirms that the integration is loaded, that
 ElevenLabs accepts your API key, that the agent is protected, that both tools are attached to
 it and match your selection, that your webhook answers at its external address, that the
 confirmation wait is shorter than the agent's, and that no entity you granted has disappeared.
@@ -278,7 +278,7 @@ can look at the house or act through the same two tools, and answers. What it do
 through a flow you build in ElevenLabs, or turn the heating on — is up to your agent.
 
 ```yaml
-action: elevenlabs_agent.send_event
+action: elevenagents.send_event
 data:
   config_entry_id: <your entry>
   message: "The house dropped to 10 °C."
@@ -289,13 +289,13 @@ response_variable: reply
 
 `entity_id` adds that entity's current state, and must be one the agent may read. `event_type`,
 `priority` and `data` reach your agent as dynamic variables. The reply comes back in
-`response_variable` and as an `elevenlabs_agent_reply` event.
+`response_variable` and as an `elevenagents_reply` event.
 
 Each delivered event is a short text conversation and **spends ElevenLabs credits**. Three settings
 in the panel keep that in hand: a cooldown for the same event (5 minutes; high priority skips it),
 a limit per hour (20; nothing skips it), and a memory window (30 minutes) during which recent events
-travel with the next one. A dropped event fires `elevenlabs_agent_event_dropped`; one that could not
-be delivered fires `elevenlabs_agent_event_failed` and fails the action with the reason.
+travel with the next one. A dropped event fires `elevenagents_event_dropped`; one that could not
+be delivered fires `elevenagents_event_failed` and fails the action with the reason.
 
 ## Uninstalling
 

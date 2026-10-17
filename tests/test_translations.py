@@ -14,8 +14,8 @@ from typing import Any
 
 import pytest
 
-TRANSLATIONS = Path("custom_components/elevenlabs_agent/translations")
-SOURCE = Path("custom_components/elevenlabs_agent")
+TRANSLATIONS = Path("custom_components/elevenagents/translations")
+SOURCE = Path("custom_components/elevenagents")
 
 
 def _load(language: str) -> dict[str, Any]:

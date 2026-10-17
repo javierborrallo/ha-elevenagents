@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Final
 
-DOMAIN: Final = "elevenlabs_agent"
+DOMAIN: Final = "elevenagents"
 
 # entry.data holds identity and secrets. Reauth and rotation write it.
 # Every write merges into the existing data.
@@ -48,13 +48,13 @@ MAX_EVENT_HOURLY_LIMIT: Final = 1000
 TURN_IDLE_SECONDS: Final = 3.0
 TURN_MAX_SECONDS: Final = 60.0
 
-EVENT_REPLY: Final = "elevenlabs_agent_reply"
-EVENT_DROPPED: Final = "elevenlabs_agent_event_dropped"
-EVENT_FAILED: Final = "elevenlabs_agent_event_failed"
+EVENT_REPLY: Final = "elevenagents_reply"
+EVENT_DROPPED: Final = "elevenagents_event_dropped"
+EVENT_FAILED: Final = "elevenagents_event_failed"
 
 # Seconds between the last sync of a burst and the connection check.
 CHECK_DEBOUNCE: Final = 10
-SIGNAL_CHECK: Final = "elevenlabs_agent_check_{}"
+SIGNAL_CHECK: Final = "elevenagents_check_{}"
 
 # Transport limits. The handler returns 401, 413, 415 and 429.
 # Every other outcome is HTTP 200 with a structured body.
@@ -117,4 +117,4 @@ ISSUE_TIMEOUT_CROSSED: Final = "timeout_crossed"
 ISSUE_ROTATION_UNSYNCED: Final = "rotation_unsynced"
 ISSUE_MISSING_ENTITIES: Final = "missing_entities"
 
-PANEL_URL_PATH: Final = "elevenlabs-agent"
+PANEL_URL_PATH: Final = "elevenagents"

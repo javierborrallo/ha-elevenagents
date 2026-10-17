@@ -66,7 +66,7 @@ class RuntimeData:
     gate: Gate = field(default_factory=Gate)
 
 
-type ElevenLabsAgentConfigEntry = ConfigEntry[RuntimeData]
+type ElevenAgentsConfigEntry = ConfigEntry[RuntimeData]
 
 
 async def async_setup(
@@ -81,7 +81,7 @@ async def async_setup(
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry
+    hass: HomeAssistant, entry: ElevenAgentsConfigEntry
 ) -> bool:
     """
     Set up the config entry: register the webhook, forward the platforms, then sync.
@@ -131,14 +131,14 @@ async def async_setup_entry(
 
 
 async def async_unload_entry(
-    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry
+    hass: HomeAssistant, entry: ElevenAgentsConfigEntry
 ) -> bool:
     """Unload the sensors. Every other resource unregisters through async_on_unload."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
 async def async_remove_entry(
-    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry
+    hass: HomeAssistant, entry: ElevenAgentsConfigEntry
 ) -> None:
     """
     Detach this integration's tools from the agent, then delete them.

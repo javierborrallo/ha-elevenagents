@@ -42,7 +42,7 @@ if TYPE_CHECKING:
     from elevenlabs import AsyncElevenLabs
     from homeassistant.core import HomeAssistant
 
-    from . import ElevenLabsAgentConfigEntry, RuntimeData
+    from . import ElevenAgentsConfigEntry, RuntimeData
 
 OK = "ok"
 PROBLEM = "problem"
@@ -64,7 +64,7 @@ CHECKS = (
 
 
 async def _webhook_check(
-    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry
+    hass: HomeAssistant, entry: ElevenAgentsConfigEntry
 ) -> dict[str, Any]:
     """
     Call the webhook's external URL without the secret.
@@ -116,7 +116,7 @@ def _key_detail(err: Exception) -> str:
     return f"HTTP {status_code}"
 
 
-def _client(hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry) -> AsyncElevenLabs:
+def _client(hass: HomeAssistant, entry: ElevenAgentsConfigEntry) -> AsyncElevenLabs:
     """Return the entry's client, or a new one when the entry is not loaded."""
     runtime: RuntimeData | None = getattr(entry, "runtime_data", None)
     if runtime is not None:
@@ -125,7 +125,7 @@ def _client(hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry) -> AsyncElev
 
 
 async def _tools_current(
-    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry, client: AsyncElevenLabs
+    hass: HomeAssistant, entry: ElevenAgentsConfigEntry, client: AsyncElevenLabs
 ) -> dict[str, list[str]]:
     """
     Compare each tool's read-back with what a sync sends now.
@@ -169,7 +169,7 @@ async def _tools_current(
     }
 
 
-def _detached_tools(entry: ElevenLabsAgentConfigEntry, agent: Any) -> list[str]:
+def _detached_tools(entry: ElevenAgentsConfigEntry, agent: Any) -> list[str]:
     """Return the stored tools that are not on the agent's prompt."""
     agent_config = agent.conversation_config.agent
     prompt = None if agent_config is None else agent_config.prompt
@@ -179,7 +179,7 @@ def _detached_tools(entry: ElevenLabsAgentConfigEntry, agent: Any) -> list[str]:
 
 
 def _local_checks(
-    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry
+    hass: HomeAssistant, entry: ElevenAgentsConfigEntry
 ) -> list[dict[str, Any]]:
     """Return the two checks that need no network."""
     confirm_timeout = entry.options.get(OPT_CONFIRM_TIMEOUT, DEFAULT_CONFIRM_TIMEOUT)
@@ -202,7 +202,7 @@ def _local_checks(
 
 
 async def async_run_check(
-    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry
+    hass: HomeAssistant, entry: ElevenAgentsConfigEntry
 ) -> dict[str, Any]:
     """
     Check the entry, the API key, the agent and both tools.

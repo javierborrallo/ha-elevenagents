@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from homeassistant.components.repairs import RepairsFlowResult
     from homeassistant.core import HomeAssistant
 
-    from . import ElevenLabsAgentConfigEntry
+    from . import ElevenAgentsConfigEntry
 
 
 def is_protected(agent: GetAgentResponseModel) -> bool:
@@ -47,7 +47,7 @@ def is_protected(agent: GetAgentResponseModel) -> bool:
 @callback
 def async_check_agent(
     hass: HomeAssistant,
-    entry: ElevenLabsAgentConfigEntry,
+    entry: ElevenAgentsConfigEntry,
     agent: GetAgentResponseModel,
 ) -> None:
     """Raise or clear the agent_unprotected issue for one entry."""
@@ -69,7 +69,7 @@ def async_check_agent(
 @callback
 def async_check_timeouts(
     hass: HomeAssistant,
-    entry: ElevenLabsAgentConfigEntry,
+    entry: ElevenAgentsConfigEntry,
     tool_config: Mapping[str, Any],
 ) -> None:
     """Raise or clear the timeout_crossed issue for one entry."""
@@ -94,7 +94,7 @@ def async_check_timeouts(
     )
 
 
-def _missing_names(hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry) -> str:
+def _missing_names(hass: HomeAssistant, entry: ElevenAgentsConfigEntry) -> str:
     """Return the missing keys as a comma-separated list, entity_ids where known."""
     names = (
         entity_id_for(hass, key) or key for key in missing_keys(hass, entry.options)
@@ -103,7 +103,7 @@ def _missing_names(hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry) -> st
 
 
 @callback
-def async_check_missing(hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry) -> None:
+def async_check_missing(hass: HomeAssistant, entry: ElevenAgentsConfigEntry) -> None:
     """Raise or clear the missing_entities issue for one entry."""
     names = _missing_names(hass, entry)
     if not names:
@@ -124,7 +124,7 @@ def async_check_missing(hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry) 
 
 async def async_apply_auth_fix(
     hass: HomeAssistant,
-    entry: ElevenLabsAgentConfigEntry,
+    entry: ElevenAgentsConfigEntry,
     client: AsyncElevenLabs,
 ) -> None:
     """
@@ -148,10 +148,10 @@ async def async_apply_auth_fix(
     ir.async_delete_issue(hass, DOMAIN, ISSUE_AGENT_UNPROTECTED)
 
 
-class ElevenLabsAgentRepairFlow(RepairsFlow):
+class ElevenAgentsRepairFlow(RepairsFlow):
     """Fix flow that turns on auth for an unprotected agent."""
 
-    def __init__(self, entry: ElevenLabsAgentConfigEntry) -> None:
+    def __init__(self, entry: ElevenAgentsConfigEntry) -> None:
         """Store the entry the fix applies to."""
         super().__init__()
         self.entry = entry
@@ -197,4 +197,4 @@ async def async_create_fix_flow(
 
     entry_id = cast("str", (data or {}).get("entry_id"))
     entry = hass.config_entries.async_get_known_entry(entry_id)
-    return ElevenLabsAgentRepairFlow(entry)
+    return ElevenAgentsRepairFlow(entry)
