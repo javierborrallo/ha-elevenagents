@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 from homeassistant.helpers import issue_registry as ir
 
-from custom_components.elevenlabs_agent.const import (
+from custom_components.elevenagents.const import (
     CONF_RESPONSE_TIMEOUT,
     CONF_TOOL_IDS,
     DEFAULT_RESPONSE_TIMEOUT,
@@ -24,12 +24,12 @@ from custom_components.elevenlabs_agent.const import (
     TOOL_CALL_SERVICE,
     TOOL_GET_STATE,
 )
-from custom_components.elevenlabs_agent.elevenlabs_client import (
+from custom_components.elevenagents.elevenlabs_client import (
     ElevenLabsError,
     ElevenLabsNotFoundError,
 )
-from custom_components.elevenlabs_agent.permissions import Permissions
-from custom_components.elevenlabs_agent.tool_sync import (
+from custom_components.elevenagents.permissions import Permissions
+from custom_components.elevenagents.tool_sync import (
     AGENT_SETTING_DEFAULTS,
     CALL_SERVICE_DESCRIPTION,
     GET_STATE_DESCRIPTION,
@@ -425,19 +425,15 @@ def tool_calls():
     """Patch the Task 10 client wrappers as module functions and echo writes back."""
     with (
         patch(
-            "custom_components.elevenlabs_agent.tool_sync.async_create_tool"
+            "custom_components.elevenagents.tool_sync.async_create_tool"
         ) as create_tool,
         patch(
-            "custom_components.elevenlabs_agent.tool_sync.async_update_tool"
+            "custom_components.elevenagents.tool_sync.async_update_tool"
         ) as update_tool,
+        patch("custom_components.elevenagents.tool_sync.async_get_tool") as get_tool,
+        patch("custom_components.elevenagents.tool_sync.async_get_agent") as get_agent,
         patch(
-            "custom_components.elevenlabs_agent.tool_sync.async_get_tool"
-        ) as get_tool,
-        patch(
-            "custom_components.elevenlabs_agent.tool_sync.async_get_agent"
-        ) as get_agent,
-        patch(
-            "custom_components.elevenlabs_agent.tool_sync.async_patch_agent"
+            "custom_components.elevenagents.tool_sync.async_patch_agent"
         ) as patch_agent,
     ):
         written: dict[str, dict] = {}

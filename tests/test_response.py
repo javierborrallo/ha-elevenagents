@@ -5,14 +5,14 @@ from __future__ import annotations
 import voluptuous as vol
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
-from custom_components.elevenlabs_agent.const import (
+from custom_components.elevenagents.const import (
     ERROR_EXECUTION_FAILED,
     ERROR_UNKNOWN_FIELD,
     OUTCOME_DONE,
     OUTCOME_NO_CHANGE,
     OUTCOME_UNCONFIRMED,
 )
-from custom_components.elevenlabs_agent.response import (
+from custom_components.elevenagents.response import (
     error_fields,
     malformed,
     project,

@@ -1,5 +1,5 @@
 {
-    "name": "javierborrallo/ha-elevenlabs-agent",
+    "name": "javierborrallo/ha-elevenagents",
     "image": "mcr.microsoft.com/devcontainers/base:debian",
     "postCreateCommand": "scripts/setup",
     "forwardPorts": [

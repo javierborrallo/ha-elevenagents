@@ -13,15 +13,15 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
-from custom_components.elevenlabs_agent.agent_session import (
+from custom_components.elevenagents.agent_session import (
     SessionError,
     TurnResult,
     _apply_frame,
     _TurnState,
     async_run_turn,
 )
-from custom_components.elevenlabs_agent.const import CONF_AGENT_ID
-from custom_components.elevenlabs_agent.elevenlabs_client import (
+from custom_components.elevenagents.const import CONF_AGENT_ID
+from custom_components.elevenagents.elevenlabs_client import (
     ElevenLabsAuthError,
     ElevenLabsError,
 )
@@ -33,7 +33,7 @@ pytestmark = pytest.mark.filterwarnings(
     "ignore::aiohttp.web_exceptions.NotAppKeyWarning"
 )
 
-SIGNED = "custom_components.elevenlabs_agent.agent_session.async_get_signed_url"
+SIGNED = "custom_components.elevenagents.agent_session.async_get_signed_url"
 Behaviour = Callable[[web.WebSocketResponse, list[dict[str, Any]]], Awaitable[None]]
 
 
@@ -54,10 +54,8 @@ def _run(
 def fast_turns():
     """Shorten the idle and maximum turn times."""
     with (
-        patch(
-            "custom_components.elevenlabs_agent.agent_session.TURN_IDLE_SECONDS", 0.2
-        ),
-        patch("custom_components.elevenlabs_agent.agent_session.TURN_MAX_SECONDS", 2.0),
+        patch("custom_components.elevenagents.agent_session.TURN_IDLE_SECONDS", 0.2),
+        patch("custom_components.elevenagents.agent_session.TURN_MAX_SECONDS", 2.0),
     ):
         yield
 
@@ -636,7 +634,7 @@ async def test_a_stalled_connect_is_bounded_past_the_maximum(hass, setup_entry, 
             return _HangingConnect()
 
     with patch(
-        "custom_components.elevenlabs_agent.agent_session.async_get_clientsession",
+        "custom_components.elevenagents.agent_session.async_get_clientsession",
         return_value=_Session(),
     ):
         start = asyncio.get_running_loop().time()

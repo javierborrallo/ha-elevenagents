@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from aiohttp.web import Request
     from homeassistant.core import HomeAssistant
 
-    from . import ElevenLabsAgentConfigEntry, RuntimeData
+    from . import ElevenAgentsConfigEntry, RuntimeData
     from .permissions import Permissions
 
 WEBHOOK_NAME = "ElevenAgents"
@@ -76,7 +76,7 @@ class TokenBucket:
         return True
 
 
-def async_register(hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry) -> None:
+def async_register(hass: HomeAssistant, entry: ElevenAgentsConfigEntry) -> None:
     """Register the webhook for one config entry."""
     webhook.async_register(
         hass,
@@ -89,14 +89,14 @@ def async_register(hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry) -> No
     )
 
 
-def async_unregister(hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry) -> None:
+def async_unregister(hass: HomeAssistant, entry: ElevenAgentsConfigEntry) -> None:
     """Remove the webhook for one config entry."""
     webhook.async_unregister(hass, entry.data[CONF_WEBHOOK_ID])
 
 
 def _entry_for_webhook(
     hass: HomeAssistant, webhook_id: str
-) -> ElevenLabsAgentConfigEntry | None:
+) -> ElevenAgentsConfigEntry | None:
     """Return the config entry that owns a webhook id."""
     for entry in hass.config_entries.async_entries(DOMAIN):
         if entry.data.get(CONF_WEBHOOK_ID) == webhook_id:
@@ -106,7 +106,7 @@ def _entry_for_webhook(
 
 def _authenticated_entry(
     hass: HomeAssistant, webhook_id: str, request: Request
-) -> ElevenLabsAgentConfigEntry | None:
+) -> ElevenAgentsConfigEntry | None:
     """Return the entry that owns this webhook once the secret matches."""
     entry = _entry_for_webhook(hass, webhook_id)
     if entry is None:
@@ -192,7 +192,7 @@ async def async_handle_webhook(
 
 
 async def async_read(
-    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry, payload: dict[str, Any]
+    hass: HomeAssistant, entry: ElevenAgentsConfigEntry, payload: dict[str, Any]
 ) -> dict[str, Any]:
     """Read the requested entities. One failure does not fail the batch."""
     entity_ids = payload.get("entity_id")
@@ -269,7 +269,7 @@ def _resolved_conversation_id(raw: Any) -> str | None:
 
 def _sensitive_answer(
     hass: HomeAssistant,
-    entry: ElevenLabsAgentConfigEntry,
+    entry: ElevenAgentsConfigEntry,
     payload: dict[str, Any],
     target: tuple[str, str, dict[str, Any]],
 ) -> dict[str, Any] | None:
@@ -322,7 +322,7 @@ def _refusal(
 
 
 async def async_write(
-    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry, payload: dict[str, Any]
+    hass: HomeAssistant, entry: ElevenAgentsConfigEntry, payload: dict[str, Any]
 ) -> dict[str, Any]:
     """
     Perform one action and report what was observed.

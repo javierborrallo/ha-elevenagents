@@ -11,14 +11,14 @@ import pytest
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers.network import NoURLAvailableError
 
-from custom_components.elevenlabs_agent.const import (
+from custom_components.elevenagents.const import (
     CONF_AGENT_ID,
     CONF_API_KEY,
     CONF_WEBHOOK_ID,
     CONF_WEBHOOK_SECRET,
     DOMAIN,
 )
-from custom_components.elevenlabs_agent.elevenlabs_client import (
+from custom_components.elevenagents.elevenlabs_client import (
     ElevenLabsAuthError,
     ElevenLabsError,
     ElevenLabsNotFoundError,
@@ -74,30 +74,30 @@ def _patch_client_and_url(
     """
     with ExitStack() as stack:
         stack.enter_context(
-            patch("custom_components.elevenlabs_agent.config_flow.async_get_client")
+            patch("custom_components.elevenagents.config_flow.async_get_client")
         )
         stack.enter_context(
             patch(
-                "custom_components.elevenlabs_agent.config_flow.async_list_agents",
+                "custom_components.elevenagents.config_flow.async_list_agents",
                 return_value=agents,
                 side_effect=list_side_effect,
             )
         )
         stack.enter_context(
             patch(
-                "custom_components.elevenlabs_agent.config_flow.async_get_agent",
+                "custom_components.elevenagents.config_flow.async_get_agent",
                 return_value=_agent_with(attached or []),
             )
         )
         stack.enter_context(
             patch(
-                "custom_components.elevenlabs_agent.config_flow.async_list_tools",
+                "custom_components.elevenagents.config_flow.async_list_tools",
                 return_value=SimpleNamespace(tools=tools or []),
             )
         )
         stack.enter_context(
             patch(
-                "custom_components.elevenlabs_agent.config_flow.get_url",
+                "custom_components.elevenagents.config_flow.get_url",
                 return_value="https://home.example",
             )
         )
@@ -128,7 +128,7 @@ async def test_successful_setup_lists_agents_then_creates_the_entry(hass):
     assert result["data"][CONF_WEBHOOK_SECRET]
     assert result["data"][CONF_WEBHOOK_ID] != result["data"][CONF_WEBHOOK_SECRET]
     assert result["options"] == {}
-    assert result["description_placeholders"] == {"panel_url": "/elevenlabs-agent"}
+    assert result["description_placeholders"] == {"panel_url": "/elevenagents"}
 
 
 async def test_agent_step_offers_a_dropdown_sorted_by_name(hass):
@@ -240,7 +240,7 @@ async def test_picking_an_already_configured_agent_aborts(hass, config_entry):
 async def test_no_external_url_aborts_before_asking_for_anything(hass):
     """A tool pointing nowhere is worse than refusing to set up."""
     with patch(
-        "custom_components.elevenlabs_agent.config_flow.get_url",
+        "custom_components.elevenagents.config_flow.get_url",
         side_effect=NoURLAvailableError,
     ):
         result = await hass.config_entries.flow.async_init(
@@ -275,8 +275,8 @@ async def test_an_internal_url_alone_is_not_enough(hass) -> None:
 async def test_reauth_updates_the_api_key_and_keeps_everything_else(hass, config_entry):
     """Reauth re-asks for the API key only and keeps agent id, webhook id and secret."""
     with (
-        patch("custom_components.elevenlabs_agent.config_flow.async_get_client"),
-        patch("custom_components.elevenlabs_agent.config_flow.async_get_agent"),
+        patch("custom_components.elevenagents.config_flow.async_get_client"),
+        patch("custom_components.elevenagents.config_flow.async_get_agent"),
     ):
         result = await config_entry.start_reauth_flow(hass)
         assert result["type"] is FlowResultType.FORM
@@ -297,9 +297,9 @@ async def test_reauth_updates_the_api_key_and_keeps_everything_else(hass, config
 async def test_reauth_with_a_still_revoked_key_reports_invalid_auth(hass, config_entry):
     """A reauth submission is validated exactly like the initial setup."""
     with (
-        patch("custom_components.elevenlabs_agent.config_flow.async_get_client"),
+        patch("custom_components.elevenagents.config_flow.async_get_client"),
         patch(
-            "custom_components.elevenlabs_agent.config_flow.async_get_agent",
+            "custom_components.elevenagents.config_flow.async_get_agent",
             side_effect=ElevenLabsAuthError("still no"),
         ),
     ):
@@ -316,9 +316,9 @@ async def test_reauth_with_a_still_revoked_key_reports_invalid_auth(hass, config
 async def test_reauth_with_a_deleted_agent_reports_agent_not_found(hass, config_entry):
     """Reauth still needs agent_not_found: the agent id is not re-asked here."""
     with (
-        patch("custom_components.elevenlabs_agent.config_flow.async_get_client"),
+        patch("custom_components.elevenagents.config_flow.async_get_client"),
         patch(
-            "custom_components.elevenlabs_agent.config_flow.async_get_agent",
+            "custom_components.elevenagents.config_flow.async_get_agent",
             side_effect=ElevenLabsNotFoundError("gone"),
         ),
     ):
@@ -413,7 +413,7 @@ async def test_detach_removes_only_the_colliding_tools(hass) -> None:
             ],
         ),
         patch(
-            "custom_components.elevenlabs_agent.config_flow.async_patch_agent"
+            "custom_components.elevenagents.config_flow.async_patch_agent"
         ) as patch_agent,
     ):
         result = await hass.config_entries.flow.async_init(
@@ -443,7 +443,7 @@ async def test_continuing_anyway_touches_nothing(hass) -> None:
             tools=[_tool("tool_old", "ha_call_service")],
         ),
         patch(
-            "custom_components.elevenlabs_agent.config_flow.async_patch_agent"
+            "custom_components.elevenagents.config_flow.async_patch_agent"
         ) as patch_agent,
     ):
         result = await hass.config_entries.flow.async_init(

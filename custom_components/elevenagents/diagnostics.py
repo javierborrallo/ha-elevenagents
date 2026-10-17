@@ -20,13 +20,13 @@ from .permissions import entity_id_for, missing_keys
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-    from . import ElevenLabsAgentConfigEntry
+    from . import ElevenAgentsConfigEntry
 
 TO_REDACT = {CONF_API_KEY, CONF_AGENT_ID, CONF_WEBHOOK_ID, CONF_WEBHOOK_SECRET}
 
 
 async def async_get_config_entry_diagnostics(
-    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry
+    hass: HomeAssistant, entry: ElevenAgentsConfigEntry
 ) -> dict[str, Any]:
     """
     Return the entry's configuration and a summary of its state.

@@ -4,7 +4,7 @@ sync_tools:
       required: true
       selector:
         config_entry:
-          integration: elevenlabs_agent
+          integration: elevenagents
 
 check:
   fields:
@@ -12,7 +12,7 @@ check:
       required: true
       selector:
         config_entry:
-          integration: elevenlabs_agent
+          integration: elevenagents
 
 send_event:
   fields:
@@ -20,7 +20,7 @@ send_event:
       required: true
       selector:
         config_entry:
-          integration: elevenlabs_agent
+          integration: elevenagents
     message:
       required: true
       selector:

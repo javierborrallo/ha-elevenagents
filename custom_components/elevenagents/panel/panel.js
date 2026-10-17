@@ -22,12 +22,12 @@ import {
 } from "./ui.js";
 
 const WS = {
-  configGet: "elevenlabs_agent/config/get",
-  configSave: "elevenlabs_agent/config/save",
-  agentGet: "elevenlabs_agent/agent/get",
-  agentSave: "elevenlabs_agent/agent/save",
-  rotate: "elevenlabs_agent/rotate",
-  check: "elevenlabs_agent/check",
+  configGet: "elevenagents/config/get",
+  configSave: "elevenagents/config/save",
+  agentGet: "elevenagents/agent/get",
+  agentSave: "elevenagents/agent/save",
+  rotate: "elevenagents/rotate",
+  check: "elevenagents/check",
 };
 
 // The icon and the disc colour of each check status.
@@ -67,7 +67,7 @@ function unsyncedFrom(result) {
   return [];
 }
 
-class ElevenLabsAgentPanel extends HTMLElement {
+class ElevenAgentsPanel extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
@@ -777,6 +777,6 @@ class ElevenLabsAgentPanel extends HTMLElement {
 // reconnected or the registered module URL changes, and every deploy
 // changes that URL. The registry keeps the name from the first load, and
 // defining it twice throws before the module finishes. Keep the first.
-if (!customElements.get("elevenlabs-agent-panel")) {
-  customElements.define("elevenlabs-agent-panel", ElevenLabsAgentPanel);
+if (!customElements.get("elevenagents-panel")) {
+  customElements.define("elevenagents-panel", ElevenAgentsPanel);
 }

@@ -14,8 +14,8 @@ import pytest
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.setup import async_setup_component
 
-from custom_components.elevenlabs_agent.check import CHECKS, async_run_check
-from custom_components.elevenlabs_agent.const import (
+from custom_components.elevenagents.check import CHECKS, async_run_check
+from custom_components.elevenagents.const import (
     CONF_RESPONSE_TIMEOUT,
     CONF_TOOL_IDS,
     DEFAULT_RESPONSE_TIMEOUT,
@@ -25,13 +25,13 @@ from custom_components.elevenlabs_agent.const import (
     TOOL_CALL_SERVICE,
     TOOL_GET_STATE,
 )
-from custom_components.elevenlabs_agent.elevenlabs_client import (
+from custom_components.elevenagents.elevenlabs_client import (
     ElevenLabsAuthError,
     ElevenLabsError,
     ElevenLabsNotFoundError,
     ElevenLabsScopeError,
 )
-from custom_components.elevenlabs_agent.tool_sync import async_build_definitions
+from custom_components.elevenagents.tool_sync import async_build_definitions
 
 if TYPE_CHECKING:
     from pytest_homeassistant_custom_component.typing import WebSocketGenerator
@@ -82,11 +82,11 @@ def elevenlabs(synced, aioclient_mock):
 
     with (
         patch(
-            "custom_components.elevenlabs_agent.check.async_get_agent",
+            "custom_components.elevenagents.check.async_get_agent",
             AsyncMock(return_value=_agent()),
         ) as get_agent,
         patch(
-            "custom_components.elevenlabs_agent.check.async_get_tool",
+            "custom_components.elevenagents.check.async_get_tool",
             AsyncMock(side_effect=get_tool),
         ) as get_tool_mock,
     ):
@@ -420,7 +420,7 @@ async def test_an_unloaded_entry_is_still_checked(hass, setup_entry, elevenlabs)
     await hass.config_entries.async_unload(setup_entry.entry_id)
 
     with patch(
-        "custom_components.elevenlabs_agent.check.async_get_client",
+        "custom_components.elevenagents.check.async_get_client",
         return_value=object(),
     ):
         result = await async_run_check(hass, setup_entry)
@@ -439,7 +439,7 @@ async def test_the_webhook_check_is_skipped_when_the_entry_is_not_loaded(
     await hass.config_entries.async_unload(setup_entry.entry_id)
 
     with patch(
-        "custom_components.elevenlabs_agent.check.async_get_client",
+        "custom_components.elevenagents.check.async_get_client",
         return_value=object(),
     ):
         result = await async_run_check(hass, setup_entry)
@@ -511,7 +511,7 @@ async def test_the_websocket_command_answers_with_the_result(
     """The panel's status card runs the same check."""
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/check", "entry_id": setup_entry.entry_id}
+        {"type": "elevenagents/check", "entry_id": setup_entry.entry_id}
     )
     result = (await client.receive_json())["result"]
 

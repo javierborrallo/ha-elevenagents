@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.elevenlabs_agent.const import (
+from custom_components.elevenagents.const import (
     ERROR_ACTION_NOT_ALLOWED,
     ERROR_NOT_FOUND,
     OPT_CONFIRM_TIMEOUT,
@@ -16,7 +16,7 @@ from custom_components.elevenlabs_agent.const import (
     OPT_READ_ENTITIES,
     OPT_SENSITIVE,
 )
-from custom_components.elevenlabs_agent.permissions import (
+from custom_components.elevenagents.permissions import (
     Permissions,
     authorise_action,
     authorise_read,

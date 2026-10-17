@@ -13,7 +13,7 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.network import NoURLAvailableError
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
-from custom_components.elevenlabs_agent.const import (
+from custom_components.elevenagents.const import (
     DOMAIN,
     ERROR_NOT_FOUND,
     ISSUE_MISSING_ENTITIES,
@@ -26,12 +26,12 @@ from custom_components.elevenlabs_agent.const import (
     OPT_READ_ENTITIES,
     OPT_READ_TARGET,
 )
-from custom_components.elevenlabs_agent.expose import _synchronise
-from custom_components.elevenlabs_agent.permissions import (
+from custom_components.elevenagents.expose import _synchronise
+from custom_components.elevenagents.permissions import (
     authorise_read,
     from_options,
 )
-from custom_components.elevenlabs_agent.tool_sync import ToolSyncError, entity_catalogue
+from custom_components.elevenagents.tool_sync import ToolSyncError, entity_catalogue
 
 if TYPE_CHECKING:
     from homeassistant.helpers import entity_registry as er
@@ -69,7 +69,7 @@ def freezer(hass, freezer):
 def mock_sync_tools():
     """Keep the debounced flush off the network in every test in this module."""
     with patch(
-        "custom_components.elevenlabs_agent.expose.async_sync_tools", AsyncMock()
+        "custom_components.elevenagents.expose.async_sync_tools", AsyncMock()
     ) as mock:
         yield mock
 
@@ -210,7 +210,7 @@ async def test_a_burst_produces_one_write(
     await hass.async_block_till_done()
 
     with patch(
-        "custom_components.elevenlabs_agent.expose.async_sync_tools", AsyncMock()
+        "custom_components.elevenagents.expose.async_sync_tools", AsyncMock()
     ) as mock_sync:
         created = []
         for index in range(5):
@@ -266,7 +266,7 @@ async def test_a_written_allowlist_is_synchronised_with_the_agent(
     await hass.async_block_till_done()
 
     with patch(
-        "custom_components.elevenlabs_agent.expose.async_sync_tools", AsyncMock()
+        "custom_components.elevenagents.expose.async_sync_tools", AsyncMock()
     ) as mock_sync:
         await _new_entity_in(hass, entity_registry, area.id)
         freezer.tick(DEBOUNCE)
@@ -656,7 +656,7 @@ async def test_a_deletion_while_not_running_is_pruned_at_setup(
     await hass.config_entries.async_unload(setup_entry.entry_id)
     entity_registry.async_remove(gone.entity_id)
 
-    with patch("custom_components.elevenlabs_agent.async_sync_tools", AsyncMock()):
+    with patch("custom_components.elevenagents.async_sync_tools", AsyncMock()):
         assert await hass.config_entries.async_setup(setup_entry.entry_id)
         await hass.async_block_till_done()
 
@@ -745,7 +745,7 @@ async def test_a_tool_sync_error_from_the_listener_does_not_escape(
 ) -> None:
     """A read-back divergence during a registry sync is swallowed like any other."""
     with patch(
-        "custom_components.elevenlabs_agent.expose.async_sync_tools",
+        "custom_components.elevenagents.expose.async_sync_tools",
         AsyncMock(side_effect=ToolSyncError("diverged")),
     ):
         await _synchronise(hass, setup_entry)
@@ -758,7 +758,7 @@ async def test_a_missing_external_url_from_the_listener_does_not_escape(
 ) -> None:
     """The URL can vanish between the debounce firing and the sync running."""
     with patch(
-        "custom_components.elevenlabs_agent.expose.async_sync_tools",
+        "custom_components.elevenagents.expose.async_sync_tools",
         AsyncMock(side_effect=NoURLAvailableError),
     ):
         await _synchronise(hass, setup_entry)
@@ -775,7 +775,7 @@ async def test_a_missing_entity_is_found_when_home_assistant_has_started(
     )
     await hass.config_entries.async_unload(setup_entry.entry_id)
 
-    with patch("custom_components.elevenlabs_agent.async_sync_tools", AsyncMock()):
+    with patch("custom_components.elevenagents.async_sync_tools", AsyncMock()):
         assert await hass.config_entries.async_setup(setup_entry.entry_id)
         await hass.async_block_till_done()
     await _settle(hass, freezer)

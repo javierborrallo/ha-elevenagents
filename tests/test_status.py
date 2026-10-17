@@ -13,13 +13,13 @@ from homeassistant.core import callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
-from custom_components.elevenlabs_agent.const import CHECK_DEBOUNCE, DOMAIN
-from custom_components.elevenlabs_agent.elevenlabs_client import ElevenLabsError
-from custom_components.elevenlabs_agent.status import (
+from custom_components.elevenagents.const import CHECK_DEBOUNCE, DOMAIN
+from custom_components.elevenagents.elevenlabs_client import ElevenLabsError
+from custom_components.elevenagents.status import (
     async_record_check,
     check_signal,
 )
-from custom_components.elevenlabs_agent.tool_sync import async_sync_tools
+from custom_components.elevenagents.tool_sync import async_sync_tools
 
 if TYPE_CHECKING:
     from pytest_homeassistant_custom_component.typing import WebSocketGenerator
@@ -36,12 +36,12 @@ pytestmark = pytest.mark.filterwarnings(
 def mock_sync_tools():
     """Keep the registry listener's debounced sync off the network."""
     with patch(
-        "custom_components.elevenlabs_agent.expose.async_sync_tools", AsyncMock()
+        "custom_components.elevenagents.expose.async_sync_tools", AsyncMock()
     ) as mock:
         yield mock
 
 
-SYNC = "custom_components.elevenlabs_agent.tool_sync._sync"
+SYNC = "custom_components.elevenagents.tool_sync._sync"
 
 GOOD: dict[str, Any] = {
     "ok": True,
@@ -57,7 +57,7 @@ BAD: dict[str, Any] = {
 def run_check():
     """Replace the connection check with a mock that answers GOOD."""
     with patch(
-        "custom_components.elevenlabs_agent.status.async_run_check",
+        "custom_components.elevenagents.status.async_run_check",
         AsyncMock(return_value=GOOD),
     ) as mock:
         yield mock
@@ -192,7 +192,7 @@ async def test_the_websocket_check_stores_its_result(
     """The panel's check refreshes the sensors too."""
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/check", "entry_id": setup_entry.entry_id}
+        {"type": "elevenagents/check", "entry_id": setup_entry.entry_id}
     )
     await client.receive_json()
 
@@ -231,7 +231,7 @@ async def test_a_check_that_outlives_a_reload_does_not_store_into_the_new_runtim
         return BAD
 
     with patch(
-        "custom_components.elevenlabs_agent.status.async_run_check",
+        "custom_components.elevenagents.status.async_run_check",
         AsyncMock(side_effect=_reload_mid_check),
     ):
         result = await async_record_check(hass, setup_entry)

@@ -61,7 +61,7 @@ REAUTH_SCHEMA = vol.Schema({vol.Required(CONF_API_KEY): str})
 ROTATE_SCHEMA = vol.Schema({vol.Required("confirm", default=True): bool})
 
 
-class ElevenLabsAgentConfigFlow(ConfigFlow, domain=DOMAIN):
+class ElevenAgentsConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for the ElevenAgents integration."""
 
     VERSION = 1

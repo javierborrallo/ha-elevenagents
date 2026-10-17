@@ -38,7 +38,7 @@ from .response import project
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse
 
-    from . import ElevenLabsAgentConfigEntry
+    from . import ElevenAgentsConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -142,7 +142,7 @@ def _variables(call: ServiceCall) -> dict[str, Any]:
 
 
 def _check_projection(
-    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry, entity_id: str | None
+    hass: HomeAssistant, entry: ElevenAgentsConfigEntry, entity_id: str | None
 ) -> dict[str, Any] | None:
     """Return the entity's projection, refusing an entity the agent may not read."""
     if entity_id is None:
@@ -158,7 +158,7 @@ def _check_projection(
 
 async def _deliver(
     hass: HomeAssistant,
-    entry: ElevenLabsAgentConfigEntry,
+    entry: ElevenAgentsConfigEntry,
     call: ServiceCall,
     projection: dict[str, Any] | None,
 ) -> dict[str, Any]:

@@ -76,9 +76,7 @@ def _import_type_adapter() -> None:
     pydantic.TypeAdapter  # noqa: B018
 
 
-async def async_warm_up(hass: HomeAssistant) -> None:
-    """Resolve the SDK's lazy pydantic import off the event loop, once per process."""
-    await hass.async_add_executor_job(_import_type_adapter)
+_import_type_adapter()
 
 
 async def async_get_signed_url(client: AsyncElevenLabs, agent_id: str) -> str:

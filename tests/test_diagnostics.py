@@ -12,7 +12,7 @@ from pytest_homeassistant_custom_component.components.diagnostics import (
     get_diagnostics_for_config_entry,
 )
 
-from custom_components.elevenlabs_agent.const import (
+from custom_components.elevenagents.const import (
     CONF_AGENT_ID,
     CONF_API_KEY,
     CONF_WEBHOOK_ID,
@@ -21,7 +21,7 @@ from custom_components.elevenlabs_agent.const import (
     OPT_EXCEPTIONS,
     OPT_READ_ENTITIES,
 )
-from custom_components.elevenlabs_agent.diagnostics import (
+from custom_components.elevenagents.diagnostics import (
     async_get_config_entry_diagnostics,
 )
 

@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-    from . import ElevenLabsAgentConfigEntry
+    from . import ElevenAgentsConfigEntry
 
 OVERALL = "agent"
 WEBHOOK = "webhook"
@@ -28,7 +28,7 @@ WEBHOOK = "webhook"
 
 async def async_setup_entry(
     hass: HomeAssistant,  # noqa: ARG001 - the platform signature
-    entry: ElevenLabsAgentConfigEntry,
+    entry: ElevenAgentsConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Add the agent sensor and one sensor for each check."""
@@ -44,7 +44,7 @@ class StatusSensor(BinarySensorEntity):
     _attr_should_poll = False
     _attr_device_class = BinarySensorDeviceClass.PROBLEM
 
-    def __init__(self, entry: ElevenLabsAgentConfigEntry, key: str) -> None:
+    def __init__(self, entry: ElevenAgentsConfigEntry, key: str) -> None:
         """Name the sensor by its key and attach it to the agent's device."""
         self._entry = entry
         self._attr_translation_key = key
@@ -74,7 +74,7 @@ class StatusSensor(BinarySensorEntity):
 class AgentSensor(StatusSensor):
     """The agent as a whole."""
 
-    def __init__(self, entry: ElevenLabsAgentConfigEntry) -> None:
+    def __init__(self, entry: ElevenAgentsConfigEntry) -> None:
         """Create the agent sensor."""
         super().__init__(entry, OVERALL)
 
@@ -100,7 +100,7 @@ class CheckSensor(StatusSensor):
         {"tools", "missing", "extra", "unreadable", "detail"}
     )
 
-    def __init__(self, entry: ElevenLabsAgentConfigEntry, check: str) -> None:
+    def __init__(self, entry: ElevenAgentsConfigEntry, check: str) -> None:
         """Create the sensor of one check."""
         super().__init__(entry, check)
         self._check = check

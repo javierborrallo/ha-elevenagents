@@ -8,8 +8,8 @@ from unittest.mock import patch
 
 import pytest
 
-from custom_components.elevenlabs_agent.const import EVENT_CONVERSATION_GRACE_SECONDS
-from custom_components.elevenlabs_agent.sensitive import (
+from custom_components.elevenagents.const import EVENT_CONVERSATION_GRACE_SECONDS
+from custom_components.elevenagents.sensitive import (
     Gate,
     Mark,
     any_confirm,
@@ -523,7 +523,7 @@ def test_ask_regenerates_a_colliding_code() -> None:
     """A newly drawn code that collides with a pending one is drawn again."""
     gate = Gate()
     with patch(
-        "custom_components.elevenlabs_agent.sensitive.secrets.token_hex"
+        "custom_components.elevenagents.sensitive.secrets.token_hex"
     ) as token_hex:
         token_hex.side_effect = ["abc123", "abc123", "def456"]
         first = _ask(gate, now=0.0, conversation="c1")

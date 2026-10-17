@@ -36,7 +36,7 @@ from .repairs import async_check_missing
 from .tool_sync import ToolSyncError, async_sync_tools, entity_catalogue
 
 if TYPE_CHECKING:
-    from . import ElevenLabsAgentConfigEntry
+    from . import ElevenAgentsConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -90,14 +90,14 @@ def _grant_new(
     return changed
 
 
-def _catalogue_changed(hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry) -> bool:
+def _catalogue_changed(hass: HomeAssistant, entry: ElevenAgentsConfigEntry) -> bool:
     """Return True when the catalogue differs from the one the last sync sent."""
     perms = from_options(entry.options)
     current = entity_catalogue(hass, perms.read | perms.control)
     return current != entry.runtime_data.catalogue
 
 
-def _prune(hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry) -> None:
+def _prune(hass: HomeAssistant, entry: ElevenAgentsConfigEntry) -> None:
     """Remove the permissions of deleted registry entities."""
     removed = removed_registry_keys(hass, entry.options)
     if not removed:
@@ -108,7 +108,7 @@ def _prune(hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry) -> None:
     _LOGGER.debug("Removed the permissions of deleted entities %s", sorted(removed))
 
 
-async def _synchronise(hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry) -> None:
+async def _synchronise(hass: HomeAssistant, entry: ElevenAgentsConfigEntry) -> None:
     """Push the current allowlist and catalogue to the agent."""
     try:
         await async_sync_tools(hass, entry, entry.runtime_data.client)
@@ -119,7 +119,7 @@ async def _synchronise(hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry) -
 
 
 def async_track_new_entities(
-    hass: HomeAssistant, entry: ElevenLabsAgentConfigEntry
+    hass: HomeAssistant, entry: ElevenAgentsConfigEntry
 ) -> CALLBACK_TYPE:
     """
     Follow the entity, device and area registries.

@@ -18,7 +18,7 @@ from elevenlabs.types.privacy_config_output import PrivacyConfigOutput
 from homeassistant import data_entry_flow
 from homeassistant.helpers import issue_registry as ir
 
-from custom_components.elevenlabs_agent.const import (
+from custom_components.elevenagents.const import (
     CONF_AGENT_ID,
     DOMAIN,
     ISSUE_AGENT_UNPROTECTED,
@@ -29,8 +29,8 @@ from custom_components.elevenlabs_agent.const import (
     OPT_EXCEPTIONS,
     PANEL_URL_PATH,
 )
-from custom_components.elevenlabs_agent.repairs import (
-    ElevenLabsAgentRepairFlow,
+from custom_components.elevenagents.repairs import (
+    ElevenAgentsRepairFlow,
     async_apply_auth_fix,
     async_check_agent,
     async_check_missing,
@@ -205,7 +205,7 @@ async def test_create_fix_flow_returns_the_repair_flow(hass, setup_entry):
         hass, ISSUE_AGENT_UNPROTECTED, {"entry_id": setup_entry.entry_id}
     )
 
-    assert isinstance(flow, ElevenLabsAgentRepairFlow)
+    assert isinstance(flow, ElevenAgentsRepairFlow)
     assert flow.entry.data[CONF_AGENT_ID] == setup_entry.data[CONF_AGENT_ID]
 
 

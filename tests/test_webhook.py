@@ -15,7 +15,7 @@ from homeassistant.helpers.service import async_set_service_schema
 from homeassistant.util import dt as dt_util
 from homeassistant.util.aiohttp import MockRequest
 
-from custom_components.elevenlabs_agent.const import (
+from custom_components.elevenagents.const import (
     CONF_WEBHOOK_ID,
     CONF_WEBHOOK_SECRET,
     EVENT_CONVERSATION_GRACE_SECONDS,
@@ -32,7 +32,7 @@ from custom_components.elevenlabs_agent.const import (
     RATE_LIMIT_BURST,
     SECRET_HEADER,
 )
-from custom_components.elevenlabs_agent.webhook import (
+from custom_components.elevenagents.webhook import (
     TokenBucket,
     async_handle_webhook,
     async_read,
@@ -61,9 +61,7 @@ def no_network_sync():
     debounced sync (triggered by creating an entity) look due. Nothing in
     this module needs that sync to run.
     """
-    with patch(
-        "custom_components.elevenlabs_agent.expose.async_sync_tools", AsyncMock()
-    ):
+    with patch("custom_components.elevenagents.expose.async_sync_tools", AsyncMock()):
         yield
 
 
@@ -129,7 +127,7 @@ async def test_secret_check_uses_compare_digest_on_bytes(
         return original(a, b)
 
     monkeypatch.setattr(
-        "custom_components.elevenlabs_agent.webhook.hmac.compare_digest", spy
+        "custom_components.elevenagents.webhook.hmac.compare_digest", spy
     )
     client = await hass_client_no_auth()
 
@@ -714,7 +712,7 @@ async def test_an_event_conversation_survives_an_entry_reload(
     )
     setup_entry.runtime_data.gate.register_event_conversation("ev1")
 
-    with patch("custom_components.elevenlabs_agent.async_sync_tools", AsyncMock()):
+    with patch("custom_components.elevenagents.async_sync_tools", AsyncMock()):
         assert await hass.config_entries.async_reload(setup_entry.entry_id)
         await hass.async_block_till_done()
 

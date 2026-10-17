@@ -13,7 +13,7 @@ from .const import PANEL_URL_PATH
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-STATIC_PATH = "/elevenlabs_agent_panel"
+STATIC_PATH = "/elevenagents_panel"
 
 
 def _version(directory: Path) -> str:
@@ -33,8 +33,8 @@ async def async_register_panel(hass: HomeAssistant) -> None:
     await panel_custom.async_register_panel(
         hass,
         frontend_url_path=PANEL_URL_PATH,
-        webcomponent_name="elevenlabs-agent-panel",
+        webcomponent_name="elevenagents-panel",
         module_url=f"{served_at}/panel.js",
         require_admin=True,
-        config_panel_domain="elevenlabs_agent",
+        config_panel_domain="elevenagents",
     )

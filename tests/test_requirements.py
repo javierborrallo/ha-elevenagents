@@ -10,7 +10,7 @@ from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
-MANIFEST = Path("custom_components/elevenlabs_agent/manifest.json")
+MANIFEST = Path("custom_components/elevenagents/manifest.json")
 TEST_REQUIREMENTS = Path("requirements_test.txt")
 CORE_MANIFEST = (
     Path(homeassistant.__file__).parent / "components" / "elevenlabs" / "manifest.json"

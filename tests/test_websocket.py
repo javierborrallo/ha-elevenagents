@@ -12,7 +12,7 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.elevenlabs_agent.const import (
+from custom_components.elevenagents.const import (
     CONF_TOOL_IDS,
     CONF_WEBHOOK_ID,
     CONF_WEBHOOK_SECRET,
@@ -31,11 +31,11 @@ from custom_components.elevenlabs_agent.const import (
     OPT_SENSITIVE,
     TOOL_GET_STATE,
 )
-from custom_components.elevenlabs_agent.elevenlabs_client import (
+from custom_components.elevenagents.elevenlabs_client import (
     ElevenLabsAuthError,
     ElevenLabsError,
 )
-from custom_components.elevenlabs_agent.tool_sync import ToolSyncError
+from custom_components.elevenagents.tool_sync import ToolSyncError
 
 if TYPE_CHECKING:
     from pytest_homeassistant_custom_component.typing import WebSocketGenerator
@@ -60,7 +60,7 @@ async def test_config_get_returns_the_stored_options(
 
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
     )
     result = (await client.receive_json())["result"]
 
@@ -88,7 +88,7 @@ async def test_config_get_returns_entity_id_forms_for_the_panels_table(
 
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
     )
     result = (await client.receive_json())["result"]
 
@@ -111,7 +111,7 @@ async def test_config_get_returns_available_actions_for_a_controlled_entity(
 
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
     )
     result = (await client.receive_json())["result"]
 
@@ -136,7 +136,7 @@ async def test_config_get_available_actions_are_not_reduced_by_exceptions(
 
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
     )
     result = (await client.receive_json())["result"]
 
@@ -160,7 +160,7 @@ async def test_config_get_drops_a_stale_key_from_the_entity_id_form(
 
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
     )
     result = (await client.receive_json())["result"]
 
@@ -185,7 +185,7 @@ async def test_config_get_offers_no_actions_for_a_control_key_whose_entity_is_go
 
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
     )
     result = (await client.receive_json())["result"]
 
@@ -205,7 +205,7 @@ async def test_config_get_returns_both_auto_expose_switches(
 
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
     )
     result = (await client.receive_json())["result"]
 
@@ -219,7 +219,7 @@ async def test_config_get_says_nothing_is_configured_when_nothing_is_granted(
     """The empty state is what the panel uses to show the wizard."""
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
     )
     result = (await client.receive_json())["result"]
 
@@ -231,7 +231,7 @@ async def test_config_get_answers_a_caller_that_names_no_entry(
 ) -> None:
     """The link the config flow leaves behind carries no entry id."""
     client = await hass_ws_client(hass)
-    await client.send_json_auto_id({"type": "elevenlabs_agent/config/get"})
+    await client.send_json_auto_id({"type": "elevenagents/config/get"})
     message = await client.receive_json()
 
     assert message["success"] is True
@@ -246,7 +246,7 @@ async def test_config_get_refuses_to_choose_between_two_entries(
     second.add_to_hass(hass)
 
     client = await hass_ws_client(hass)
-    await client.send_json_auto_id({"type": "elevenlabs_agent/config/get"})
+    await client.send_json_auto_id({"type": "elevenagents/config/get"})
     message = await client.receive_json()
 
     assert message["success"] is False
@@ -260,7 +260,7 @@ async def test_config_get_refuses_a_caller_that_names_no_entry_when_none_exists(
     """Without the integration set up there is nothing to answer with."""
     assert await async_setup_component(hass, DOMAIN, {})
     client = await hass_ws_client(hass)
-    await client.send_json_auto_id({"type": "elevenlabs_agent/config/get"})
+    await client.send_json_auto_id({"type": "elevenagents/config/get"})
     message = await client.receive_json()
 
     assert message["success"] is False
@@ -274,7 +274,7 @@ async def test_config_get_refuses_an_unknown_entry(
     """An entry id from another integration is not addressable."""
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/config/get", "entry_id": "does_not_exist"}
+        {"type": "elevenagents/config/get", "entry_id": "does_not_exist"}
     )
     message = await client.receive_json()
 
@@ -291,7 +291,7 @@ async def test_config_get_refuses_an_entry_from_another_integration(
 
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/config/get", "entry_id": foreign_entry.entry_id}
+        {"type": "elevenagents/config/get", "entry_id": foreign_entry.entry_id}
     )
     message = await client.receive_json()
 
@@ -305,7 +305,7 @@ async def test_config_get_refuses_a_non_admin(
     """The screen that grants actions on a lock is for administrators."""
     client = await hass_ws_client(hass, hass_read_only_access_token)
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
     )
     message = await client.receive_json()
 
@@ -321,11 +321,11 @@ async def test_saving_entities_stores_keys_and_synchronises(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+        "custom_components.elevenagents.websocket.async_sync_tools", AsyncMock()
     ) as sync:
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/config/save",
+                "type": "elevenagents/config/save",
                 "entry_id": setup_entry.entry_id,
                 "block": "entities",
                 "data": {"read": [entry.entity_id], "control": []},
@@ -346,11 +346,11 @@ async def test_an_entity_with_no_registry_entry_is_keyed_by_entity_id(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+        "custom_components.elevenagents.websocket.async_sync_tools", AsyncMock()
     ):
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/config/save",
+                "type": "elevenagents/config/save",
                 "entry_id": setup_entry.entry_id,
                 "block": "entities",
                 "data": {"read": [], "control": ["lock.yaml_lock"]},
@@ -369,12 +369,12 @@ async def test_a_failed_sync_still_stores_the_permission(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_sync_tools",
+        "custom_components.elevenagents.websocket.async_sync_tools",
         AsyncMock(side_effect=ElevenLabsError("boom")),
     ):
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/config/save",
+                "type": "elevenagents/config/save",
                 "entry_id": setup_entry.entry_id,
                 "block": "entities",
                 "data": {"read": [entry.entity_id], "control": []},
@@ -395,12 +395,12 @@ async def test_a_dropped_field_still_stores_the_permission(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_sync_tools",
+        "custom_components.elevenagents.websocket.async_sync_tools",
         AsyncMock(side_effect=ToolSyncError("field dropped")),
     ):
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/config/save",
+                "type": "elevenagents/config/save",
                 "entry_id": setup_entry.entry_id,
                 "block": "entities",
                 "data": {"read": [entry.entity_id], "control": []},
@@ -422,11 +422,11 @@ async def test_saving_to_an_entry_that_is_not_loaded_reports_saved_not_sent(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+        "custom_components.elevenagents.websocket.async_sync_tools", AsyncMock()
     ) as sync:
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/config/save",
+                "type": "elevenagents/config/save",
                 "entry_id": setup_entry.entry_id,
                 "block": "entities",
                 "data": {"read": [entry.entity_id], "control": []},
@@ -450,7 +450,7 @@ async def test_config_save_refuses_a_non_admin(
     client = await hass_ws_client(hass, hass_read_only_access_token)
     await client.send_json_auto_id(
         {
-            "type": "elevenlabs_agent/config/save",
+            "type": "elevenagents/config/save",
             "entry_id": setup_entry.entry_id,
             "block": "auto_expose",
             "data": {"read": True, "control": True, "areas": []},
@@ -470,11 +470,11 @@ async def test_saving_exceptions_stores_by_permission_key_and_synchronises(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+        "custom_components.elevenagents.websocket.async_sync_tools", AsyncMock()
     ) as sync:
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/config/save",
+                "type": "elevenagents/config/save",
                 "entry_id": setup_entry.entry_id,
                 "block": "exceptions",
                 "data": {entry.entity_id: ["light.toggle"]},
@@ -499,11 +499,11 @@ async def test_saving_exceptions_fans_out_to_every_key_a_group_resolves_to(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+        "custom_components.elevenagents.websocket.async_sync_tools", AsyncMock()
     ):
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/config/save",
+                "type": "elevenagents/config/save",
                 "entry_id": setup_entry.entry_id,
                 "block": "exceptions",
                 "data": {"group.demo_group": ["light.toggle"]},
@@ -526,11 +526,11 @@ async def test_saving_exceptions_drops_a_target_that_resolves_to_nothing(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+        "custom_components.elevenagents.websocket.async_sync_tools", AsyncMock()
     ):
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/config/save",
+                "type": "elevenagents/config/save",
                 "entry_id": setup_entry.entry_id,
                 "block": "exceptions",
                 "data": {"group.empty_group": ["light.toggle"]},
@@ -549,11 +549,11 @@ async def test_saving_auto_expose_does_not_synchronise(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+        "custom_components.elevenagents.websocket.async_sync_tools", AsyncMock()
     ) as sync:
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/config/save",
+                "type": "elevenagents/config/save",
                 "entry_id": setup_entry.entry_id,
                 "block": "auto_expose",
                 "data": {"read": True, "control": True, "areas": ["salon"]},
@@ -575,11 +575,11 @@ async def test_saving_auto_expose_defaults_to_off_and_no_areas(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+        "custom_components.elevenagents.websocket.async_sync_tools", AsyncMock()
     ):
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/config/save",
+                "type": "elevenagents/config/save",
                 "entry_id": setup_entry.entry_id,
                 "block": "auto_expose",
                 "data": {},
@@ -600,11 +600,11 @@ async def test_saving_auto_expose_honours_each_switch_independently(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+        "custom_components.elevenagents.websocket.async_sync_tools", AsyncMock()
     ):
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/config/save",
+                "type": "elevenagents/config/save",
                 "entry_id": setup_entry.entry_id,
                 "block": "auto_expose",
                 "data": {"control": True, "areas": ["salon"]},
@@ -624,7 +624,7 @@ async def test_a_confirmation_timeout_at_or_above_the_agents_is_refused(
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
         {
-            "type": "elevenlabs_agent/config/save",
+            "type": "elevenagents/config/save",
             "entry_id": setup_entry.entry_id,
             "block": "settings",
             "data": {"confirm_timeout": 20},
@@ -644,11 +644,11 @@ async def test_saving_agent_settings_synchronises(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+        "custom_components.elevenagents.websocket.async_sync_tools", AsyncMock()
     ) as sync:
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/config/save",
+                "type": "elevenagents/config/save",
                 "entry_id": setup_entry.entry_id,
                 "block": "settings",
                 "data": {
@@ -671,7 +671,7 @@ async def test_an_unknown_block_is_refused_by_the_schema(
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
         {
-            "type": "elevenlabs_agent/config/save",
+            "type": "elevenagents/config/save",
             "entry_id": setup_entry.entry_id,
             "block": "everything",
             "data": {},
@@ -699,11 +699,11 @@ async def test_agent_get_returns_the_prompt_that_is_there(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_get_agent",
+        "custom_components.elevenagents.websocket.async_get_agent",
         AsyncMock(return_value=_agent_with_prompt("Eres un asistente.")),
     ):
         await client.send_json_auto_id(
-            {"type": "elevenlabs_agent/agent/get", "entry_id": setup_entry.entry_id}
+            {"type": "elevenagents/agent/get", "entry_id": setup_entry.entry_id}
         )
         result = (await client.receive_json())["result"]
 
@@ -717,11 +717,11 @@ async def test_agent_get_returns_the_opening_line_and_the_agent_name(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_get_agent",
+        "custom_components.elevenagents.websocket.async_get_agent",
         AsyncMock(return_value=_agent_with_prompt("Eres un asistente.", "Hola.")),
     ):
         await client.send_json_auto_id(
-            {"type": "elevenlabs_agent/agent/get", "entry_id": setup_entry.entry_id}
+            {"type": "elevenagents/agent/get", "entry_id": setup_entry.entry_id}
         )
         result = (await client.receive_json())["result"]
 
@@ -736,11 +736,11 @@ async def test_agent_get_falls_back_to_the_default_settings_when_never_synced(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_get_agent",
+        "custom_components.elevenagents.websocket.async_get_agent",
         AsyncMock(return_value=_agent_with_prompt("Eres un asistente.")),
     ):
         await client.send_json_auto_id(
-            {"type": "elevenlabs_agent/agent/get", "entry_id": setup_entry.entry_id}
+            {"type": "elevenagents/agent/get", "entry_id": setup_entry.entry_id}
         )
         result = (await client.receive_json())["result"]
 
@@ -761,16 +761,16 @@ async def test_agent_get_returns_the_accounts_own_setting(
 
     with (
         patch(
-            "custom_components.elevenlabs_agent.websocket.async_get_agent",
+            "custom_components.elevenagents.websocket.async_get_agent",
             AsyncMock(return_value=_agent_with_prompt("Eres un asistente.")),
         ),
         patch(
-            "custom_components.elevenlabs_agent.websocket.async_get_tool",
+            "custom_components.elevenagents.websocket.async_get_tool",
             AsyncMock(return_value=tool),
         ) as get_tool,
     ):
         await client.send_json_auto_id(
-            {"type": "elevenlabs_agent/agent/get", "entry_id": setup_entry.entry_id}
+            {"type": "elevenagents/agent/get", "entry_id": setup_entry.entry_id}
         )
         result = (await client.receive_json())["result"]
 
@@ -785,7 +785,7 @@ async def test_agent_get_refuses_a_non_admin(
     """Reading the agent's system prompt is for administrators."""
     client = await hass_ws_client(hass, hass_read_only_access_token)
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/agent/get", "entry_id": setup_entry.entry_id}
+        {"type": "elevenagents/agent/get", "entry_id": setup_entry.entry_id}
     )
     message = await client.receive_json()
 
@@ -801,7 +801,7 @@ async def test_agent_get_refuses_an_entry_that_is_not_loaded(
     client = await hass_ws_client(hass)
 
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/agent/get", "entry_id": setup_entry.entry_id}
+        {"type": "elevenagents/agent/get", "entry_id": setup_entry.entry_id}
     )
     message = await client.receive_json()
 
@@ -818,11 +818,11 @@ async def test_agent_save_writes_the_prompt(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_patch_agent", AsyncMock()
+        "custom_components.elevenagents.websocket.async_patch_agent", AsyncMock()
     ) as patched:
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/agent/save",
+                "type": "elevenagents/agent/save",
                 "entry_id": setup_entry.entry_id,
                 "prompt": "# Tools\n...",
             }
@@ -842,11 +842,11 @@ async def test_agent_save_writes_the_opening_line(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_patch_agent", AsyncMock()
+        "custom_components.elevenagents.websocket.async_patch_agent", AsyncMock()
     ) as patched:
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/agent/save",
+                "type": "elevenagents/agent/save",
                 "entry_id": setup_entry.entry_id,
                 "first_message": "Hola, soy tu casa.",
             }
@@ -866,11 +866,11 @@ async def test_agent_save_writes_nothing_when_nothing_is_sent(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_patch_agent", AsyncMock()
+        "custom_components.elevenagents.websocket.async_patch_agent", AsyncMock()
     ) as patched:
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/agent/save",
+                "type": "elevenagents/agent/save",
                 "entry_id": setup_entry.entry_id,
             }
         )
@@ -887,7 +887,7 @@ async def test_agent_save_refuses_a_non_admin(
     client = await hass_ws_client(hass, hass_read_only_access_token)
     await client.send_json_auto_id(
         {
-            "type": "elevenlabs_agent/agent/save",
+            "type": "elevenagents/agent/save",
             "entry_id": setup_entry.entry_id,
             "prompt": "x",
         }
@@ -905,12 +905,12 @@ async def test_agent_save_reports_a_refused_write(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_patch_agent",
+        "custom_components.elevenagents.websocket.async_patch_agent",
         AsyncMock(side_effect=ElevenLabsAuthError("unauthorised")),
     ):
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/agent/save",
+                "type": "elevenagents/agent/save",
                 "entry_id": setup_entry.entry_id,
                 "prompt": "x",
             }
@@ -930,7 +930,7 @@ async def test_agent_save_refuses_an_entry_that_is_not_loaded(
 
     await client.send_json_auto_id(
         {
-            "type": "elevenlabs_agent/agent/save",
+            "type": "elevenagents/agent/save",
             "entry_id": setup_entry.entry_id,
             "prompt": "x",
         }
@@ -949,7 +949,7 @@ async def test_rotate_refuses_a_non_admin(
     client = await hass_ws_client(hass, hass_read_only_access_token)
     await client.send_json_auto_id(
         {
-            "type": "elevenlabs_agent/rotate",
+            "type": "elevenagents/rotate",
             "entry_id": setup_entry.entry_id,
             "what": "secret",
         }
@@ -968,11 +968,11 @@ async def test_rotating_the_secret_replaces_it_and_syncs(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+        "custom_components.elevenagents.websocket.async_sync_tools", AsyncMock()
     ) as sync:
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/rotate",
+                "type": "elevenagents/rotate",
                 "entry_id": setup_entry.entry_id,
                 "what": "secret",
             }
@@ -993,17 +993,17 @@ async def test_a_failed_webhook_rotation_restores_the_old_id(
 
     with (
         patch(
-            "custom_components.elevenlabs_agent.websocket.webhook.async_generate_id",
+            "custom_components.elevenagents.websocket.webhook.async_generate_id",
             return_value="new_webhook_id",
         ),
         patch(
-            "custom_components.elevenlabs_agent.websocket.async_sync_tools",
+            "custom_components.elevenagents.websocket.async_sync_tools",
             AsyncMock(side_effect=ElevenLabsError("no")),
         ),
     ):
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/rotate",
+                "type": "elevenagents/rotate",
                 "entry_id": setup_entry.entry_id,
                 "what": "webhook",
             }
@@ -1028,17 +1028,17 @@ async def test_a_dropped_field_during_webhook_rotation_restores_the_old_id(
 
     with (
         patch(
-            "custom_components.elevenlabs_agent.websocket.webhook.async_generate_id",
+            "custom_components.elevenagents.websocket.webhook.async_generate_id",
             return_value="new_webhook_id",
         ),
         patch(
-            "custom_components.elevenlabs_agent.websocket.async_sync_tools",
+            "custom_components.elevenagents.websocket.async_sync_tools",
             AsyncMock(side_effect=ToolSyncError("field dropped")),
         ),
     ):
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/rotate",
+                "type": "elevenagents/rotate",
                 "entry_id": setup_entry.entry_id,
                 "what": "webhook",
             }
@@ -1065,7 +1065,7 @@ async def test_rotate_refuses_an_entry_that_is_not_loaded(
 
     await client.send_json_auto_id(
         {
-            "type": "elevenlabs_agent/rotate",
+            "type": "elevenagents/rotate",
             "entry_id": setup_entry.entry_id,
             "what": "webhook",
         }
@@ -1097,16 +1097,14 @@ async def test_a_successful_webhook_rotation_clears_the_issue(
 
     with (
         patch(
-            "custom_components.elevenlabs_agent.websocket.webhook.async_generate_id",
+            "custom_components.elevenagents.websocket.webhook.async_generate_id",
             return_value="new_webhook_id",
         ),
-        patch(
-            "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
-        ),
+        patch("custom_components.elevenagents.websocket.async_sync_tools", AsyncMock()),
     ):
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/rotate",
+                "type": "elevenagents/rotate",
                 "entry_id": setup_entry.entry_id,
                 "what": "webhook",
             }
@@ -1147,11 +1145,11 @@ async def test_the_issue_survives_until_the_sync_actually_finishes(
         secret_during_sync.append(setup_entry.data[CONF_WEBHOOK_SECRET] != before)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_sync_tools", _sync_tools
+        "custom_components.elevenagents.websocket.async_sync_tools", _sync_tools
     ):
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/rotate",
+                "type": "elevenagents/rotate",
                 "entry_id": setup_entry.entry_id,
                 "what": "secret",
             }
@@ -1180,7 +1178,7 @@ async def test_config_get_lists_missing_keys_with_where_they_are_stored(
 
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
     )
     result = (await client.receive_json())["result"]
 
@@ -1219,7 +1217,7 @@ async def test_config_get_shows_a_key_that_only_has_a_mark(
 
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
     )
     result = (await client.receive_json())["result"]
 
@@ -1253,7 +1251,7 @@ async def test_config_get_shows_a_key_a_registry_entity_took_as_missing(
 
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
     )
     result = (await client.receive_json())["result"]
 
@@ -1282,7 +1280,7 @@ async def test_config_get_names_the_entities_outside_the_registry(
 
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
     )
     result = (await client.receive_json())["result"]
 
@@ -1304,11 +1302,11 @@ async def test_forget_removes_missing_keys_and_synchronises(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+        "custom_components.elevenagents.websocket.async_sync_tools", AsyncMock()
     ) as sync:
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/config/save",
+                "type": "elevenagents/config/save",
                 "entry_id": setup_entry.entry_id,
                 "block": "forget",
                 "data": {"keys": ["lock.yaml_gone"]},
@@ -1333,11 +1331,11 @@ async def test_forget_refuses_a_key_whose_entity_exists(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+        "custom_components.elevenagents.websocket.async_sync_tools", AsyncMock()
     ):
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/config/save",
+                "type": "elevenagents/config/save",
                 "entry_id": setup_entry.entry_id,
                 "block": "forget",
                 "data": {"keys": ["lock.yaml_present"]},
@@ -1366,11 +1364,11 @@ async def test_forget_clears_the_missing_entities_issue(
     client = await hass_ws_client(hass)
 
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+        "custom_components.elevenagents.websocket.async_sync_tools", AsyncMock()
     ):
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/config/save",
+                "type": "elevenagents/config/save",
                 "entry_id": setup_entry.entry_id,
                 "block": "forget",
                 "data": {"keys": ["sensor.yaml_gone"]},
@@ -1402,7 +1400,7 @@ async def test_config_get_lists_the_entities_the_agent_lacks(
     }
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
     )
     result = (await client.receive_json())["result"]
 
@@ -1413,7 +1411,7 @@ async def test_config_get_lists_none_before_a_check(hass, setup_entry, hass_ws_c
     """No check, no claim."""
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
     )
     result = (await client.receive_json())["result"]
 
@@ -1424,7 +1422,7 @@ async def test_config_get_returns_the_event_settings(hass, setup_entry, hass_ws_
     """Defaults apply until the user saves."""
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
     )
     result = (await client.receive_json())["result"]
 
@@ -1439,11 +1437,11 @@ async def test_config_save_stores_the_event_settings(hass, setup_entry, hass_ws_
     """The events block writes three options and does not sync."""
     client = await hass_ws_client(hass)
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+        "custom_components.elevenagents.websocket.async_sync_tools", AsyncMock()
     ) as sync:
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/config/save",
+                "type": "elevenagents/config/save",
                 "entry_id": setup_entry.entry_id,
                 "block": "events",
                 "data": {
@@ -1477,7 +1475,7 @@ async def test_config_save_refuses_event_settings_out_of_range(
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
         {
-            "type": "elevenlabs_agent/config/save",
+            "type": "elevenagents/config/save",
             "entry_id": setup_entry.entry_id,
             "block": "events",
             "data": data,
@@ -1503,7 +1501,7 @@ async def test_config_save_refuses_a_bad_event_number_instead_of_crashing(
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
         {
-            "type": "elevenlabs_agent/config/save",
+            "type": "elevenagents/config/save",
             "entry_id": setup_entry.entry_id,
             "block": "events",
             "data": data,
@@ -1524,11 +1522,11 @@ async def test_config_save_stores_sensitive_marks_by_key(
     hass.states.async_set(lock.entity_id, "locked")
     client = await hass_ws_client(hass)
     with patch(
-        "custom_components.elevenlabs_agent.websocket.async_sync_tools", AsyncMock()
+        "custom_components.elevenagents.websocket.async_sync_tools", AsyncMock()
     ) as sync:
         await client.send_json_auto_id(
             {
-                "type": "elevenlabs_agent/config/save",
+                "type": "elevenagents/config/save",
                 "entry_id": setup_entry.entry_id,
                 "block": "sensitive",
                 "data": {lock.entity_id: {"confirm": True, "refuse_automatic": False}},
@@ -1543,7 +1541,7 @@ async def test_config_save_stores_sensitive_marks_by_key(
     sync.assert_awaited_once()
 
     await client.send_json_auto_id(
-        {"type": "elevenlabs_agent/config/get", "entry_id": setup_entry.entry_id}
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
     )
     got = (await client.receive_json())["result"]
     assert got["sensitive_entity_ids"] == {

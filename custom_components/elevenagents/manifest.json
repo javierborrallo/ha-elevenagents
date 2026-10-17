@@ -1,5 +1,5 @@
 {
-  "domain": "elevenlabs_agent",
+  "domain": "elevenagents",
   "name": "ElevenAgents",
   "codeowners": [
     "@javierborrallo"
@@ -12,13 +12,13 @@
     "http",
     "websocket_api"
   ],
-  "documentation": "https://github.com/javierborrallo/ha-elevenlabs-agent",
+  "documentation": "https://github.com/javierborrallo/ha-elevenagents",
   "integration_type": "service",
   "iot_class": "cloud_push",
-  "issue_tracker": "https://github.com/javierborrallo/ha-elevenlabs-agent/issues",
+  "issue_tracker": "https://github.com/javierborrallo/ha-elevenagents/issues",
   "requirements": [
     "elevenlabs>=2.51.0"
   ],
   "single_config_entry": true,
-  "version": "0.5.0"
+  "version": "0.6.0"
 }
