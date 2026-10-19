@@ -17,7 +17,6 @@ from homeassistant.config_entries import (
     ConfigFlow,
     ConfigFlowResult,
 )
-from homeassistant.helpers.network import NoURLAvailableError, get_url
 from homeassistant.helpers.selector import (
     SelectOptionDict,
     SelectSelector,
@@ -47,7 +46,7 @@ from .elevenlabs_client import (
     async_list_tools,
     async_patch_agent,
 )
-from .public_url import normalize_public_url
+from .public_url import PublicUrlError, ha_origin, public_url_option
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -58,9 +57,14 @@ _LOGGER = logging.getLogger(__name__)
 
 USER_SCHEMA = vol.Schema({vol.Required(CONF_API_KEY): str})
 
-PUBLIC_URL_SCHEMA = USER_SCHEMA.extend({vol.Required(OPT_PUBLIC_URL): str})
 
-OPTIONAL_PUBLIC_URL_SCHEMA = USER_SCHEMA.extend({vol.Optional(OPT_PUBLIC_URL): str})
+def _user_schema(suggested: str | None) -> vol.Schema:
+    """Return the first form, with the webhook URL field prefilled."""
+    description = {"suggested_value": suggested} if suggested else None
+    return USER_SCHEMA.extend(
+        {vol.Optional(OPT_PUBLIC_URL, description=description): str}
+    )
+
 
 REAUTH_SCHEMA = vol.Schema({vol.Required(CONF_API_KEY): str})
 
@@ -87,22 +91,22 @@ class ElevenAgentsConfigFlow(ConfigFlow, domain=DOMAIN):
         """
         Validate the API key by listing the workspace's agents.
 
-        Ask for a public URL as well. It is required when Home Assistant has
-        no external URL, and optional when it has one.
+        Ask for the webhook URL as well. The field starts as the Home
+        Assistant URL, or empty without one.
         """
-        try:
-            get_url(self.hass, allow_internal=False)
-        except NoURLAvailableError:
-            schema = PUBLIC_URL_SCHEMA
-        else:
-            schema = OPTIONAL_PUBLIC_URL_SCHEMA
-
         errors: dict[str, str] = {}
+        suggested = ha_origin(self.hass)
 
-        if user_input is not None and not self._read_public_url(
-            user_input, required=schema is PUBLIC_URL_SCHEMA
-        ):
-            errors[OPT_PUBLIC_URL] = "invalid_public_url"
+        if user_input is not None:
+            suggested = user_input.get(OPT_PUBLIC_URL, "")
+            try:
+                public_url = public_url_option(self.hass, suggested)
+            except PublicUrlError as err:
+                errors[OPT_PUBLIC_URL] = err.code
+            else:
+                self._options = (
+                    {} if public_url is None else {OPT_PUBLIC_URL: public_url}
+                )
 
         if user_input is not None and not errors:
             client = async_get_client(self.hass, user_input[CONF_API_KEY])
@@ -124,26 +128,9 @@ class ElevenAgentsConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=schema,
+            data_schema=_user_schema(suggested),
             errors=errors,
         )
-
-    def _read_public_url(self, user_input: dict[str, Any], *, required: bool) -> bool:
-        """
-        Store the public URL of the form in the options of the new entry.
-
-        Return False when the value is not a bare https origin. An empty value
-        clears the option, and is refused when the field is required.
-        """
-        value = user_input.get(OPT_PUBLIC_URL, "")
-        public_url = normalize_public_url(value)
-        if public_url is not None:
-            self._options = {OPT_PUBLIC_URL: public_url}
-            return True
-        if value.strip() or required:
-            return False
-        self._options = {}
-        return True
 
     async def async_step_agent(
         self, user_input: dict[str, Any] | None = None
@@ -203,6 +190,8 @@ class ElevenAgentsConfigFlow(ConfigFlow, domain=DOMAIN):
     def _create_entry(self) -> ConfigFlowResult:
         """Create the entry for the chosen agent."""
         webhook_id = webhook.async_generate_id()
+        webhook_path = webhook.async_generate_path(webhook_id)
+        origin = self._options.get(OPT_PUBLIC_URL) or ha_origin(self.hass) or ""
         return self.async_create_entry(
             title=self._agent_id,
             data={
@@ -215,7 +204,8 @@ class ElevenAgentsConfigFlow(ConfigFlow, domain=DOMAIN):
             options=self._options,
             description_placeholders={
                 "panel_url": f"/{PANEL_URL_PATH}",
-                "webhook_path": webhook.async_generate_path(webhook_id),
+                "webhook_url": f"{origin}{webhook_path}",
+                "webhook_path": webhook_path,
             },
         )
 

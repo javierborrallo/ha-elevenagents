@@ -55,23 +55,23 @@ agent, and keeps them aligned as your Home Assistant configuration changes.
 ## Setting it up
 
 **Set your external URL first.** Settings → System → Network. The integration writes that
-address into your agent's tools, unless you give it a public webhook URL.
+address into your agent's tools, unless you change the webhook URL.
 
 Adding the integration asks for your API key, validated against ElevenLabs before anything
-else happens, and a public webhook URL: required when Home Assistant has no external URL,
-optional when it has one. Then it asks for your agent, picked from the list read back from
-your account.
+else happens, and the webhook URL: the address ElevenLabs calls. It starts as the external URL
+of Home Assistant, or empty when there is none. Then it asks for your agent, picked from the
+list read back from your account.
 
 ### A private Home Assistant
 
 ElevenLabs calls one address in your home: `/api/webhook/<id>`. Nothing else has to be public.
 If Home Assistant lives on a VPN or a mesh network, put a reverse proxy on the internet that
-forwards that path to it, and enter the proxy's address as the **public webhook URL**, during
+forwards that path to it, and enter the proxy's address as the **webhook URL**, during
 setup or later under **Agent settings** in the panel. Do the same when your external URL works
 only inside your own network. The tools then call the proxy; Home Assistant keeps its own URLs.
 
-The field takes an `https://` address with no path, such as `https://hooks.example.com`. Leave it
-empty to use the external URL of Home Assistant.
+The field takes an `https://` address with no path, such as `https://hooks.example.com`.
+**Back to the Home Assistant URL** in the panel undoes it.
 
 With Caddy:
 
@@ -88,14 +88,14 @@ hooks.example.com {
 }
 ```
 
-- The closing message of the setup shows the path with its `<id>`; so does the URL of either
-  tool in the ElevenLabs dashboard. Publishing only this webhook keeps every other one private.
-  Rotating the webhook in the panel changes the id.
+- The closing message of the setup shows the full URL with its `<id>`. So does **Agent
+  settings** in the panel, under **Full URL**. The panel calls that URL when it opens, and
+  **Test this address** calls a new one before you save it. Publishing only this webhook keeps
+  every other one private. Rotating the webhook in the panel changes the id.
 - Removing `X-Forwarded-For` spares you a `trusted_proxies` entry in Home Assistant. Without
   it, Home Assistant refuses requests from an untrusted proxy.
-- The **Webhook reachable** sensor calls the public address. Green means ElevenLabs gets
-  through. The id exists only once setup ends, so the sensor stays red until the proxy
-  forwards it.
+- The **Webhook reachable** sensor calls the webhook URL. Green means the address answers.
+  The id exists only once setup ends, so the sensor stays red until the proxy forwards it.
 
 Nothing is exposed yet. The closing message links to the configuration panel, which is also
 what **Configure** opens on the integration page. The first time, the panel walks seven steps:

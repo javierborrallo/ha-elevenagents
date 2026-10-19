@@ -77,6 +77,16 @@ async def _webhook_check(
         url = entry_webhook_url(hass, entry)
     except NoURLAvailableError:
         return _item("webhook", PROBLEM, "no external URL")
+    return await async_probe_webhook(hass, url)
+
+
+async def async_probe_webhook(hass: HomeAssistant, url: str) -> dict[str, Any]:
+    """
+    Call one webhook URL without the secret and return the report line.
+
+    The handler of this integration answers 401. The detail never carries
+    the URL.
+    """
     try:
         async with async_get_clientsession(hass).post(
             url, json={}, timeout=aiohttp.ClientTimeout(total=WEBHOOK_PROBE_TIMEOUT)

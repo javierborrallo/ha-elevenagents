@@ -6,11 +6,11 @@
         "description": "Introduce una clave de API de ElevenLabs. La clave necesita permiso de escritura sobre ElevenAgents. No se guarda nada hasta que elijas un agente en la pantalla siguiente.",
         "data": {
           "api_key": "Clave de API",
-          "public_url": "URL pública del webhook"
+          "public_url": "URL del webhook"
         },
         "data_description": {
           "api_key": "Crea una clave en el panel de ElevenLabs, dentro de tu perfil. Dale permiso de escritura sobre ElevenAgents.",
-          "public_url": "La dirección https a la que llama ElevenLabs, por ejemplo https://hooks.example.com. Solo la dirección, sin ruta. Déjala vacía si ElevenLabs llega a la URL externa de Home Assistant. Rellénala si Home Assistant no tiene URL externa, o si esa URL solo funciona en tu propia red: pon la dirección de un proxy que reenvíe /api/webhook/ a este Home Assistant."
+          "public_url": "La dirección https a la que llama ElevenLabs, sin ruta. Empieza con la URL externa de Home Assistant, o vacía si no la hay. Cámbiala si ElevenLabs no llega a esa URL: pon la dirección de un proxy que reenvíe /api/webhook/ a este Home Assistant."
         }
       },
       "agent": {
@@ -39,6 +39,7 @@
     "error": {
       "invalid_auth": "ElevenLabs ha rechazado esta clave. Comprueba que la copiaste entera y que no está revocada.",
       "invalid_public_url": "Introduce una dirección https sin ruta, por ejemplo https://hooks.example.com.",
+      "no_public_url": "Home Assistant no tiene URL externa. Pon la dirección de un proxy que reenvíe /api/webhook/ a este Home Assistant.",
       "insufficient_scope": "La clave funciona, pero puede que no alcance ElevenAgents. Ábrela en el panel de ElevenLabs y dale permiso de escritura sobre ElevenAgents.",
       "no_agents": "Esta clave no alcanza ningún agente. Crea uno en el panel de ElevenLabs y vuelve a añadir la integración.",
       "agent_not_found": "Ese agente ya no existe en el espacio de trabajo que alcanza esta clave.",
@@ -51,7 +52,7 @@
       "reauth_successful": "La clave nueva funciona. La integración vuelve a estar conectada."
     },
     "create_entry": {
-      "default": "Tu clave y tu agente quedan guardados.\n\nTodavía no hay nada expuesto. **[Elige qué puede ver y hacer tu agente]({panel_url})** — hasta que lo hagas, el agente no alcanza nada de esta instalación.\n\nElevenLabs llama a esta instalación en `{webhook_path}`. Si un proxy publica Home Assistant, reenvía esa ruta."
+      "default": "Tu clave y tu agente quedan guardados.\n\nTodavía no hay nada expuesto. **[Elige qué puede ver y hacer tu agente]({panel_url})** — hasta que lo hagas, el agente no alcanza nada de esta instalación.\n\nElevenLabs llama a `{webhook_url}`. Un proxy delante de Home Assistant debe reenviar `{webhook_path}`."
     }
   },
   "issues": {

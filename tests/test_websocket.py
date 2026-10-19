@@ -38,6 +38,7 @@ from custom_components.elevenagents.elevenlabs_client import (
     ElevenLabsAuthError,
     ElevenLabsError,
 )
+from custom_components.elevenagents.public_url import entry_webhook_url
 from custom_components.elevenagents.tool_sync import ToolSyncError
 
 if TYPE_CHECKING:
@@ -1978,3 +1979,158 @@ async def test_config_get_returns_the_public_url(
     )
     result = (await client.receive_json())["result"]
     assert result["public_url"] == "https://hooks.example.com"
+
+
+async def test_config_get_returns_the_webhook_address(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The panel shows the address ElevenLabs calls and the path a proxy forwards."""
+    path = f"/api/webhook/{setup_entry.data[CONF_WEBHOOK_ID]}"
+    await hass.config.async_update(external_url="https://home.example")
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
+    )
+    result = (await client.receive_json())["result"]
+    assert result["webhook_path"] == path
+    assert result["webhook_url"] == f"https://home.example{path}"
+
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_PUBLIC_URL: "https://hooks.example.com"}
+    )
+    await client.send_json_auto_id(
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
+    )
+    result = (await client.receive_json())["result"]
+    assert result["webhook_url"] == f"https://hooks.example.com{path}"
+
+
+async def test_config_get_without_an_address_returns_an_empty_webhook_url(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """Without either address the panel shows no URL, only the path."""
+    await hass.config.async_update(
+        internal_url="http://192.168.1.10:8123", external_url=None
+    )
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
+    )
+    result = (await client.receive_json())["result"]
+    assert result["webhook_url"] == ""
+    assert result["webhook_path"] == f"/api/webhook/{setup_entry.data[CONF_WEBHOOK_ID]}"
+
+
+async def test_saving_the_home_assistant_url_removes_the_public_url(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The prefilled value hands the webhook back to the external URL."""
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_PUBLIC_URL: "https://hooks.example.com"}
+    )
+
+    result, sync = await _save_settings(
+        hass, setup_entry, hass_ws_client, {"public_url": "https://home.example/"}
+    )
+
+    assert result["outcome"] == "ok"
+    assert sync.await_count == 1
+    assert OPT_PUBLIC_URL not in setup_entry.options
+
+
+async def test_config_get_returns_the_home_assistant_url(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The panel prefills the field and offers a way back to it."""
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
+    )
+    assert (await client.receive_json())["result"]["ha_url"] == "https://home.example"
+
+    await hass.config.async_update(
+        internal_url="http://192.168.1.10:8123", external_url=None
+    )
+    await client.send_json_auto_id(
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
+    )
+    assert (await client.receive_json())["result"]["ha_url"] == ""
+
+
+async def _probe(hass, entry, hass_ws_client, extra) -> tuple[dict, AsyncMock]:
+    """Run the webhook probe with the HTTP call patched, and return the result."""
+    client = await hass_ws_client(hass)
+    with patch(
+        "custom_components.elevenagents.websocket.async_probe_webhook",
+        AsyncMock(return_value={"check": "webhook", "status": "ok", "detail": None}),
+    ) as probe:
+        await client.send_json_auto_id(
+            {"type": "elevenagents/webhook/probe", "entry_id": entry.entry_id, **extra}
+        )
+        result = (await client.receive_json())["result"]
+    return result, probe
+
+
+async def test_the_probe_calls_the_current_webhook_url(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The panel checks the saved address when it opens."""
+    result, probe = await _probe(hass, setup_entry, hass_ws_client, {})
+
+    assert result == {"status": "ok", "detail": None}
+    probe.assert_awaited_once_with(hass, entry_webhook_url(hass, setup_entry))
+
+
+async def test_the_probe_calls_a_typed_address_with_the_webhook_path(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The user tests a proxy before the tools move to it."""
+    result, probe = await _probe(
+        hass, setup_entry, hass_ws_client, {"public_url": "https://Hooks.example.com/"}
+    )
+
+    path = f"/api/webhook/{setup_entry.data[CONF_WEBHOOK_ID]}"
+    assert result["status"] == "ok"
+    probe.assert_awaited_once_with(hass, f"https://hooks.example.com{path}")
+    assert OPT_PUBLIC_URL not in setup_entry.options
+
+
+async def test_the_probe_of_the_home_assistant_url_uses_it(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The prefilled value is probed like the saved one."""
+    _result, probe = await _probe(
+        hass, setup_entry, hass_ws_client, {"public_url": "https://home.example"}
+    )
+
+    path = f"/api/webhook/{setup_entry.data[CONF_WEBHOOK_ID]}"
+    probe.assert_awaited_once_with(hass, f"https://home.example{path}")
+
+
+async def test_the_probe_refuses_an_invalid_address_without_a_call(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """A value with a path never leaves Home Assistant."""
+    result, probe = await _probe(
+        hass,
+        setup_entry,
+        hass_ws_client,
+        {"public_url": "https://hooks.example.com/ha"},
+    )
+
+    assert result == {"status": "problem", "detail": "invalid_public_url"}
+    probe.assert_not_awaited()
+
+
+async def test_the_probe_without_any_address_makes_no_call(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """Without either address there is nothing to call."""
+    await hass.config.async_update(
+        internal_url="http://192.168.1.10:8123", external_url=None
+    )
+
+    result, probe = await _probe(hass, setup_entry, hass_ws_client, {})
+
+    assert result == {"status": "problem", "detail": "no_public_url"}
+    probe.assert_not_awaited()
