@@ -104,6 +104,9 @@ const EN = {
   firstMessageLabel: "Opening line",
   firstMessageHint: "The first thing the agent says. Leave it empty to let the caller speak first.",
   firstMessageOffline: "Available when ElevenLabs can be reached.",
+  maxDurationLabel: "Maximum conversation length (seconds)",
+  silenceTimeoutLabel: "End the call after silence (seconds)",
+  silenceTimeoutOff: "Off",
   confirmTimeoutLabel: "Confirmation timeout (seconds)",
   confirmTimeoutDescription:
     "How long the integration waits for Home Assistant to finish an action " +
@@ -275,6 +278,9 @@ const ES = {
   firstMessageHint:
     "Lo primero que dice el agente. Déjalo vacío para que hable antes quien llama.",
   firstMessageOffline: "Disponible cuando se pueda contactar con ElevenLabs.",
+  maxDurationLabel: "Duración máxima de la conversación (segundos)",
+  silenceTimeoutLabel: "Colgar tras un silencio de (segundos)",
+  silenceTimeoutOff: "Desactivado",
   confirmTimeoutLabel: "Tiempo de confirmación (segundos)",
   confirmTimeoutDescription:
     "Cuánto espera la integración a que Home Assistant termine una acción " +

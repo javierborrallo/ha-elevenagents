@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -689,6 +689,8 @@ def _agent_with_prompt(text: str, first_message: str = "") -> MagicMock:
     agent.name = "Casa"
     agent.conversation_config.agent.prompt.prompt = text
     agent.conversation_config.agent.first_message = first_message
+    agent.conversation_config.conversation.max_duration_seconds = None
+    agent.conversation_config.turn.silence_end_call_timeout = None
     return agent
 
 
@@ -727,6 +729,54 @@ async def test_agent_get_returns_the_opening_line_and_the_agent_name(
 
     assert result["first_message"] == "Hola."
     assert result["name"] == "Casa"
+
+
+async def test_agent_get_returns_the_conversation_limits(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The settings screen opens on the limits the agent already carries."""
+    agent = _agent_with_prompt("Eres un asistente.")
+    agent.conversation_config.conversation.max_duration_seconds = 180
+    agent.conversation_config.turn.silence_end_call_timeout = -1.0
+    client = await hass_ws_client(hass)
+
+    with patch(
+        "custom_components.elevenagents.websocket.async_get_agent",
+        AsyncMock(return_value=agent),
+    ):
+        await client.send_json_auto_id(
+            {"type": "elevenagents/agent/get", "entry_id": setup_entry.entry_id}
+        )
+        result = (await client.receive_json())["result"]
+
+    assert result["limits"] == {
+        "max_duration_seconds": 180,
+        "silence_end_call_timeout": -1.0,
+    }
+
+
+async def test_agent_get_returns_no_limits_when_the_agent_has_none(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """A missing conversation or turn object reads as unset, not as an error."""
+    agent = _agent_with_prompt("Eres un asistente.")
+    agent.conversation_config.conversation = None
+    agent.conversation_config.turn = None
+    client = await hass_ws_client(hass)
+
+    with patch(
+        "custom_components.elevenagents.websocket.async_get_agent",
+        AsyncMock(return_value=agent),
+    ):
+        await client.send_json_auto_id(
+            {"type": "elevenagents/agent/get", "entry_id": setup_entry.entry_id}
+        )
+        result = (await client.receive_json())["result"]
+
+    assert result["limits"] == {
+        "max_duration_seconds": None,
+        "silence_end_call_timeout": None,
+    }
 
 
 async def test_agent_get_falls_back_to_the_default_settings_when_never_synced(
@@ -857,6 +907,115 @@ async def test_agent_save_writes_the_opening_line(
     assert patched.await_args is not None
     sent = patched.await_args.kwargs["conversation_config"]
     assert sent["agent"] == {"first_message": "Hola, soy tu casa."}
+
+
+async def _save_agent(
+    hass, hass_ws_client, entry, **fields: Any
+) -> tuple[AsyncMock, dict[str, Any]]:
+    """Send agent/save with a patched client and return the call and the reply."""
+    client = await hass_ws_client(hass)
+    with patch(
+        "custom_components.elevenagents.websocket.async_patch_agent", AsyncMock()
+    ) as patched:
+        await client.send_json_auto_id(
+            {"type": "elevenagents/agent/save", "entry_id": entry.entry_id, **fields}
+        )
+        message = await client.receive_json()
+    return patched, message
+
+
+async def test_agent_save_writes_only_the_maximum_duration(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """A message with one limit patches that limit and nothing else."""
+    patched, message = await _save_agent(
+        hass, hass_ws_client, setup_entry, max_duration_seconds=300
+    )
+
+    assert message["result"]["outcome"] == "ok"
+    assert patched.await_args is not None
+    assert patched.await_args.kwargs["conversation_config"] == {
+        "conversation": {"max_duration_seconds": 300}
+    }
+
+
+async def test_agent_save_writes_only_the_silence_timeout(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The value -1 switches the silence timeout off and is sent as it is."""
+    patched, message = await _save_agent(
+        hass, hass_ws_client, setup_entry, silence_end_call_timeout=-1
+    )
+
+    assert message["result"]["outcome"] == "ok"
+    assert patched.await_args is not None
+    assert patched.await_args.kwargs["conversation_config"] == {
+        "turn": {"silence_end_call_timeout": -1}
+    }
+
+
+async def test_agent_save_sends_the_opening_line_and_both_limits_in_one_patch(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """One save is one call to ElevenLabs."""
+    patched, message = await _save_agent(
+        hass,
+        hass_ws_client,
+        setup_entry,
+        first_message="Hola.",
+        max_duration_seconds=300,
+        silence_end_call_timeout=20.5,
+    )
+
+    assert message["result"]["outcome"] == "ok"
+    assert patched.await_count == 1
+    assert patched.await_args is not None
+    assert patched.await_args.kwargs["conversation_config"] == {
+        "agent": {"first_message": "Hola."},
+        "conversation": {"max_duration_seconds": 300},
+        "turn": {"silence_end_call_timeout": 20.5},
+    }
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"max_duration_seconds": 0},
+        {"max_duration_seconds": -5},
+        {"silence_end_call_timeout": 0},
+    ],
+)
+async def test_agent_save_refuses_a_limit_out_of_range(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator, fields
+) -> None:
+    """The schema refuses a limit that is not positive."""
+    patched, message = await _save_agent(hass, hass_ws_client, setup_entry, **fields)
+
+    assert message["success"] is False
+    assert message["error"]["code"] == "invalid_format"
+    assert patched.await_count == 0
+
+
+async def test_agent_save_reports_a_refused_limit(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """An error from ElevenLabs reaches the panel as a failed outcome."""
+    client = await hass_ws_client(hass)
+    with patch(
+        "custom_components.elevenagents.websocket.async_patch_agent",
+        AsyncMock(side_effect=ElevenLabsAuthError("too long")),
+    ):
+        await client.send_json_auto_id(
+            {
+                "type": "elevenagents/agent/save",
+                "entry_id": setup_entry.entry_id,
+                "max_duration_seconds": 99999,
+            }
+        )
+        result = (await client.receive_json())["result"]
+
+    assert result["outcome"] == "failed"
+    assert "too long" in result["detail"]
 
 
 async def test_agent_save_writes_nothing_when_nothing_is_sent(
