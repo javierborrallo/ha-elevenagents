@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import httpx
-from homeassistant.components import webhook
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.network import NoURLAvailableError
@@ -18,7 +17,6 @@ from .const import (
     CONF_API_KEY,
     CONF_RESPONSE_TIMEOUT,
     CONF_TOOL_IDS,
-    CONF_WEBHOOK_ID,
     DEFAULT_CONFIRM_TIMEOUT,
     DEFAULT_RESPONSE_TIMEOUT,
     OPT_CONFIRM_TIMEOUT,
@@ -33,6 +31,7 @@ from .elevenlabs_client import (
     async_get_tool,
 )
 from .permissions import entity_id_for, missing_keys
+from .public_url import entry_webhook_url
 from .repairs import is_protected
 from .tool_sync import async_build_definitions, entity_enum, readback_divergence
 
@@ -75,9 +74,7 @@ async def _webhook_check(
     if entry.state is not ConfigEntryState.LOADED:
         return _item("webhook", SKIPPED)
     try:
-        url = webhook.async_generate_url(
-            hass, entry.data[CONF_WEBHOOK_ID], allow_internal=False
-        )
+        url = entry_webhook_url(hass, entry)
     except NoURLAvailableError:
         return _item("webhook", PROBLEM, "no external URL")
     try:

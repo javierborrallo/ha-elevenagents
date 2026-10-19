@@ -123,6 +123,12 @@ const EN = {
   eventsOutOfRange: "Cooldown and memory go from 0 to 1440 minutes; events per hour from 1 to 1000.",
   preToolSpeechLabel: "Speech before tool calls",
   preToolSpeechHint: "Whether the agent says something before it acts.",
+  publicUrlLabel: "Public webhook URL",
+  publicUrlHint:
+    "The https address ElevenLabs calls instead of the external URL of Home Assistant. " +
+    "Leave it empty to use the external URL.",
+  invalidPublicUrl: "Enter an https address without a path, for example https://hooks.example.com.",
+  noPublicUrl: "Home Assistant has no external URL, so this field cannot be empty.",
   preToolSpeechAuto: "Auto",
   preToolSpeechForce: "Always",
   preToolSpeechOff: "Never",
@@ -297,6 +303,12 @@ const ES = {
   eventsOutOfRange: "El cooldown y la memoria van de 0 a 1440 minutos; los eventos por hora, de 1 a 1000.",
   preToolSpeechLabel: "Voz antes de usar herramientas",
   preToolSpeechHint: "Si el agente dice algo antes de actuar.",
+  publicUrlLabel: "URL pública del webhook",
+  publicUrlHint:
+    "La dirección https a la que llama ElevenLabs en lugar de la URL externa de Home Assistant. " +
+    "Déjala vacía para usar la URL externa.",
+  invalidPublicUrl: "Introduce una dirección https sin ruta, por ejemplo https://hooks.example.com.",
+  noPublicUrl: "Home Assistant no tiene URL externa, así que este campo no puede quedar vacío.",
   preToolSpeechAuto: "Automático",
   preToolSpeechForce: "Siempre",
   preToolSpeechOff: "Nunca",

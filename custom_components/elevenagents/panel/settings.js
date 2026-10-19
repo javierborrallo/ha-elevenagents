@@ -103,8 +103,8 @@ function rotateRow(t, what, label, confirmText, onRotate) {
 }
 
 /**
- * The agent's opening line, the confirmation timeout and the one writable
- * ElevenLabs behaviour setting.
+ * The agent's opening line, the confirmation timeout, the one writable
+ * ElevenLabs behaviour setting and the public webhook URL.
  *
  * The opening line lives on the ElevenAgents agent and the other two live in
  * the config entry, so a save can touch two places. `agent` is null when
@@ -126,6 +126,7 @@ export function settingsScreen(
     first_message: agent ? agent.first_message : "",
     confirm_timeout: config.confirm_timeout,
     pre_tool_speech: settings.pre_tool_speech || "auto",
+    public_url: config.public_url || "",
     cooldown_minutes: events.cooldown_minutes,
     hourly_limit: events.hourly_limit,
     continuity_minutes: events.continuity_minutes,
@@ -224,6 +225,17 @@ export function settingsScreen(
     ),
   );
 
+  const publicUrl = document.createElement("input");
+  publicUrl.type = "url";
+  publicUrl.className = "text";
+  publicUrl.placeholder = "https://hooks.example.com";
+  publicUrl.value = draft.public_url;
+  publicUrl.addEventListener("input", () => {
+    draft.public_url = publicUrl.value;
+    reportDirty();
+  });
+  group.appendChild(field(t.publicUrlLabel, t.publicUrlHint, publicUrl));
+
   const numberRow = (label, hint, key, min, max) =>
     field(
       label,
@@ -278,6 +290,7 @@ export function settingsScreen(
     const settingsSaved = await saveConfig("settings", {
       confirm_timeout: draft.confirm_timeout,
       agent_settings: { pre_tool_speech: draft.pre_tool_speech },
+      public_url: draft.public_url,
     });
     if (!isAdvanceable(settingsSaved)) return settingsSaved;
     return saveConfig("events", {

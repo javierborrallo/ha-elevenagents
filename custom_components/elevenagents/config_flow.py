@@ -31,6 +31,7 @@ from .const import (
     CONF_WEBHOOK_ID,
     CONF_WEBHOOK_SECRET,
     DOMAIN,
+    OPT_PUBLIC_URL,
     PANEL_URL_PATH,
     TOOL_CALL_SERVICE,
     TOOL_GET_STATE,
@@ -46,6 +47,7 @@ from .elevenlabs_client import (
     async_list_tools,
     async_patch_agent,
 )
+from .public_url import normalize_public_url
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -55,6 +57,10 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 USER_SCHEMA = vol.Schema({vol.Required(CONF_API_KEY): str})
+
+PUBLIC_URL_SCHEMA = USER_SCHEMA.extend({vol.Required(OPT_PUBLIC_URL): str})
+
+OPTIONAL_PUBLIC_URL_SCHEMA = USER_SCHEMA.extend({vol.Optional(OPT_PUBLIC_URL): str})
 
 REAUTH_SCHEMA = vol.Schema({vol.Required(CONF_API_KEY): str})
 
@@ -73,19 +79,32 @@ class ElevenAgentsConfigFlow(ConfigFlow, domain=DOMAIN):
         self._agents: list[AgentSummaryResponseModel] = []
         self._agent_id: str = ""
         self._colliding: list[str] = []
+        self._options: dict[str, Any] = {}
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Validate the API key by listing the workspace's agents."""
+        """
+        Validate the API key by listing the workspace's agents.
+
+        Ask for a public URL as well. It is required when Home Assistant has
+        no external URL, and optional when it has one.
+        """
         try:
             get_url(self.hass, allow_internal=False)
         except NoURLAvailableError:
-            return self.async_abort(reason="no_external_url")
+            schema = PUBLIC_URL_SCHEMA
+        else:
+            schema = OPTIONAL_PUBLIC_URL_SCHEMA
 
         errors: dict[str, str] = {}
 
-        if user_input is not None:
+        if user_input is not None and not self._read_public_url(
+            user_input, required=schema is PUBLIC_URL_SCHEMA
+        ):
+            errors[OPT_PUBLIC_URL] = "invalid_public_url"
+
+        if user_input is not None and not errors:
             client = async_get_client(self.hass, user_input[CONF_API_KEY])
             try:
                 agents_page = await async_list_agents(client)
@@ -104,8 +123,27 @@ class ElevenAgentsConfigFlow(ConfigFlow, domain=DOMAIN):
                     return await self.async_step_agent()
 
         return self.async_show_form(
-            step_id="user", data_schema=USER_SCHEMA, errors=errors
+            step_id="user",
+            data_schema=schema,
+            errors=errors,
         )
+
+    def _read_public_url(self, user_input: dict[str, Any], *, required: bool) -> bool:
+        """
+        Store the public URL of the form in the options of the new entry.
+
+        Return False when the value is not a bare https origin. An empty value
+        clears the option, and is refused when the field is required.
+        """
+        value = user_input.get(OPT_PUBLIC_URL, "")
+        public_url = normalize_public_url(value)
+        if public_url is not None:
+            self._options = {OPT_PUBLIC_URL: public_url}
+            return True
+        if value.strip() or required:
+            return False
+        self._options = {}
+        return True
 
     async def async_step_agent(
         self, user_input: dict[str, Any] | None = None
@@ -164,17 +202,21 @@ class ElevenAgentsConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def _create_entry(self) -> ConfigFlowResult:
         """Create the entry for the chosen agent."""
+        webhook_id = webhook.async_generate_id()
         return self.async_create_entry(
             title=self._agent_id,
             data={
                 CONF_API_KEY: self._api_key,
                 CONF_AGENT_ID: self._agent_id,
-                CONF_WEBHOOK_ID: webhook.async_generate_id(),
+                CONF_WEBHOOK_ID: webhook_id,
                 CONF_WEBHOOK_SECRET: secrets.token_urlsafe(32),
                 CONF_TOOL_IDS: {},
             },
-            options={},
-            description_placeholders={"panel_url": f"/{PANEL_URL_PATH}"},
+            options=self._options,
+            description_placeholders={
+                "panel_url": f"/{PANEL_URL_PATH}",
+                "webhook_path": webhook.async_generate_path(webhook_id),
+            },
         )
 
     async def async_step_duplicate(

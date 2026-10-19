@@ -29,6 +29,7 @@ from custom_components.elevenagents.const import (
     OPT_CONFIRM_TIMEOUT,
     OPT_CONTROL_ENTITIES,
     OPT_EXCEPTIONS,
+    OPT_PUBLIC_URL,
     OPT_READ_ENTITIES,
     OPT_SENSITIVE,
     TOOL_GET_STATE,
@@ -1862,3 +1863,118 @@ async def test_conversation_token_never_reaches_the_log(
         if record.name.startswith("custom_components.elevenagents")
     ]
     assert not any("tok-secret-987" in line for line in ours)
+
+
+async def _save_settings(hass, entry, hass_ws_client, data) -> tuple[dict, AsyncMock]:
+    """Save the settings block with the sync patched, and return the result."""
+    client = await hass_ws_client(hass)
+    with patch(
+        "custom_components.elevenagents.websocket.async_sync_tools", AsyncMock()
+    ) as sync:
+        await client.send_json_auto_id(
+            {
+                "type": "elevenagents/config/save",
+                "entry_id": entry.entry_id,
+                "block": "settings",
+                "data": {"confirm_timeout": 5, **data},
+            }
+        )
+        result = (await client.receive_json())["result"]
+    return result, sync
+
+
+async def test_the_public_url_is_stored_as_an_origin_and_synchronised(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The tools must carry the new address at once."""
+    result, sync = await _save_settings(
+        hass, setup_entry, hass_ws_client, {"public_url": "https://Hooks.example.com/"}
+    )
+
+    assert result["outcome"] == "ok"
+    assert sync.await_count == 1
+    assert setup_entry.options[OPT_PUBLIC_URL] == "https://hooks.example.com"
+
+
+async def test_a_public_url_with_a_path_is_refused(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The webhook path is appended, so a path of our own would break it."""
+    result, sync = await _save_settings(
+        hass,
+        setup_entry,
+        hass_ws_client,
+        {"public_url": "https://hooks.example.com/ha"},
+    )
+
+    assert result == {"outcome": "failed", "detail": "invalid_public_url"}
+    assert sync.await_count == 0
+    assert OPT_PUBLIC_URL not in setup_entry.options
+
+
+async def test_an_empty_public_url_clears_it(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """With the field empty, the external URL of Home Assistant comes back."""
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_PUBLIC_URL: "https://hooks.example.com"}
+    )
+
+    result, _sync = await _save_settings(
+        hass, setup_entry, hass_ws_client, {"public_url": "  "}
+    )
+
+    assert result["outcome"] == "ok"
+    assert OPT_PUBLIC_URL not in setup_entry.options
+
+
+async def test_clearing_the_only_address_is_refused(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """Without either address, every tool call would fail."""
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_PUBLIC_URL: "https://hooks.example.com"}
+    )
+    await hass.config.async_update(external_url=None)
+
+    result, sync = await _save_settings(
+        hass, setup_entry, hass_ws_client, {"public_url": ""}
+    )
+
+    assert result == {"outcome": "failed", "detail": "no_public_url"}
+    assert sync.await_count == 0
+    assert setup_entry.options[OPT_PUBLIC_URL] == "https://hooks.example.com"
+
+
+async def test_a_settings_save_without_the_field_keeps_the_public_url(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """A panel that does not send the field leaves the address alone."""
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_PUBLIC_URL: "https://hooks.example.com"}
+    )
+
+    result, _sync = await _save_settings(hass, setup_entry, hass_ws_client, {})
+
+    assert result["outcome"] == "ok"
+    assert setup_entry.options[OPT_PUBLIC_URL] == "https://hooks.example.com"
+
+
+async def test_config_get_returns_the_public_url(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The panel shows an empty field when no address is set."""
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
+    )
+    assert (await client.receive_json())["result"]["public_url"] == ""
+
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_PUBLIC_URL: "https://hooks.example.com"}
+    )
+    await client.send_json_auto_id(
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
+    )
+    result = (await client.receive_json())["result"]
+    assert result["public_url"] == "https://hooks.example.com"
