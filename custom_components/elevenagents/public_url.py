@@ -6,12 +6,25 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
 from homeassistant.components import webhook
+from homeassistant.helpers.network import NoURLAvailableError, get_url
 
 from .const import CONF_WEBHOOK_ID, OPT_PUBLIC_URL
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
+
+INVALID_PUBLIC_URL = "invalid_public_url"
+NO_PUBLIC_URL = "no_public_url"
+
+
+class PublicUrlError(ValueError):
+    """Raise when the webhook URL field holds no usable value."""
+
+    def __init__(self, code: str) -> None:
+        """Store the failure code."""
+        super().__init__(code)
+        self.code = code
 
 
 def normalize_public_url(value: str) -> str | None:
@@ -53,3 +66,41 @@ def entry_webhook_url(hass: HomeAssistant, entry: ConfigEntry) -> str:
     return webhook_url(
         hass, entry.data[CONF_WEBHOOK_ID], entry.options.get(OPT_PUBLIC_URL)
     )
+
+
+def ha_origin(hass: HomeAssistant) -> str | None:
+    """
+    Return the origin that the webhook uses without a public URL.
+
+    Return None when Home Assistant has no such origin.
+    """
+    try:
+        url = get_url(
+            hass, allow_internal=False, allow_cloud=False, prefer_external=True
+        )
+    except NoURLAvailableError:
+        return None
+    return url.rstrip("/")
+
+
+def public_url_option(hass: HomeAssistant, value: str) -> str | None:
+    """
+    Return the public URL to store, or None to store no public URL.
+
+    An empty value and a value equal to the Home Assistant origin store
+    nothing. Raise PublicUrlError with NO_PUBLIC_URL when the value is empty
+    and no Home Assistant origin exists. Raise PublicUrlError with
+    INVALID_PUBLIC_URL when the value is not a bare https origin.
+    """
+    text = value.strip().rstrip("/")
+    origin = ha_origin(hass)
+    if not text:
+        if origin is None:
+            raise PublicUrlError(NO_PUBLIC_URL)
+        return None
+    if origin is not None and text.lower() == origin.lower():
+        return None
+    public_url = normalize_public_url(text)
+    if public_url is None:
+        raise PublicUrlError(INVALID_PUBLIC_URL)
+    return public_url

@@ -1,5 +1,6 @@
 import { strings } from "./strings.js";
-import { button, dirtyReporter, el, field, isAdvanceable } from "./ui.js";
+import { button, dirtyReporter, el, field, icon, ICON, isAdvanceable } from "./ui.js";
+import { fullWebhookUrl, isHaUrl, previewOrigin, statusView } from "./webhook.js";
 
 const PRE_TOOL_SPEECH_VALUES = ["auto", "force", "off"];
 
@@ -104,8 +105,8 @@ function rotateRow(t, what, label, confirmText, onRotate) {
 
 /**
  * The agent's opening line, the confirmation timeout, the one writable
- * ElevenLabs behaviour setting and the public webhook URL. Show the webhook
- * URL that ElevenLabs calls, read-only.
+ * ElevenLabs behaviour setting and the webhook URL. Show the full webhook
+ * URL and the last webhook check, read-only.
  *
  * The opening line lives on the ElevenAgents agent and the other two live in
  * the config entry, so a save can touch two places. `agent` is null when
@@ -113,7 +114,7 @@ function rotateRow(t, what, label, confirmText, onRotate) {
  */
 export function settingsScreen(
   hass,
-  { config, agent, saveConfig, saveAgent, onDirty, exposeSave },
+  { config, agent, saveConfig, saveAgent, probeWebhook, onDirty, exposeSave },
 ) {
   const t = strings(hass.language);
   const reportDirty = dirtyReporter(onDirty);
@@ -127,7 +128,7 @@ export function settingsScreen(
     first_message: agent ? agent.first_message : "",
     confirm_timeout: config.confirm_timeout,
     pre_tool_speech: settings.pre_tool_speech || "auto",
-    public_url: config.public_url || "",
+    public_url: config.public_url || config.ha_url || "",
     cooldown_minutes: events.cooldown_minutes,
     hourly_limit: events.hourly_limit,
     continuity_minutes: events.continuity_minutes,
@@ -226,30 +227,95 @@ export function settingsScreen(
     ),
   );
 
-  const publicUrl = document.createElement("input");
-  publicUrl.type = "url";
-  publicUrl.className = "text";
-  publicUrl.placeholder = "https://hooks.example.com";
-  publicUrl.value = draft.public_url;
-  publicUrl.addEventListener("input", () => {
-    draft.public_url = publicUrl.value;
+  const savedOrigin = config.public_url || config.ha_url || "";
+  const initialOrigin = draft.public_url;
+  const origin = document.createElement("input");
+  origin.type = "url";
+  origin.className = "text";
+  origin.placeholder = "https://hooks.example.com";
+  origin.value = draft.public_url;
+  const originHint = el("div", "hint");
+  const backToHa = button(t.webhookBackToHa, "plain", () => {
+    origin.value = config.ha_url;
+    onOrigin();
     reportDirty();
   });
-  group.appendChild(field(t.publicUrlLabel, t.publicUrlHint, publicUrl));
+  const originField = field(t.webhookOriginLabel, null, origin);
+  originField.insertBefore(originHint, origin);
+  originField.appendChild(backToHa);
+  group.appendChild(originField);
 
-  const webhookUrl = document.createElement("input");
-  webhookUrl.type = "text";
-  webhookUrl.className = "text";
-  webhookUrl.readOnly = true;
-  webhookUrl.value = config.webhook_url || t.webhookUrlNone;
-  webhookUrl.addEventListener("focus", () => webhookUrl.select());
-  group.appendChild(
-    field(
-      t.webhookUrlLabel,
-      t.webhookUrlHint.replace("{path}", config.webhook_path || ""),
-      webhookUrl,
-    ),
-  );
+  const fullUrl = document.createElement("input");
+  fullUrl.type = "text";
+  fullUrl.className = "text";
+  fullUrl.readOnly = true;
+  fullUrl.addEventListener("focus", () => fullUrl.select());
+  const fullField = field(t.webhookFullLabel, t.webhookFullHint, fullUrl);
+  const status = el("div", "check-row");
+  const statusIcon = el("div", "status-icon");
+  const statusText = el("div", "hint");
+  status.appendChild(statusIcon);
+  status.appendChild(statusText);
+  const testButton = button(t.webhookTest, "plain", () => probe(origin.value));
+  fullField.appendChild(status);
+  fullField.appendChild(testButton);
+  group.appendChild(fullField);
+
+  // The last probe: the value it called and its status.
+  let lastProbe = null;
+
+  // Call the webhook URL that the value gives, and show the answer.
+  // An unchanged saved value calls the current webhook URL.
+  async function probe(value) {
+    if (!probeWebhook) return;
+    const current = { value, status: "checking", detail: null };
+    lastProbe = current;
+    onOrigin();
+    let answer;
+    try {
+      answer = await probeWebhook(value === savedOrigin ? undefined : value);
+    } catch (err) {
+      answer = { status: "problem", detail: null };
+    }
+    if (lastProbe !== current) return;
+    lastProbe = { value, status: answer.status, detail: answer.detail };
+    onOrigin();
+  }
+
+  // Return the sentence for one probe status and its detail.
+  function statusSentence(view, detail) {
+    if (view === "checking") return t.webhookStatusChecking;
+    if (view === "ok") return t.webhookStatusOk;
+    if (detail === "invalid_public_url") return t.invalidPublicUrl;
+    if (detail === "no_public_url") return t.noPublicUrl;
+    return detail ? `${t.webhookStatusProblem} (${detail})` : t.webhookStatusProblem;
+  }
+
+  // Update the hint, the buttons, the full URL and the status from the field.
+  function onOrigin() {
+    draft.public_url = origin.value;
+    const usesHa = isHaUrl(origin.value, config.ha_url);
+    originHint.textContent = usesHa ? t.webhookOriginHintHa : t.webhookOriginHintOther;
+    backToHa.style.display = !config.ha_url || usesHa ? "none" : "";
+    const preview = previewOrigin(origin.value, config.ha_url);
+    if (preview === null) fullUrl.value = t.webhookFullInvalid;
+    else fullUrl.value = fullWebhookUrl(preview, config.webhook_path) || t.webhookFullNone;
+    const view = statusView(origin.value, lastProbe);
+    status.style.display = view === "none" ? "none" : "";
+    testButton.style.display = view === "none" && preview && probeWebhook ? "" : "none";
+    const tone = { ok: "ok", problem: "bad", checking: "skipped" }[view] || "skipped";
+    statusIcon.className = `status-icon ${tone}`;
+    statusIcon.replaceChildren(
+      ...(view === "ok" ? [icon(ICON.check)] : view === "problem" ? [icon(ICON.alert)] : []),
+    );
+    statusText.textContent = statusSentence(view, lastProbe && lastProbe.detail);
+  }
+  origin.addEventListener("input", () => {
+    onOrigin();
+    reportDirty();
+  });
+  onOrigin();
+  if (savedOrigin) probe(savedOrigin);
 
   const numberRow = (label, hint, key, min, max) =>
     field(
@@ -302,11 +368,13 @@ export function settingsScreen(
       }
     }
     // Save settings before events. A failed settings save stops here.
-    const settingsSaved = await saveConfig("settings", {
+    const settingsData = {
       confirm_timeout: draft.confirm_timeout,
       agent_settings: { pre_tool_speech: draft.pre_tool_speech },
-      public_url: draft.public_url,
-    });
+    };
+    // Send the webhook URL only when the user changed it.
+    if (draft.public_url !== initialOrigin) settingsData.public_url = draft.public_url;
+    const settingsSaved = await saveConfig("settings", settingsData);
     if (!isAdvanceable(settingsSaved)) return settingsSaved;
     return saveConfig("events", {
       cooldown_minutes: Number(draft.cooldown_minutes),

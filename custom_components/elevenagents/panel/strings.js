@@ -123,17 +123,22 @@ const EN = {
   eventsOutOfRange: "Cooldown and memory go from 0 to 1440 minutes; events per hour from 1 to 1000.",
   preToolSpeechLabel: "Speech before tool calls",
   preToolSpeechHint: "Whether the agent says something before it acts.",
-  publicUrlLabel: "Public webhook URL",
-  publicUrlHint:
-    "The https address ElevenLabs calls instead of the external URL of Home Assistant. " +
-    "Leave it empty to use the external URL.",
   invalidPublicUrl: "Enter an https address without a path, for example https://hooks.example.com.",
   noPublicUrl: "Home Assistant has no external URL, so this field cannot be empty.",
-  webhookUrlLabel: "Webhook address",
-  webhookUrlHint:
-    "The address ElevenLabs calls now. If a proxy publishes Home Assistant, forward the path {path}. " +
-    "Rotating the webhook changes it.",
-  webhookUrlNone: "No address: Home Assistant has no external URL and no public URL is set.",
+  webhookOriginLabel: "Webhook URL",
+  webhookOriginHintHa:
+    "The external URL of Home Assistant. Change it when ElevenLabs cannot reach that URL: " +
+    "enter the address of a proxy that forwards /api/webhook/ to this Home Assistant.",
+  webhookOriginHintOther: "An https address without a path. It must forward /api/webhook/ to this Home Assistant.",
+  webhookBackToHa: "Back to the Home Assistant URL",
+  webhookFullLabel: "Full URL",
+  webhookFullHint: "The address ElevenLabs calls. Rotating the webhook changes it.",
+  webhookFullNone: "No address",
+  webhookStatusOk: "The address answers.",
+  webhookStatusProblem: "The address does not answer.",
+  webhookStatusChecking: "Checking the address…",
+  webhookTest: "Test this address",
+  webhookFullInvalid: "Not a valid address",
   preToolSpeechAuto: "Auto",
   preToolSpeechForce: "Always",
   preToolSpeechOff: "Never",
@@ -308,17 +313,22 @@ const ES = {
   eventsOutOfRange: "El cooldown y la memoria van de 0 a 1440 minutos; los eventos por hora, de 1 a 1000.",
   preToolSpeechLabel: "Voz antes de usar herramientas",
   preToolSpeechHint: "Si el agente dice algo antes de actuar.",
-  publicUrlLabel: "URL pública del webhook",
-  publicUrlHint:
-    "La dirección https a la que llama ElevenLabs en lugar de la URL externa de Home Assistant. " +
-    "Déjala vacía para usar la URL externa.",
   invalidPublicUrl: "Introduce una dirección https sin ruta, por ejemplo https://hooks.example.com.",
   noPublicUrl: "Home Assistant no tiene URL externa, así que este campo no puede quedar vacío.",
-  webhookUrlLabel: "Dirección del webhook",
-  webhookUrlHint:
-    "La dirección a la que llama ElevenLabs ahora. Si un proxy publica Home Assistant, reenvía la ruta {path}. " +
-    "Rotar el webhook la cambia.",
-  webhookUrlNone: "Sin dirección: Home Assistant no tiene URL externa y no hay URL pública.",
+  webhookOriginLabel: "URL del webhook",
+  webhookOriginHintHa:
+    "La URL externa de Home Assistant. Cámbiala si ElevenLabs no llega a ella: " +
+    "pon la dirección de un proxy que reenvíe /api/webhook/ a este Home Assistant.",
+  webhookOriginHintOther: "Una dirección https sin ruta. Debe reenviar /api/webhook/ a este Home Assistant.",
+  webhookBackToHa: "Volver a la URL de Home Assistant",
+  webhookFullLabel: "URL completa",
+  webhookFullHint: "La dirección a la que llama ElevenLabs. Rotar el webhook la cambia.",
+  webhookFullNone: "Sin dirección",
+  webhookStatusOk: "La dirección responde.",
+  webhookStatusProblem: "La dirección no responde.",
+  webhookStatusChecking: "Comprobando la dirección…",
+  webhookTest: "Probar esta dirección",
+  webhookFullInvalid: "Dirección no válida",
   preToolSpeechAuto: "Automático",
   preToolSpeechForce: "Siempre",
   preToolSpeechOff: "Nunca",

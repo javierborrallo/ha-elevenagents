@@ -140,3 +140,10 @@ def test_the_closing_message_names_the_webhook_path() -> None:
     for language in ("en", "es"):
         message = _load(language)["config"]["create_entry"]["default"]
         assert "{webhook_path}" in message
+        assert "{webhook_url}" in message
+
+
+def test_the_flow_explains_an_empty_webhook_url() -> None:
+    """The flow refuses an empty field without an external URL."""
+    for language in ("en", "es"):
+        assert _load(language)["config"]["error"]["no_public_url"]

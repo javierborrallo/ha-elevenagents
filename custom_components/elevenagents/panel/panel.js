@@ -28,6 +28,7 @@ const WS = {
   agentSave: "elevenagents/agent/save",
   rotate: "elevenagents/rotate",
   check: "elevenagents/check",
+  webhookProbe: "elevenagents/webhook/probe",
 };
 
 // The icon and the disc colour of each check status.
@@ -173,6 +174,15 @@ class ElevenAgentsPanel extends HTMLElement {
 
   _saveConfig(block, data) {
     return this._callWS(WS.configSave, { block, data });
+  }
+
+  // Call the webhook URL without the secret. Without a value, call the
+  // current webhook URL.
+  _probeWebhook(publicUrl) {
+    return this._callWS(
+      WS.webhookProbe,
+      publicUrl === undefined ? {} : { public_url: publicUrl },
+    );
   }
 
   _saveAgent(payload) {
@@ -355,6 +365,7 @@ class ElevenAgentsPanel extends HTMLElement {
           agent: this._agent,
           saveConfig: (block, data) => this._saveConfig(block, data),
           saveAgent: (payload) => this._saveAgent(payload),
+          probeWebhook: (publicUrl) => this._probeWebhook(publicUrl),
           exposeSave: (save) => {
             commit = save;
           },
@@ -751,6 +762,7 @@ class ElevenAgentsPanel extends HTMLElement {
             agent: this._agent,
             saveConfig: (block, data) => this._saveConfig(block, data),
             saveAgent: (payload) => this._saveAgent(payload),
+            probeWebhook: (publicUrl) => this._probeWebhook(publicUrl),
             exposeSave: (save) => {
               commit = save;
             },

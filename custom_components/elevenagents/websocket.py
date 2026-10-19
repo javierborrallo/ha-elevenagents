@@ -13,9 +13,10 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
-from homeassistant.helpers.network import NoURLAvailableError, get_url
+from homeassistant.helpers.network import NoURLAvailableError
 from homeassistant.helpers.service import async_get_all_descriptions
 
+from .check import PROBLEM, async_probe_webhook
 from .const import (
     CONF_AGENT_ID,
     CONF_RESPONSE_TIMEOUT,
@@ -62,7 +63,13 @@ from .permissions import (
     stored_keys,
     without_keys,
 )
-from .public_url import entry_webhook_url, normalize_public_url
+from .public_url import (
+    NO_PUBLIC_URL,
+    PublicUrlError,
+    entry_webhook_url,
+    ha_origin,
+    public_url_option,
+)
 from .repairs import async_check_missing
 from .sensitive import Mark
 from .status import async_record_check
@@ -259,6 +266,7 @@ async def config_get(
             "public_url": options.get(OPT_PUBLIC_URL, ""),
             "webhook_url": _webhook_url(hass, entry),
             "webhook_path": webhook.async_generate_path(entry.data[CONF_WEBHOOK_ID]),
+            "ha_url": ha_origin(hass) or "",
             "agent_timeout": entry.data.get(
                 CONF_RESPONSE_TIMEOUT, DEFAULT_RESPONSE_TIMEOUT
             ),
@@ -365,22 +373,6 @@ def _auto_expose_block(_hass: HomeAssistant, data: dict[str, Any]) -> dict[str, 
     }
 
 
-def _public_url_value(hass: HomeAssistant, value: str) -> str | None:
-    """
-    Return the origin to store, None to clear the field, or the failure detail.
-
-    An empty field is refused when Home Assistant has no external URL.
-    """
-    if not value.strip():
-        try:
-            get_url(hass, allow_internal=False)
-        except NoURLAvailableError:
-            return "no_public_url"
-        return None
-    public_url = normalize_public_url(value)
-    return "invalid_public_url" if public_url is None else public_url
-
-
 def _block_keys(
     hass: HomeAssistant,
     entry: ElevenAgentsConfigEntry,
@@ -397,10 +389,10 @@ def _block_keys(
         if "agent_settings" in data:
             keys[OPT_AGENT_SETTINGS] = dict(data["agent_settings"])
         if "public_url" in data:
-            public_url = _public_url_value(hass, str(data["public_url"]))
-            if public_url in ("invalid_public_url", "no_public_url"):
-                return public_url
-            keys[OPT_PUBLIC_URL] = public_url
+            try:
+                keys[OPT_PUBLIC_URL] = public_url_option(hass, str(data["public_url"]))
+            except PublicUrlError as err:
+                return err.code
         return keys
     if block == "events":
         events = _events_block(data)
@@ -679,6 +671,51 @@ async def rotate(
 @callback
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "elevenagents/webhook/probe",
+        vol.Required("entry_id"): str,
+        vol.Optional("public_url"): str,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def webhook_probe(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """
+    Call the webhook URL without the secret and answer with the status.
+
+    Without "public_url", call the current webhook URL. With it, call the
+    URL that the value gives. Store nothing.
+    """
+    entry = _entry(hass, msg["entry_id"])
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "Unknown config entry")
+        return
+
+    if "public_url" in msg:
+        try:
+            public_url = public_url_option(hass, msg["public_url"])
+        except PublicUrlError as err:
+            connection.send_result(msg["id"], {"status": PROBLEM, "detail": err.code})
+            return
+        origin = public_url or ha_origin(hass) or ""
+        path = webhook.async_generate_path(entry.data[CONF_WEBHOOK_ID])
+        url = f"{origin}{path}"
+    else:
+        url = _webhook_url(hass, entry)
+    if not url:
+        connection.send_result(msg["id"], {"status": PROBLEM, "detail": NO_PUBLIC_URL})
+        return
+
+    item = await async_probe_webhook(hass, url)
+    connection.send_result(
+        msg["id"], {"status": item["status"], "detail": item["detail"]}
+    )
+
+
+@callback
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "elevenagents/check",
         vol.Required("entry_id"): str,
     }
@@ -754,4 +791,5 @@ def async_register_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, agent_save)
     websocket_api.async_register_command(hass, rotate)
     websocket_api.async_register_command(hass, check)
+    websocket_api.async_register_command(hass, webhook_probe)
     websocket_api.async_register_command(hass, conversation_token)

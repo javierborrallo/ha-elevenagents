@@ -101,7 +101,7 @@ def _patch_client_and_url(
         )
         stack.enter_context(
             patch(
-                "custom_components.elevenagents.config_flow.get_url",
+                "custom_components.elevenagents.public_url.get_url",
                 return_value="https://home.example",
                 side_effect=None if external else NoURLAvailableError,
             )
@@ -135,6 +135,9 @@ async def test_successful_setup_lists_agents_then_creates_the_entry(hass):
     assert result["options"] == {}
     assert result["description_placeholders"] == {
         "panel_url": "/elevenagents",
+        "webhook_url": (
+            f"https://home.example/api/webhook/{result['data'][CONF_WEBHOOK_ID]}"
+        ),
         "webhook_path": f"/api/webhook/{result['data'][CONF_WEBHOOK_ID]}",
     }
 
@@ -245,31 +248,70 @@ async def test_picking_an_already_configured_agent_aborts(hass, config_entry):
     assert result["reason"] == "already_configured"
 
 
-def _public_url_marker(schema: vol.Schema) -> object:
+def _public_url_marker(schema: vol.Schema) -> vol.Marker:
     """Return the schema key of the public URL field."""
-    return next(key for key in schema.schema if key == OPT_PUBLIC_URL)
+    marker: vol.Marker = next(key for key in schema.schema if key == OPT_PUBLIC_URL)
+    return marker
 
 
-async def test_no_external_url_asks_for_a_public_url(hass):
-    """A Home Assistant on a private network needs an address ElevenLabs can reach."""
-    with _patch_client_and_url(agents=AGENTS_RESPONSE, external=False):
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={"source": "user"}
-        )
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "user"
-    assert type(_public_url_marker(result["data_schema"])) is vol.Required
-
-
-async def test_an_external_url_makes_the_public_url_optional(hass):
-    """An external URL may exist only on a private network, so the field stays."""
+async def test_the_webhook_url_starts_as_the_external_url(hass):
+    """The user sees the address ElevenLabs will call and may change it."""
     with _patch_client_and_url(agents=AGENTS_RESPONSE):
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": "user"}
         )
 
-    assert type(_public_url_marker(result["data_schema"])) is vol.Optional
+    marker = _public_url_marker(result["data_schema"])
+    assert type(marker) is vol.Optional
+    assert marker.description == {"suggested_value": "https://home.example"}
+
+
+async def test_the_webhook_url_starts_empty_without_an_external_url(hass):
+    """A private Home Assistant has no address to offer."""
+    with _patch_client_and_url(agents=AGENTS_RESPONSE, external=False):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "user"}
+        )
+
+    assert not (_public_url_marker(result["data_schema"]).description or {}).get(
+        "suggested_value"
+    )
+
+
+async def test_the_prefilled_external_url_stores_nothing(hass):
+    """The webhook follows the external URL when the user keeps it."""
+    with _patch_client_and_url(agents=AGENTS_RESPONSE):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "user"}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {**API_KEY_INPUT, OPT_PUBLIC_URL: "https://home.example"}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_AGENT_ID: "agent_a"}
+        )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["options"] == {}
+
+
+async def test_a_refused_value_comes_back_in_the_form(hass):
+    """The user corrects the typed value, and the key is not echoed."""
+    with _patch_client_and_url(agents=AGENTS_RESPONSE):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "user"}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {**API_KEY_INPUT, OPT_PUBLIC_URL: "https://hooks.example.com/ha"},
+        )
+
+    schema = result["data_schema"].schema
+    assert _public_url_marker(result["data_schema"]).description == {
+        "suggested_value": "https://hooks.example.com/ha"
+    }
+    api_key = next(key for key in schema if key == CONF_API_KEY)
+    assert not (api_key.description or {}).get("suggested_value")
 
 
 @pytest.mark.parametrize("value", [None, "", "   "])
@@ -569,4 +611,4 @@ async def test_an_empty_public_url_is_refused_without_an_external_url(hass, valu
         )
 
     assert result["type"] is FlowResultType.FORM
-    assert result["errors"] == {OPT_PUBLIC_URL: "invalid_public_url"}
+    assert result["errors"] == {OPT_PUBLIC_URL: "no_public_url"}

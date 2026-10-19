@@ -6,11 +6,11 @@
         "description": "Enter an ElevenLabs API key. The key needs write access to ElevenAgents. Nothing is saved until you choose an agent on the next screen.",
         "data": {
           "api_key": "API key",
-          "public_url": "Public webhook URL"
+          "public_url": "Webhook URL"
         },
         "data_description": {
           "api_key": "Create a key in the ElevenLabs dashboard, under your profile. Give it write access to ElevenAgents.",
-          "public_url": "The https address ElevenLabs calls, for example https://hooks.example.com. Enter the address only, without a path. Leave it empty when ElevenLabs can reach the external URL of Home Assistant. Fill it in when Home Assistant has no external URL, or when that URL works only on your own network: enter the address of a proxy that forwards /api/webhook/ to this Home Assistant."
+          "public_url": "The https address ElevenLabs calls, without a path. It starts as the external URL of Home Assistant, or empty when there is none. Change it when ElevenLabs cannot reach that URL: enter the address of a proxy that forwards /api/webhook/ to this Home Assistant."
         }
       },
       "agent": {
@@ -39,6 +39,7 @@
     "error": {
       "invalid_auth": "ElevenLabs rejected this key. Check that you copied it whole, and that it has not been revoked.",
       "invalid_public_url": "Enter an https address without a path, for example https://hooks.example.com.",
+      "no_public_url": "Home Assistant has no external URL. Enter the address of a proxy that forwards /api/webhook/ to this Home Assistant.",
       "insufficient_scope": "This key works, but it may not reach ElevenAgents. Open the key in the ElevenLabs dashboard and give it write access to ElevenAgents.",
       "no_agents": "This key reaches no agents. Create an agent in the ElevenLabs dashboard first, then add this integration again.",
       "agent_not_found": "This agent no longer exists in the workspace this key reaches.",
@@ -51,7 +52,7 @@
       "reauth_successful": "The new API key works. The integration is connected again."
     },
     "create_entry": {
-      "default": "Your key and your agent are stored.\n\nNothing is exposed yet. **[Choose what your agent may see and do]({panel_url})** — until you do, the agent can reach nothing in this installation.\n\nElevenLabs calls this installation at `{webhook_path}`. If a proxy publishes Home Assistant, forward that path."
+      "default": "Your key and your agent are stored.\n\nNothing is exposed yet. **[Choose what your agent may see and do]({panel_url})** — until you do, the agent can reach nothing in this installation.\n\nElevenLabs calls `{webhook_url}`. A proxy in front of Home Assistant must forward `{webhook_path}`."
     }
   },
   "issues": {
