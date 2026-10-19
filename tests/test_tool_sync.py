@@ -172,24 +172,43 @@ def test_service_data_carries_types_and_no_constraints():
     assert "target" not in properties
 
 
-def test_colliding_keys_with_different_types_are_omitted():
-    """Guessing wrong sends a schema that always fails validation."""
-    descriptions = {
+def _two_services(first: str, second: str) -> dict[str, Any]:
+    """Return two services that declare the key value with two selectors."""
+    return {
         "a": {
             "one": {
                 "target": {"entity": [{"domain": ["a"]}]},
-                "fields": {"value": {"description": "n", "selector": {"number": {}}}},
+                "fields": {"value": {"description": "x", "selector": {first: {}}}},
             }
         },
         "b": {
             "two": {
                 "target": {"entity": [{"domain": ["b"]}]},
-                "fields": {"value": {"description": "s", "selector": {"text": {}}}},
+                "fields": {"value": {"description": "y", "selector": {second: {}}}},
             }
         },
     }
 
-    properties = service_data_properties(descriptions, {"a.one", "b.two"}, {})
+
+@pytest.mark.parametrize(("first", "second"), [("number", "text"), ("text", "number")])
+def test_a_key_typed_number_and_string_is_published_as_a_string(first, second):
+    """
+    number.set_value types value as text and input_number.set_value as a number.
+
+    Omitting the key leaves the agent unable to set either.
+    """
+    properties = service_data_properties(
+        _two_services(first, second), {"a.one", "b.two"}, {}
+    )
+
+    assert properties["value"]["type"] == "string"
+
+
+def test_a_key_typed_number_and_boolean_is_omitted():
+    """No single type serves both, so guessing sends a schema that fails."""
+    properties = service_data_properties(
+        _two_services("number", "boolean"), {"a.one", "b.two"}, {}
+    )
 
     assert "value" not in properties
 
@@ -1084,3 +1103,27 @@ async def test_the_synced_definitions_carry_history_only_when_a_mark_confirms(
     with_marks = await async_build_definitions(hass, setup_entry)
     schema = with_marks[TOOL_CALL_SERVICE]["api_schema"]["request_body_schema"]
     assert "conversation_history" in schema["properties"]
+
+
+def test_the_call_service_description_says_how_to_read_a_no_change():
+    """A slow device reads as no_change while it still moves."""
+    assert (
+        "If the outcome is no_change and the state is not what the user asked for, "
+        "say the command was sent and the device has not reported the change yet."
+    ) in CALL_SERVICE_DESCRIPTION
+
+
+def test_the_call_service_description_says_how_to_correct_an_invalid_value():
+    """The detail of invalid_value names what to change."""
+    assert (
+        "If the error is invalid_value, correct the service_data from the detail "
+        "and call once more."
+    ) in CALL_SERVICE_DESCRIPTION
+
+
+def test_the_call_service_description_says_how_to_read_moving():
+    """A moving device reports a position on its way, not where it stops."""
+    assert (
+        "If the response carries moving true, the device is still moving: "
+        "say it is on its way to what the user asked for."
+    ) in CALL_SERVICE_DESCRIPTION

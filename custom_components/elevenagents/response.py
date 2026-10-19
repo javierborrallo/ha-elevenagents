@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
@@ -15,14 +16,22 @@ from homeassistant.helpers import (
 from homeassistant.helpers import (
     entity_registry as er,
 )
+from homeassistant.util import dt as dt_util
 
 from .const import (
     ERROR_EXECUTION_FAILED,
+    ERROR_INVALID_VALUE,
     ERROR_MALFORMED_REQUEST,
     ERROR_UNKNOWN_FIELD,
+    INSTANCE_TEMPERATURE_DOMAINS,
     OUTCOME_UNCONFIRMED,
     PROJECTION_ATTRIBUTES,
 )
+
+# The voluptuous message for a key that the schema does not declare.
+EXTRA_KEYS_MESSAGE = "extra keys not allowed"
+# The state of a text entity in password mode.
+HIDDEN_VALUE = "<hidden>"
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -46,6 +55,59 @@ def _area_name(hass: HomeAssistant, entity_id: str) -> str | None:
     return None if area is None else area.name
 
 
+def _brightness_pct(brightness: Any) -> Any:
+    """
+    Convert a brightness of 0-255 to a percentage of 0-100.
+
+    A value above zero gives at least 1. A value that is not a number
+    stays as it is.
+    """
+    if isinstance(brightness, bool) or not isinstance(brightness, int | float):
+        return brightness
+    if brightness <= 0:
+        return 0
+    return max(1, round(brightness * 100 / 255))
+
+
+def _local_time(value: Any) -> Any:
+    """
+    Convert a time with a time zone to local time, in ISO format.
+
+    The time is a datetime or a string in ISO format. A value that is not
+    such a time stays as it is.
+    """
+    if isinstance(value, datetime):
+        moment: datetime | None = value
+    elif isinstance(value, str):
+        try:
+            moment = dt_util.parse_datetime(value)
+        except ValueError:
+            return value
+    else:
+        return value
+    if moment is None or moment.tzinfo is None:
+        return value
+    return dt_util.as_local(moment).isoformat(timespec="seconds")
+
+
+def _time_left(finishes_at: Any) -> str | None:
+    """
+    Return the time from now to finishes_at, as H:MM:SS.
+
+    Return None when finishes_at is not a time with a time zone.
+    """
+    if not isinstance(finishes_at, str):
+        return None
+    try:
+        end = dt_util.parse_datetime(finishes_at)
+    except ValueError:
+        return None
+    if end is None or end.tzinfo is None:
+        return None
+    seconds = max(0, round((end - dt_util.utcnow()).total_seconds()))
+    return str(timedelta(seconds=seconds))
+
+
 def project(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
     """
     Return the curated projection of one entity.
@@ -64,9 +126,27 @@ def project(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
     }
 
     domain = entity_id.partition(".")[0]
+    projected["state"] = _local_time(state.state)
+    if domain in ("text", "input_text") and state.attributes.get("mode") == "password":
+        projected["state"] = HIDDEN_VALUE
+
     for attribute in PROJECTION_ATTRIBUTES.get(domain, ()):
         if attribute in state.attributes:
-            projected[attribute] = state.attributes[attribute]
+            projected[attribute] = _local_time(state.attributes[attribute])
+
+    if domain == "timer" and state.state == "active":
+        left = _time_left(state.attributes.get("finishes_at"))
+        if left is not None:
+            projected["remaining"] = left
+
+    if domain == "humidifier" and "action" in projected:
+        projected["humidifier_action"] = projected.pop("action")
+
+    if "brightness" in projected:
+        projected["brightness_pct"] = _brightness_pct(projected.pop("brightness"))
+
+    if domain in INSTANCE_TEMPERATURE_DOMAINS:
+        projected["temperature_unit"] = hass.config.units.temperature_unit
 
     if state.attributes.get("assumed_state"):
         projected["assumed_state"] = True
@@ -94,7 +174,7 @@ def write_result(
     if outcome == OUTCOME_UNCONFIRMED:
         result["check_state_next"] = True
     elif projection:
-        result.update({k: v for k, v in projection.items() if k != "entity_id"})
+        result.update({k: v for k, v in projection.items() if k not in result})
     if extra:
         result.update(extra)
     return result
@@ -121,7 +201,14 @@ def error_fields(exc: Exception) -> tuple[str, dict[str, Any]]:
     if isinstance(exc, vol.Invalid):
         path = exc.path
         field = str(path[0]) if path else ""
-        return ERROR_UNKNOWN_FIELD, {"field": field} if field else {}
+        if exc.error_message == EXTRA_KEYS_MESSAGE:
+            return ERROR_UNKNOWN_FIELD, {"field": field} if field else {}
+        # An inclusion group gives a path of the form <group>, not a field.
+        extra = {"field": field} if field and not field.startswith("<") else {}
+        return ERROR_INVALID_VALUE, {**extra, "detail": exc.error_message}
+
+    if isinstance(exc, ValueError):
+        return ERROR_INVALID_VALUE, {"detail": str(exc)}
 
     return ERROR_EXECUTION_FAILED, {}
 

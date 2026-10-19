@@ -11,6 +11,9 @@ from typing import TYPE_CHECKING, Any
 
 from aiohttp import web
 from homeassistant.components import webhook
+from homeassistant.core import Event, EventStateChangedData, callback
+from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers.json import json_dumps
 from homeassistant.helpers.service import async_get_all_descriptions
 from homeassistant.util import dt as dt_util
 
@@ -24,6 +27,8 @@ from .const import (
     ERROR_NOT_FOUND,
     EVENT_ACTION,
     MAX_BODY_BYTES,
+    MOVING_DEVICE_DOMAINS,
+    MOVING_DEVICE_WAIT_SECONDS,
     OPT_CONFIRM_TIMEOUT,
     OUTCOME_DONE,
     OUTCOME_FAILED,
@@ -41,6 +46,7 @@ from .tool_sync import service_data_keys
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from datetime import datetime
 
     from aiohttp.web import Request
     from homeassistant.core import HomeAssistant
@@ -158,10 +164,14 @@ async def _parsed_json_body(request: Request) -> dict[str, Any] | web.Response:
     try:
         payload = json.loads(body)
     except ValueError:
-        return web.json_response(malformed("body is not valid JSON"))
+        return web.json_response(
+            dumps=json_dumps, data=malformed("body is not valid JSON")
+        )
 
     if not isinstance(payload, dict):
-        return web.json_response(malformed("body must be a JSON object"))
+        return web.json_response(
+            dumps=json_dumps, data=malformed("body must be a JSON object")
+        )
     return payload
 
 
@@ -191,12 +201,16 @@ async def async_handle_webhook(
 
     tool = payload.get("tool")
     if tool == DISCRIMINATOR_GET_STATE:
-        return web.json_response(await async_read(hass, entry, payload))
+        return web.json_response(
+            await async_read(hass, entry, payload), dumps=json_dumps
+        )
     if tool == DISCRIMINATOR_CALL_SERVICE:
         response = await async_write(hass, entry, payload)
         _fire_action_event(hass, payload, response)
-        return web.json_response(response)
-    return web.json_response(malformed(f"unknown tool: {tool!r}"))
+        return web.json_response(response, dumps=json_dumps)
+    return web.json_response(
+        dumps=json_dumps, data=malformed(f"unknown tool: {tool!r}")
+    )
 
 
 def _fire_action_event(
@@ -354,6 +368,41 @@ def _refusal(
     return None
 
 
+def _last_updated(hass: HomeAssistant, entity_id: str) -> datetime | None:
+    """Return the time of the entity's last state write, or None."""
+    state = hass.states.get(entity_id)
+    return None if state is None else state.last_updated
+
+
+async def _wait_for_write(
+    hass: HomeAssistant, entity_id: str, before: datetime | None
+) -> bool:
+    """
+    Wait for a state write by the entity, MOVING_DEVICE_WAIT_SECONDS at most.
+
+    Return True when the entity wrote its state.
+    """
+    written = asyncio.Event()
+
+    @callback
+    def _on_write(_event: Event[EventStateChangedData]) -> None:
+        written.set()
+
+    unsubscribe = async_track_state_change_event(hass, [entity_id], _on_write)
+    try:
+        # A write between the check and the subscription ends the wait at once.
+        if _last_updated(hass, entity_id) != before:
+            return True
+        async with asyncio.timeout(MOVING_DEVICE_WAIT_SECONDS):
+            await written.wait()
+    except TimeoutError:
+        return False
+    else:
+        return True
+    finally:
+        unsubscribe()
+
+
 async def async_write(
     hass: HomeAssistant, entry: ElevenAgentsConfigEntry, payload: dict[str, Any]
 ) -> dict[str, Any]:
@@ -403,8 +452,20 @@ async def async_write(
             OUTCOME_FAILED, entity_id, action, extra={"error": code, **extra}
         )
 
-    after = hass.states.get(entity_id)
-    after_updated = None if after is None else after.last_updated
+    moving = False
+    if (
+        domain in MOVING_DEVICE_DOMAINS
+        and _last_updated(hass, entity_id) == before_updated
+    ):
+        moving = await _wait_for_write(hass, entity_id, before_updated)
+
+    after_updated = _last_updated(hass, entity_id)
     outcome = OUTCOME_DONE if after_updated != before_updated else OUTCOME_NO_CHANGE
 
-    return write_result(outcome, entity_id, action, project(hass, entity_id))
+    return write_result(
+        outcome,
+        entity_id,
+        action,
+        project(hass, entity_id),
+        {"moving": True} if moving else None,
+    )
