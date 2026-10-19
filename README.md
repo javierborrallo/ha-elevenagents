@@ -88,8 +88,8 @@ hooks.example.com {
 }
 ```
 
-- The closing message of the setup shows the path with its `<id>`; so does the URL of either
-  tool in the ElevenLabs dashboard. Publishing only this webhook keeps every other one private.
+- The closing message of the setup shows the path with its `<id>`. So do **Agent settings** in
+  the panel, under **Webhook address**, and the URL of either tool in the ElevenLabs dashboard. Publishing only this webhook keeps every other one private.
   Rotating the webhook in the panel changes the id.
 - Removing `X-Forwarded-For` spares you a `trusted_proxies` entry in Home Assistant. Without
   it, Home Assistant refuses requests from an untrusted proxy.

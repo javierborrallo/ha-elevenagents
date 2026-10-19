@@ -1978,3 +1978,43 @@ async def test_config_get_returns_the_public_url(
     )
     result = (await client.receive_json())["result"]
     assert result["public_url"] == "https://hooks.example.com"
+
+
+async def test_config_get_returns_the_webhook_address(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The panel shows the address ElevenLabs calls and the path a proxy forwards."""
+    path = f"/api/webhook/{setup_entry.data[CONF_WEBHOOK_ID]}"
+    await hass.config.async_update(external_url="https://home.example")
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
+    )
+    result = (await client.receive_json())["result"]
+    assert result["webhook_path"] == path
+    assert result["webhook_url"] == f"https://home.example{path}"
+
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_PUBLIC_URL: "https://hooks.example.com"}
+    )
+    await client.send_json_auto_id(
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
+    )
+    result = (await client.receive_json())["result"]
+    assert result["webhook_url"] == f"https://hooks.example.com{path}"
+
+
+async def test_config_get_without_an_address_returns_an_empty_webhook_url(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """Without either address the panel shows no URL, only the path."""
+    await hass.config.async_update(
+        internal_url="http://192.168.1.10:8123", external_url=None
+    )
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
+    )
+    result = (await client.receive_json())["result"]
+    assert result["webhook_url"] == ""
+    assert result["webhook_path"] == f"/api/webhook/{setup_entry.data[CONF_WEBHOOK_ID]}"

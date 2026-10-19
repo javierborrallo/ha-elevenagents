@@ -62,7 +62,7 @@ from .permissions import (
     stored_keys,
     without_keys,
 )
-from .public_url import normalize_public_url
+from .public_url import entry_webhook_url, normalize_public_url
 from .repairs import async_check_missing
 from .sensitive import Mark
 from .status import async_record_check
@@ -257,12 +257,22 @@ async def config_get(
             "auto_expose_areas": sorted(options.get(OPT_AUTO_EXPOSE_AREAS, ())),
             "agent_settings": dict(options.get(OPT_AGENT_SETTINGS, {})),
             "public_url": options.get(OPT_PUBLIC_URL, ""),
+            "webhook_url": _webhook_url(hass, entry),
+            "webhook_path": webhook.async_generate_path(entry.data[CONF_WEBHOOK_ID]),
             "agent_timeout": entry.data.get(
                 CONF_RESPONSE_TIMEOUT, DEFAULT_RESPONSE_TIMEOUT
             ),
             "configured": bool(read or control),
         },
     )
+
+
+def _webhook_url(hass: HomeAssistant, entry: ElevenAgentsConfigEntry) -> str:
+    """Return the URL that ElevenLabs calls, or "" when no address exists."""
+    try:
+        return entry_webhook_url(hass, entry)
+    except NoURLAvailableError:
+        return ""
 
 
 BLOCKS = (

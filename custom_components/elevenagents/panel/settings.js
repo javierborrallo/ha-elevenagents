@@ -104,7 +104,8 @@ function rotateRow(t, what, label, confirmText, onRotate) {
 
 /**
  * The agent's opening line, the confirmation timeout, the one writable
- * ElevenLabs behaviour setting and the public webhook URL.
+ * ElevenLabs behaviour setting and the public webhook URL. Show the webhook
+ * URL that ElevenLabs calls, read-only.
  *
  * The opening line lives on the ElevenAgents agent and the other two live in
  * the config entry, so a save can touch two places. `agent` is null when
@@ -235,6 +236,20 @@ export function settingsScreen(
     reportDirty();
   });
   group.appendChild(field(t.publicUrlLabel, t.publicUrlHint, publicUrl));
+
+  const webhookUrl = document.createElement("input");
+  webhookUrl.type = "text";
+  webhookUrl.className = "text";
+  webhookUrl.readOnly = true;
+  webhookUrl.value = config.webhook_url || t.webhookUrlNone;
+  webhookUrl.addEventListener("focus", () => webhookUrl.select());
+  group.appendChild(
+    field(
+      t.webhookUrlLabel,
+      t.webhookUrlHint.replace("{path}", config.webhook_path || ""),
+      webhookUrl,
+    ),
+  );
 
   const numberRow = (label, hint, key, min, max) =>
     field(

@@ -129,6 +129,11 @@ const EN = {
     "Leave it empty to use the external URL.",
   invalidPublicUrl: "Enter an https address without a path, for example https://hooks.example.com.",
   noPublicUrl: "Home Assistant has no external URL, so this field cannot be empty.",
+  webhookUrlLabel: "Webhook address",
+  webhookUrlHint:
+    "The address ElevenLabs calls now. If a proxy publishes Home Assistant, forward the path {path}. " +
+    "Rotating the webhook changes it.",
+  webhookUrlNone: "No address: Home Assistant has no external URL and no public URL is set.",
   preToolSpeechAuto: "Auto",
   preToolSpeechForce: "Always",
   preToolSpeechOff: "Never",
@@ -309,6 +314,11 @@ const ES = {
     "Déjala vacía para usar la URL externa.",
   invalidPublicUrl: "Introduce una dirección https sin ruta, por ejemplo https://hooks.example.com.",
   noPublicUrl: "Home Assistant no tiene URL externa, así que este campo no puede quedar vacío.",
+  webhookUrlLabel: "Dirección del webhook",
+  webhookUrlHint:
+    "La dirección a la que llama ElevenLabs ahora. Si un proxy publica Home Assistant, reenvía la ruta {path}. " +
+    "Rotar el webhook la cambia.",
+  webhookUrlNone: "Sin dirección: Home Assistant no tiene URL externa y no hay URL pública.",
   preToolSpeechAuto: "Automático",
   preToolSpeechForce: "Siempre",
   preToolSpeechOff: "Nunca",
