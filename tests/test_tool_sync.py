@@ -19,6 +19,7 @@ from custom_components.elevenagents.const import (
     ISSUE_TIMEOUT_CROSSED,
     OPT_AGENT_SETTINGS,
     OPT_CONFIRM_TIMEOUT,
+    OPT_PUBLIC_URL,
     OPT_READ_ENTITIES,
     OPT_SENSITIVE,
     TOOL_CALL_SERVICE,
@@ -1127,3 +1128,25 @@ def test_the_call_service_description_says_how_to_read_moving():
         "If the response carries moving true, the device is still moving: "
         "say it is on its way to what the user asked for."
     ) in CALL_SERVICE_DESCRIPTION
+
+
+async def test_both_tools_call_the_public_url_when_one_is_set(hass, setup_entry):
+    """ElevenLabs reaches a private Home Assistant through the public address."""
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_PUBLIC_URL: "https://hooks.example.com"}
+    )
+
+    definitions = await async_build_definitions(hass, setup_entry)
+
+    expected = "https://hooks.example.com/api/webhook/webhook_test"
+    assert definitions[TOOL_GET_STATE]["api_schema"]["url"] == expected
+    assert definitions[TOOL_CALL_SERVICE]["api_schema"]["url"] == expected
+
+
+async def test_both_tools_call_the_external_url_without_a_public_url(hass, setup_entry):
+    """An empty field keeps the address of earlier versions."""
+    definitions = await async_build_definitions(hass, setup_entry)
+
+    expected = "https://home.example/api/webhook/webhook_test"
+    assert definitions[TOOL_GET_STATE]["api_schema"]["url"] == expected
+    assert definitions[TOOL_CALL_SERVICE]["api_schema"]["url"] == expected

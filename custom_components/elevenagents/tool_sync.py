@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Final, cast
 
-from homeassistant.components import webhook
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.service import async_get_all_descriptions
@@ -15,7 +14,6 @@ from .const import (
     CONF_AGENT_ID,
     CONF_RESPONSE_TIMEOUT,
     CONF_TOOL_IDS,
-    CONF_WEBHOOK_ID,
     CONF_WEBHOOK_SECRET,
     DEFAULT_RESPONSE_TIMEOUT,
     DISCRIMINATOR_CALL_SERVICE,
@@ -34,6 +32,7 @@ from .elevenlabs_client import (
     async_update_tool,
 )
 from .permissions import entity_id_for, from_options, granted_services
+from .public_url import entry_webhook_url
 from .repairs import async_check_agent, async_check_timeouts
 from .sensitive import any_confirm
 
@@ -519,9 +518,7 @@ async def async_build_definitions(
     )
     secret = entry.data[CONF_WEBHOOK_SECRET]
     timeout = int(entry.data.get(CONF_RESPONSE_TIMEOUT, DEFAULT_RESPONSE_TIMEOUT))
-    url = webhook.async_generate_url(
-        hass, entry.data[CONF_WEBHOOK_ID], allow_internal=False
-    )
+    url = entry_webhook_url(hass, entry)
     settings = agent_settings(entry.options)
 
     return {

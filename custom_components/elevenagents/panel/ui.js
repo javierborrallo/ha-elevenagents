@@ -298,6 +298,8 @@ export function describeSaveOutcome(t, result) {
   if (result.outcome === "saved_not_sent") return t.savedNotSent;
   if (result.detail === "timeout_not_below_agent") return t.timeoutNotBelowAgent;
   if (result.detail === "events_out_of_range") return t.eventsOutOfRange;
+  if (result.detail === "invalid_public_url") return t.invalidPublicUrl;
+  if (result.detail === "no_public_url") return t.noPublicUrl;
   return t.saveFailed.replace("{detail}", result.detail || "");
 }
 

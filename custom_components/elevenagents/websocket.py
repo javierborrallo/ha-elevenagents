@@ -13,6 +13,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.network import NoURLAvailableError, get_url
 from homeassistant.helpers.service import async_get_all_descriptions
 
 from .const import (
@@ -40,6 +41,7 @@ from .const import (
     OPT_EVENT_COOLDOWN,
     OPT_EVENT_HOURLY_LIMIT,
     OPT_EXCEPTIONS,
+    OPT_PUBLIC_URL,
     OPT_READ_ENTITIES,
     OPT_SENSITIVE,
     TOOL_GET_STATE,
@@ -60,6 +62,7 @@ from .permissions import (
     stored_keys,
     without_keys,
 )
+from .public_url import normalize_public_url
 from .repairs import async_check_missing
 from .sensitive import Mark
 from .status import async_record_check
@@ -253,6 +256,7 @@ async def config_get(
             "auto_control": options.get(OPT_AUTO_CONTROL, False),
             "auto_expose_areas": sorted(options.get(OPT_AUTO_EXPOSE_AREAS, ())),
             "agent_settings": dict(options.get(OPT_AGENT_SETTINGS, {})),
+            "public_url": options.get(OPT_PUBLIC_URL, ""),
             "agent_timeout": entry.data.get(
                 CONF_RESPONSE_TIMEOUT, DEFAULT_RESPONSE_TIMEOUT
             ),
@@ -351,6 +355,22 @@ def _auto_expose_block(_hass: HomeAssistant, data: dict[str, Any]) -> dict[str, 
     }
 
 
+def _public_url_value(hass: HomeAssistant, value: str) -> str | None:
+    """
+    Return the origin to store, None to clear the field, or the failure detail.
+
+    An empty field is refused when Home Assistant has no external URL.
+    """
+    if not value.strip():
+        try:
+            get_url(hass, allow_internal=False)
+        except NoURLAvailableError:
+            return "no_public_url"
+        return None
+    public_url = normalize_public_url(value)
+    return "invalid_public_url" if public_url is None else public_url
+
+
 def _block_keys(
     hass: HomeAssistant,
     entry: ElevenAgentsConfigEntry,
@@ -366,6 +386,11 @@ def _block_keys(
         keys: dict[str, Any] = {OPT_CONFIRM_TIMEOUT: value}
         if "agent_settings" in data:
             keys[OPT_AGENT_SETTINGS] = dict(data["agent_settings"])
+        if "public_url" in data:
+            public_url = _public_url_value(hass, str(data["public_url"]))
+            if public_url in ("invalid_public_url", "no_public_url"):
+                return public_url
+            keys[OPT_PUBLIC_URL] = public_url
         return keys
     if block == "events":
         events = _events_block(data)
@@ -410,7 +435,9 @@ async def config_save(
         connection.send_result(msg["id"], {"outcome": "failed", "detail": keys})
         return
 
-    hass.config_entries.async_update_entry(entry, options={**entry.options, **keys})
+    merged = {**entry.options, **keys}
+    options = {key: value for key, value in merged.items() if value is not None}
+    hass.config_entries.async_update_entry(entry, options=options)
     async_check_missing(hass, entry)
 
     if block not in SYNCING_BLOCKS:

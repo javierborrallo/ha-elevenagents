@@ -21,6 +21,7 @@ from custom_components.elevenagents.const import (
     DEFAULT_RESPONSE_TIMEOUT,
     DOMAIN,
     OPT_CONFIRM_TIMEOUT,
+    OPT_PUBLIC_URL,
     OPT_READ_ENTITIES,
     TOOL_CALL_SERVICE,
     TOOL_GET_STATE,
@@ -568,3 +569,23 @@ async def test_no_external_url_is_a_problem(hass, setup_entry, elevenlabs):
     assert _detail(result, "webhook") == "no external URL"
     assert _status(result)["tools_current"] == "problem"
     assert _detail(result, "tools_current") == "no external URL"
+
+
+async def test_the_webhook_probe_calls_the_public_url(
+    hass, setup_entry, elevenlabs, aioclient_mock
+):
+    """The probe tests the address ElevenLabs calls, not the external URL."""
+    public = "https://hooks.example.com/api/webhook/webhook_test"
+    aioclient_mock.post(public, status=401)
+    await hass.config.async_update(external_url=None)
+    hass.config_entries.async_update_entry(
+        setup_entry,
+        options={**setup_entry.options, OPT_PUBLIC_URL: "https://hooks.example.com"},
+    )
+
+    result = await async_run_check(hass, setup_entry)
+
+    assert _status(result)["webhook"] == "ok"
+    probed = [str(call[1]) for call in aioclient_mock.mock_calls]
+    assert public in probed
+    assert WEBHOOK_URL not in probed

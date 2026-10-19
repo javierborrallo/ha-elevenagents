@@ -133,3 +133,10 @@ def test_every_raised_translation_key_has_text(language: str) -> None:
     assert used <= documented, (
         f"{language}.json has no text for {sorted(used - documented)}"
     )
+
+
+def test_the_closing_message_names_the_webhook_path() -> None:
+    """The owner of a proxy needs the path to forward."""
+    for language in ("en", "es"):
+        message = _load(language)["config"]["create_entry"]["default"]
+        assert "{webhook_path}" in message

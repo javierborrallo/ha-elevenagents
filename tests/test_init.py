@@ -23,6 +23,7 @@ from custom_components.elevenagents.const import (
     CONF_TOOL_IDS,
     CONF_WEBHOOK_ID,
     DOMAIN,
+    OPT_PUBLIC_URL,
 )
 from custom_components.elevenagents.elevenlabs_client import (
     ElevenLabsAuthError,
@@ -337,3 +338,16 @@ async def test_a_reload_after_an_auth_error_loads_cleanly(hass, config_entry, ca
     assert config_entry.state is ConfigEntryState.LOADED
     assert len(_entities_for(hass, config_entry)) == 9
     assert "already been setup" not in caplog.text
+
+
+async def test_a_public_url_loads_without_an_external_url(hass, config_entry):
+    """A Home Assistant on a private network sets up through the public address."""
+    await hass.config.async_update(external_url=None)
+    hass.config_entries.async_update_entry(
+        config_entry, options={OPT_PUBLIC_URL: "https://hooks.example.com"}
+    )
+    with patch("custom_components.elevenagents.async_sync_tools", AsyncMock()):
+        assert await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.LOADED
