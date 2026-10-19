@@ -76,6 +76,11 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 
+_silence_timeout = vol.Any(
+    -1, vol.All(vol.Any(int, float), vol.Range(min=0, min_included=False))
+)
+
+
 def _entry(hass: HomeAssistant, entry_id: str) -> ConfigEntry | None:
     """Return this integration's entry with that id, or None."""
     entry = hass.config_entries.async_get_entry(entry_id)
@@ -469,6 +474,8 @@ async def agent_get(
     config = agent.conversation_config.agent
     prompt = "" if config is None or config.prompt is None else config.prompt.prompt
     first_message = "" if config is None else config.first_message
+    conversation = agent.conversation_config.conversation
+    turn = agent.conversation_config.turn
 
     settings = dict(AGENT_SETTING_DEFAULTS)
     if tool is not None:
@@ -483,6 +490,14 @@ async def agent_get(
             "name": agent.name or "",
             "prompt": prompt or "",
             "first_message": first_message or "",
+            "limits": {
+                "max_duration_seconds": (
+                    None if conversation is None else conversation.max_duration_seconds
+                ),
+                "silence_end_call_timeout": (
+                    None if turn is None else turn.silence_end_call_timeout
+                ),
+            },
             "settings": settings,
         },
     )
@@ -494,6 +509,8 @@ async def agent_get(
         vol.Required("entry_id"): str,
         vol.Optional("prompt"): str,
         vol.Optional("first_message"): str,
+        vol.Optional("max_duration_seconds"): vol.All(int, vol.Range(min=1)),
+        vol.Optional("silence_end_call_timeout"): _silence_timeout,
     }
 )
 @websocket_api.require_admin
@@ -518,7 +535,18 @@ async def agent_save(
         agent_config["prompt"] = {"prompt": msg["prompt"]}
     if "first_message" in msg:
         agent_config["first_message"] = msg["first_message"]
-    if not agent_config:
+    conversation_config: dict[str, Any] = {}
+    if agent_config:
+        conversation_config["agent"] = agent_config
+    if "max_duration_seconds" in msg:
+        conversation_config["conversation"] = {
+            "max_duration_seconds": msg["max_duration_seconds"]
+        }
+    if "silence_end_call_timeout" in msg:
+        conversation_config["turn"] = {
+            "silence_end_call_timeout": msg["silence_end_call_timeout"]
+        }
+    if not conversation_config:
         connection.send_result(msg["id"], {"outcome": "ok", "detail": None})
         return
 
@@ -526,7 +554,7 @@ async def agent_save(
         await async_patch_agent(
             entry.runtime_data.client,
             entry.data[CONF_AGENT_ID],
-            conversation_config={"agent": agent_config},
+            conversation_config=conversation_config,
         )
     except ElevenLabsError as err:
         connection.send_result(msg["id"], {"outcome": "failed", "detail": str(err)})

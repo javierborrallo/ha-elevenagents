@@ -64,7 +64,8 @@ Nothing is exposed yet. The closing message links to the configuration panel, wh
 what **Configure** opens on the integration page. The first time, the panel walks seven steps:
 
 1. **Agent settings** — the opening line, how long an action waits to be confirmed, and
-   whether the agent speaks before it acts.
+   whether the agent speaks before it acts. The panel also sets the maximum conversation
+   length and the silence timeout. Both are the agent's own settings in ElevenLabs.
 2. **Prompt** — your agent's prompt beside the block this integration recommends, to copy
    across as much or as little as you want.
 3. **Read** — the entities the agent may read.

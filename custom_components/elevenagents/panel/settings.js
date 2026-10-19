@@ -130,6 +130,13 @@ export function settingsScreen(
     hourly_limit: events.hourly_limit,
     continuity_minutes: events.continuity_minutes,
   };
+  const limits = (agent && agent.limits) || {};
+  const initialLimits = {
+    max_duration_seconds: limits.max_duration_seconds ?? null,
+    silence_end_call_timeout:
+      limits.silence_end_call_timeout === -1 ? null : limits.silence_end_call_timeout ?? null,
+  };
+  const limitDraft = { ...initialLimits };
   const initialMessage = draft.first_message;
 
   const group = el("div", "titled");
@@ -147,6 +154,32 @@ export function settingsScreen(
   } else {
     group.appendChild(
       field(t.firstMessageLabel, t.firstMessageOffline, el("div", "hint", "—")),
+    );
+  }
+
+  if (agent) {
+    const limitInput = (key, placeholder) => {
+      const input = document.createElement("input");
+      input.type = "number";
+      input.className = "text";
+      input.min = "1";
+      if (placeholder) input.placeholder = placeholder;
+      if (limitDraft[key] !== null) input.value = String(limitDraft[key]);
+      input.addEventListener("input", () => {
+        limitDraft[key] = input.value === "" ? null : Number(input.value);
+        reportDirty();
+      });
+      return input;
+    };
+    group.appendChild(
+      field(t.maxDurationLabel, "", limitInput("max_duration_seconds", "")),
+    );
+    group.appendChild(
+      field(
+        t.silenceTimeoutLabel,
+        "",
+        limitInput("silence_end_call_timeout", t.silenceTimeoutOff),
+      ),
     );
   }
 
@@ -225,6 +258,21 @@ export function settingsScreen(
     if (agent && draft.first_message !== initialMessage) {
       const written = await saveAgent({ first_message: draft.first_message });
       if (!isAdvanceable(written)) return written;
+    }
+    if (agent) {
+      const changed = {};
+      if (limitDraft.max_duration_seconds !== initialLimits.max_duration_seconds) {
+        changed.max_duration_seconds = limitDraft.max_duration_seconds;
+      }
+      if (
+        limitDraft.silence_end_call_timeout !== initialLimits.silence_end_call_timeout
+      ) {
+        changed.silence_end_call_timeout = limitDraft.silence_end_call_timeout ?? -1;
+      }
+      if (Object.keys(changed).length > 0) {
+        const written = await saveAgent(changed);
+        if (!isAdvanceable(written)) return written;
+      }
     }
     // Save settings before events. A failed settings save stops here.
     const settingsSaved = await saveConfig("settings", {
