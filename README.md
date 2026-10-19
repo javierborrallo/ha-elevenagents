@@ -73,6 +73,9 @@ only inside your own network. The tools then call the proxy; Home Assistant keep
 The field takes an `https://` address with no path, such as `https://hooks.example.com`.
 **Back to the Home Assistant URL** in the panel undoes it.
 
+**Nabu Casa** has not been tested. If your Nabu Casa address is not your external URL, the
+field starts empty: enter `https://<id>.ui.nabu.casa`, then **Test this address** in the panel.
+
 With Caddy:
 
 ```caddy
