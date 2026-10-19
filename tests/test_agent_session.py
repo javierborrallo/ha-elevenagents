@@ -101,6 +101,29 @@ def _tool(name: str) -> dict[str, Any]:
     }
 
 
+def _full_payload(name: str, call_id: str = "t1") -> dict[str, Any]:
+    return {
+        "type": "agent_tool_response_full_payload",
+        "agent_tool_response_full_payload": {
+            "tool_name": name,
+            "tool_call_id": call_id,
+            "is_error": False,
+            "full_tool_result": "{}",
+        },
+    }
+
+
+def _plain(name: str, call_id: str = "t1") -> dict[str, Any]:
+    return {
+        "type": "agent_tool_response",
+        "agent_tool_response": {
+            "tool_name": name,
+            "tool_call_id": call_id,
+            "is_error": False,
+        },
+    }
+
+
 async def _hold(ws: web.WebSocketResponse) -> None:
     """Keep the socket open until the client closes it."""
     await ws.receive()
@@ -130,6 +153,30 @@ async def test_a_turn_returns_the_answer_and_the_tools(hass, setup_entry, fake):
     assert result.responses == ["Son 10 grados."]
     assert result.tools == [{"tool_name": "ha_get_state", "is_error": False}]
     assert result.incomplete is False
+
+
+async def test_a_full_payload_alone_records_the_tool(hass, setup_entry, fake):
+    """A full payload frame without a plain response still records the tool."""
+    fake.behave = _standard(_full_payload("ha_call_service"), _response("Hecho."))
+
+    result = await _run(hass, setup_entry, "Evento: luz", {})
+
+    assert result.tools == [{"tool_name": "ha_call_service", "is_error": False}]
+
+
+@pytest.mark.parametrize("full_first", [False, True])
+async def test_both_response_frames_for_one_call_record_one_tool(
+    hass, setup_entry, fake, full_first
+):
+    """The plain and the full payload frame of one call id count once."""
+    plain = _plain("ha_call_service")
+    full = _full_payload("ha_call_service")
+    frames = (full, plain) if full_first else (plain, full)
+    fake.behave = _standard(*frames, _response("Hecho."))
+
+    result = await _run(hass, setup_entry, "Evento: luz", {})
+
+    assert result.tools == [{"tool_name": "ha_call_service", "is_error": False}]
 
 
 async def test_the_first_frames_ask_for_text_only_and_carry_the_variables(

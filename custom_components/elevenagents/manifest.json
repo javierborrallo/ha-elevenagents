@@ -10,7 +10,8 @@
     "repairs",
     "panel_custom",
     "http",
-    "websocket_api"
+    "websocket_api",
+    "frontend"
   ],
   "documentation": "https://github.com/javierborrallo/ha-elevenagents",
   "integration_type": "service",

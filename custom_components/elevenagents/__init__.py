@@ -15,6 +15,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.network import NoURLAvailableError
 
+from .card import async_register_card
 from .const import CONF_AGENT_ID, CONF_API_KEY, CONF_TOOL_IDS, CONF_WEBHOOK_ID, DOMAIN
 from .elevenlabs_client import (
     ElevenLabsAuthError,
@@ -75,6 +76,7 @@ async def async_setup(
     """Register the sync_tools service and the panel's commands, once."""
     async_setup_services(hass)
     await async_register_panel(hass)
+    await async_register_card(hass)
     async_register_commands(hass)
     return True
 

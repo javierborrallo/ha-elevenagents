@@ -20,6 +20,7 @@ from custom_components.elevenagents.elevenlabs_client import (
     async_delete_tool,
     async_get_agent,
     async_get_client,
+    async_get_conversation_token,
     async_get_signed_url,
     async_get_tool,
     async_list_agents,
@@ -242,3 +243,37 @@ def test_import_type_adapter_caches_the_lazy_attribute() -> None:
     vars(pydantic).pop("TypeAdapter", None)
     _import_type_adapter()
     assert "TypeAdapter" in vars(pydantic)
+
+
+async def test_get_conversation_token_returns_the_token() -> None:
+    """The SDK answers with a model that carries token."""
+    client = SimpleNamespace(
+        conversational_ai=SimpleNamespace(
+            conversations=SimpleNamespace(
+                get_webrtc_token=AsyncMock(return_value=SimpleNamespace(token="tok-1"))  # noqa: S106
+            )
+        )
+    )
+
+    token = await async_get_conversation_token(cast("Any", client), "agent_1")
+
+    assert token == "tok-1"  # noqa: S105
+    client.conversational_ai.conversations.get_webrtc_token.assert_awaited_once_with(
+        agent_id="agent_1"
+    )
+
+
+async def test_get_conversation_token_translates_a_refused_key() -> None:
+    """A 401 becomes ElevenLabsAuthError like every other call."""
+    client = SimpleNamespace(
+        conversational_ai=SimpleNamespace(
+            conversations=SimpleNamespace(
+                get_webrtc_token=AsyncMock(
+                    side_effect=ApiError(status_code=401, body="no")
+                )
+            )
+        )
+    )
+
+    with pytest.raises(ElevenLabsAuthError):
+        await async_get_conversation_token(cast("Any", client), "agent_1")

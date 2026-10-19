@@ -75,6 +75,17 @@ def _tool_id(event: dict[str, Any]) -> str | None:
     return event.get("tool_call_id") or event.get("tool_name")
 
 
+def _record_tool(state: _TurnState, event: dict[str, Any], tool_id: str | None) -> None:
+    """Append the tool to the result once per call id."""
+    if tool_id is not None and tool_id in state.answered_tools:
+        return
+    state.result.tools.append(
+        {"tool_name": event.get("tool_name"), "is_error": bool(event.get("is_error"))}
+    )
+    if tool_id is not None:
+        state.answered_tools.add(tool_id)
+
+
 @dataclass
 class _TurnState:
     """The turn so far: its result, whether the user message is out, what is pending."""
@@ -83,6 +94,7 @@ class _TurnState:
     sent: bool = False
     last_content: float | None = None
     pending_tools: set[str] = field(default_factory=set)
+    answered_tools: set[str] = field(default_factory=set)
     on_started: Callable[[str], None] | None = None
 
 
@@ -135,16 +147,12 @@ async def _apply_frame(
         tool_id = _tool_id(event)
         if tool_id is not None:
             state.pending_tools.add(tool_id)
-    elif kind == "agent_tool_response":
-        event = payload.get("agent_tool_response") or {}
-        state.result.tools.append(
-            {
-                "tool_name": event.get("tool_name"),
-                "is_error": bool(event.get("is_error")),
-            }
-        )
+    elif kind in ("agent_tool_response", "agent_tool_response_full_payload"):
+        event = payload.get(kind) or {}
+        tool_id = _tool_id(event)
+        _record_tool(state, event, tool_id)
         state.last_content = loop.time()
-        state.pending_tools.discard(_tool_id(event))
+        state.pending_tools.discard(tool_id)
     elif kind == "agent_response_complete" and not state.pending_tools:
         return True
     return False

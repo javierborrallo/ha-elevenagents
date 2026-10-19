@@ -49,7 +49,11 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 # Client events that report a tool call on the WebSocket.
-TOOL_CLIENT_EVENTS: Final = ("agent_tool_request", "agent_tool_response")
+TOOL_CLIENT_EVENTS: Final = (
+    "agent_tool_request",
+    "agent_tool_response",
+    "agent_tool_response_full_payload",
+)
 
 GET_STATE_DESCRIPTION = (
     "Read the current state of one or more Home Assistant entities. "
