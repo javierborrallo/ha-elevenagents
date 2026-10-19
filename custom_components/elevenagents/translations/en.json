@@ -38,7 +38,7 @@
     },
     "error": {
       "invalid_auth": "ElevenLabs rejected this key. Check that you copied it whole, and that it has not been revoked.",
-      "invalid_public_url": "Enter an https address without a path, for example https://hooks.example.com.",
+      "invalid_public_url": "Enter an https address without a path: a host and, if needed, a port.",
       "no_public_url": "Home Assistant has no external URL. Enter the address of a proxy that forwards /api/webhook/ to this Home Assistant.",
       "insufficient_scope": "This key works, but it may not reach ElevenAgents. Open the key in the ElevenLabs dashboard and give it write access to ElevenAgents.",
       "no_agents": "This key reaches no agents. Create an agent in the ElevenLabs dashboard first, then add this integration again.",

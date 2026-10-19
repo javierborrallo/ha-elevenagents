@@ -147,3 +147,18 @@ def test_the_flow_explains_an_empty_webhook_url() -> None:
     """The flow refuses an empty field without an external URL."""
     for language in ("en", "es"):
         assert _load(language)["config"]["error"]["no_public_url"]
+
+
+def _strings(node: object) -> list[str]:
+    """Return every string inside a translation tree."""
+    if isinstance(node, str):
+        return [node]
+    if isinstance(node, dict):
+        return [text for value in node.values() for text in _strings(value)]
+    return []
+
+
+def test_no_translation_holds_a_url() -> None:
+    """Hassfest refuses a URL in a translation string."""
+    for language in ("en", "es"):
+        assert [text for text in _strings(_load(language)) if "://" in text] == []
