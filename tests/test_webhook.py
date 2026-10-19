@@ -403,6 +403,129 @@ async def test_write_that_writes_nothing_is_no_change_not_a_failure(
     assert "error" not in body
 
 
+async def _write_a_late_device(
+    hass, config_entry, entity_registry, domain: str, delay: float | None
+) -> tuple[dict[str, object], float]:
+    """
+    Run open on a device that writes its state delay seconds after the call.
+
+    A delay of None never writes. Return the body and the seconds it took.
+    """
+    device = entity_registry.async_get_or_create(domain, "demo", "late")
+    # Feature 1 is OPEN for both covers and valves.
+    attributes = {"supported_features": 1}
+    hass.states.async_set(device.entity_id, "closed", attributes)
+
+    async def open_device(call) -> None:
+        if delay is not None:
+            hass.loop.call_later(
+                delay, hass.states.async_set, device.entity_id, "opening", attributes
+            )
+
+    service = f"open_{domain}"
+    hass.services.async_register(domain, service, open_device)
+    hass.config_entries.async_update_entry(
+        config_entry, options={OPT_CONTROL_ENTITIES: [device.id]}
+    )
+
+    start = asyncio.get_running_loop().time()
+    body = await async_write(
+        hass,
+        config_entry,
+        {
+            "tool": "call_service",
+            "entity_id": device.entity_id,
+            "action": f"{domain}.{service}",
+        },
+    )
+    return body, asyncio.get_running_loop().time() - start
+
+
+@pytest.mark.parametrize("domain", ["cover", "valve"])
+async def test_a_device_that_moves_after_the_call_is_done(
+    hass, config_entry, entity_registry, domain
+):
+    """A cover or valve writes its state when it starts to move, not when called."""
+    body, _ = await _write_a_late_device(
+        hass, config_entry, entity_registry, domain, 0.1
+    )
+
+    assert body["outcome"] == OUTCOME_DONE
+    assert body["state"] == "opening"
+    assert body["moving"] is True
+
+
+async def test_a_cover_that_never_moves_is_no_change_after_the_wait(
+    hass, config_entry, entity_registry
+):
+    """The wait ends at its limit, and the answer is no_change."""
+    with patch(
+        "custom_components.elevenagents.webhook.MOVING_DEVICE_WAIT_SECONDS", 0.2
+    ):
+        body, took = await _write_a_late_device(
+            hass, config_entry, entity_registry, "cover", None
+        )
+
+    assert body["outcome"] == OUTCOME_NO_CHANGE
+    assert body["state"] == "closed"
+    assert "moving" not in body
+    assert took >= 0.2
+
+
+async def test_a_cover_that_writes_during_the_call_is_not_moving(
+    hass, config_entry, entity_registry
+):
+    """A write before the call returns needs no wait and carries no moving."""
+    cover = entity_registry.async_get_or_create("cover", "demo", "quick")
+    hass.states.async_set(cover.entity_id, "closed", {"supported_features": 1})
+
+    async def open_cover(call) -> None:
+        hass.states.async_set(cover.entity_id, "open", {"supported_features": 1})
+
+    hass.services.async_register("cover", "open_cover", open_cover)
+    hass.config_entries.async_update_entry(
+        config_entry, options={OPT_CONTROL_ENTITIES: [cover.id]}
+    )
+
+    body = await async_write(
+        hass,
+        config_entry,
+        {
+            "tool": "call_service",
+            "entity_id": cover.entity_id,
+            "action": "cover.open_cover",
+        },
+    )
+
+    assert body["outcome"] == OUTCOME_DONE
+    assert "moving" not in body
+
+
+async def test_a_light_does_not_wait_for_a_late_write(
+    hass, config_entry, entity_registry
+):
+    """Only covers and valves wait; a light answers at once."""
+    one = entity_registry.async_get_or_create("light", "demo", "one")
+    hass.states.async_set(one.entity_id, "off", {})
+
+    async def turn_on(call) -> None:
+        hass.loop.call_later(0.1, hass.states.async_set, one.entity_id, "on", {})
+
+    hass.services.async_register("light", "turn_on", turn_on)
+    hass.config_entries.async_update_entry(
+        config_entry, options={OPT_CONTROL_ENTITIES: [one.id]}
+    )
+
+    body = await async_write(
+        hass,
+        config_entry,
+        {"tool": "call_service", "entity_id": one.entity_id, "action": "light.turn_on"},
+    )
+
+    assert body["outcome"] == OUTCOME_NO_CHANGE
+    await asyncio.sleep(0.15)
+
+
 async def test_write_that_changes_only_an_attribute_is_still_done(
     hass, config_entry, entity_registry
 ):
@@ -1066,3 +1189,35 @@ async def test_an_exhausted_bucket_fires_no_action_event(
     )
 
     assert heard == []
+
+
+async def test_a_write_whose_state_holds_a_set_still_answers(
+    hass, hass_client_no_auth, setup_entry, entity_registry
+):
+    """An attribute that is not plain JSON never empties the response."""
+    one = entity_registry.async_get_or_create("light", "demo", "odd")
+    hass.states.async_set(one.entity_id, "off", {})
+
+    async def turn_on(call) -> None:
+        hass.states.async_set(one.entity_id, "on", {"effect_list": {"rainbow"}})
+
+    hass.services.async_register("light", "turn_on", turn_on)
+    hass.config_entries.async_update_entry(
+        setup_entry, options={OPT_CONTROL_ENTITIES: [one.id]}
+    )
+
+    client = await hass_client_no_auth()
+    response = await client.post(
+        f"/api/webhook/{setup_entry.data[CONF_WEBHOOK_ID]}",
+        headers={SECRET_HEADER: setup_entry.data[CONF_WEBHOOK_SECRET]},
+        json={
+            "tool": "call_service",
+            "entity_id": one.entity_id,
+            "action": "light.turn_on",
+        },
+    )
+
+    assert response.status == 200
+    body = await response.json()
+    assert body["outcome"] == OUTCOME_DONE
+    assert body["effect_list"] == ["rainbow"]

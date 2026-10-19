@@ -70,6 +70,12 @@ CALL_SERVICE_DESCRIPTION = (
     " If the outcome is confirmation_required, nothing ran: ask the user to confirm "
     "this action on this device. If the user confirms, call again with the same "
     "entity_id, action and service_data, and the confirmation_code. If not, do nothing."
+    " If the outcome is no_change and the state is not what the user asked for, "
+    "say the command was sent and the device has not reported the change yet."
+    " If the error is invalid_value, correct the service_data from the detail "
+    "and call once more."
+    " If the response carries moving true, the device is still moving: "
+    "say it is on its way to what the user asked for."
 )
 
 # Any selector kind absent from this table is not a scalar. Its key is omitted.
@@ -80,6 +86,10 @@ _SELECTOR_TYPES: dict[str, str] = {
     "state": "string",
     "boolean": "boolean",
 }
+
+# A key typed number by one action and string by another is published as
+# a string.
+_TEXT_SERVES_BOTH: frozenset[str] = frozenset({"number", "string"})
 
 # Fields this integration checks in the tool's read-back after a write.
 COMPARED_FIELDS: tuple[str, ...] = (
@@ -177,7 +187,8 @@ def service_data_properties(
     No minimum, maximum or enum travels with a property. Two permitted
     services can publish the same key with different bounds, and Home
     Assistant validates against the entity's own limits regardless. A key
-    two actions declare with a different type is omitted.
+    that one action types as a number and another as a string is a string.
+    A key two actions declare with another pair of types is omitted.
     """
     properties: dict[str, dict[str, Any]] = {}
     types_seen: dict[str, str] = {}
@@ -190,6 +201,10 @@ def service_data_properties(
         for key, json_type in _scalar_fields(service_description).items():
             previous_type = types_seen.get(key)
             if previous_type is not None and previous_type != json_type:
+                if {previous_type, json_type} == _TEXT_SERVES_BOTH:
+                    types_seen[key] = "string"
+                    properties[key]["type"] = "string"
+                    continue
                 omitted.add(key)
                 _LOGGER.warning(
                     "Omitting service_data key '%s': %s and %s disagree on its type",
