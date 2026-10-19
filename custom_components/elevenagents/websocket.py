@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import secrets
 from typing import TYPE_CHECKING, Any
 
@@ -45,6 +47,7 @@ from .const import (
 from .elevenlabs_client import (
     ElevenLabsError,
     async_get_agent,
+    async_get_conversation_token,
     async_get_tool,
     async_patch_agent,
 )
@@ -69,6 +72,8 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
 
     from . import ElevenAgentsConfigEntry
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _entry(hass: HomeAssistant, entry_id: str) -> ConfigEntry | None:
@@ -626,6 +631,56 @@ async def check(
     connection.send_result(msg["id"], await async_record_check(hass, entry))
 
 
+def _agent_limits(agent: Any) -> dict[str, Any]:
+    """Return the two conversation limits of an agent. A missing limit is None."""
+    config = agent.conversation_config
+    conversation = getattr(config, "conversation", None)
+    turn = getattr(config, "turn", None)
+    return {
+        "max_duration_seconds": (
+            None if conversation is None else conversation.max_duration_seconds
+        ),
+        "silence_end_call_timeout": (
+            None if turn is None else turn.silence_end_call_timeout
+        ),
+    }
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "elevenagents/conversation_token"}
+)
+@websocket_api.async_response
+async def conversation_token(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return a conversation token and the agent's limits. Any user may ask."""
+    entry, _ = _sole_entry(hass)
+    if entry is None or entry.state is not ConfigEntryState.LOADED:
+        connection.send_error(msg["id"], "not_configured", "ElevenAgents is not set up")
+        return
+    client = entry.runtime_data.client
+    agent_id = entry.data[CONF_AGENT_ID]
+    token, agent = await asyncio.gather(
+        async_get_conversation_token(client, agent_id),
+        async_get_agent(client, agent_id),
+        return_exceptions=True,
+    )
+    if isinstance(token, ElevenLabsError):
+        connection.send_error(msg["id"], "unreachable", type(token).__name__)
+        return
+    if isinstance(token, BaseException):
+        raise token
+    if isinstance(agent, BaseException):
+        _LOGGER.debug("The agent read for the limits failed: %s", type(agent).__name__)
+        limits: dict[str, Any] = {
+            "max_duration_seconds": None,
+            "silence_end_call_timeout": None,
+        }
+    else:
+        limits = _agent_limits(agent)
+    connection.send_result(msg["id"], {"token": token, "limits": limits})
+
+
 def async_register_commands(hass: HomeAssistant) -> None:
     """Register every command the panel uses."""
     websocket_api.async_register_command(hass, config_get)
@@ -634,3 +689,4 @@ def async_register_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, agent_save)
     websocket_api.async_register_command(hass, rotate)
     websocket_api.async_register_command(hass, check)
+    websocket_api.async_register_command(hass, conversation_token)

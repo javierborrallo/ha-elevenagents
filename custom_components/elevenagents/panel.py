@@ -16,8 +16,8 @@ if TYPE_CHECKING:
 STATIC_PATH = "/elevenagents_panel"
 
 
-def _version(directory: Path) -> str:
-    """Return a path segment that changes whenever a panel file changes."""
+def asset_version(directory: Path) -> str:
+    """Return a path segment that changes when a top-level .js file changes."""
     newest = max(path.stat().st_mtime_ns for path in directory.glob("*.js"))
     return f"v{newest}"
 
@@ -25,7 +25,7 @@ def _version(directory: Path) -> str:
 async def async_register_panel(hass: HomeAssistant) -> None:
     """Serve the panel files and register the panel itself."""
     directory = Path(__file__).parent / "panel"
-    version = await hass.async_add_executor_job(_version, directory)
+    version = await hass.async_add_executor_job(asset_version, directory)
     served_at = f"{STATIC_PATH}/{version}"
     await hass.http.async_register_static_paths(
         [StaticPathConfig(served_at, str(directory), cache_headers=True)]

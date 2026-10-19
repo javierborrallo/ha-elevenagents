@@ -90,6 +90,17 @@ async def async_get_signed_url(client: AsyncElevenLabs, agent_id: str) -> str:
     return str(result.signed_url)
 
 
+async def async_get_conversation_token(client: AsyncElevenLabs, agent_id: str) -> str:
+    """Return a WebRTC conversation token for one conversation with the agent."""
+    try:
+        result = await client.conversational_ai.conversations.get_webrtc_token(
+            agent_id=agent_id
+        )
+    except (ApiError, httpx.HTTPError) as err:
+        raise _translate(err) from err
+    return str(result.token)
+
+
 async def async_list_tools(client: AsyncElevenLabs) -> ToolsResponseModel:
     """List the tools in the user's workspace."""
     try:

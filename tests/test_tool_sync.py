@@ -616,6 +616,7 @@ async def test_attaching_adds_the_tool_events_to_the_agent(
         "agent_response",
         "agent_tool_response",
         "agent_tool_request",
+        "agent_tool_response_full_payload",
     ]
 
 
