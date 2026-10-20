@@ -153,7 +153,7 @@ input.text{padding:10px 12px;font:inherit;border-radius:8px;
  color:inherit}
 .wizard{display:flex;flex-direction:column;gap:16px;padding:16px;flex:1;
  min-height:0}
-.wizard-body{flex:1;min-height:0;display:flex;flex-direction:column}
+.wizard-body{flex:1;min-height:0;display:flex;flex-direction:column;overflow:auto}
 .wizard-body>*,.dlg-body>.tree,.dlg-body>.titled{flex:1;min-height:0}
 .wizard-foot{display:flex;gap:8px;align-items:center;justify-content:flex-end}
 h3.title{margin:0;font-size:20px;font-weight:500}
