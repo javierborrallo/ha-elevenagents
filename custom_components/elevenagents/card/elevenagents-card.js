@@ -4,6 +4,7 @@ import {
   STATES, nextState, preflightProblem, gridOptions, formFor,
   chipFor, mergeChip, chipLabel, chipIcon, chipTone, endReason, endedSummary, cardConfig,
   limitsFrom, progress, addLine, cutLastAgentLine, createHold,
+  relayIfBlocked,
 } from "./logic.js";
 import { stringsFor } from "./strings.js";
 import { el, icon } from "./dom.js";
@@ -39,6 +40,16 @@ function loadSdk() {
     });
   }
   return sdkPromise;
+}
+
+// Return an audio element that plays an empty stream, started inside the
+// tap. The tracks added to the stream later play without a new play().
+function unlockedVoice() {
+  const voice = new Audio();
+  voice.autoplay = true;
+  voice.srcObject = new MediaStream();
+  voice.play().catch(() => {});
+  return voice;
 }
 
 // Play a soft ring through Web Audio. Return a function that stops it.
@@ -167,6 +178,8 @@ class ElevenAgentsCard extends HTMLElement {
     this.endedAt = null;
     this.clock = null;
     this.stopRing = null;
+    this.voice = null;
+    this.audioWatch = null;
     this.endedReason = null;
     this.problem = null;
     this.frame = null;
@@ -488,6 +501,7 @@ class ElevenAgentsCard extends HTMLElement {
   setState(event) {
     this.state = nextState(this.state, event);
     if (this.state !== STATES.CONNECTING) this.ringOff();
+    if (this.state === STATES.READY || this.state === STATES.ENDED) this.voiceOff();
     if (this.isOpen() && this.clock === null) this.clock = setInterval(() => this.render(), 1000);
     if (!this.isOpen() && this.clock !== null) {
       clearInterval(this.clock);
@@ -499,6 +513,29 @@ class ElevenAgentsCard extends HTMLElement {
   ringOff() {
     if (this.stopRing) this.stopRing();
     this.stopRing = null;
+  }
+
+  // Relay each audio element that the SDK adds while a session runs.
+  watchAudio() {
+    const voice = this.voice;
+    this.audioWatch = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (node.tagName === "AUDIO") relayIfBlocked(node, voice);
+        }
+      }
+    });
+    this.audioWatch.observe(document.body, { childList: true });
+  }
+
+  voiceOff() {
+    if (this.audioWatch) this.audioWatch.disconnect();
+    this.audioWatch = null;
+    if (this.voice) {
+      this.voice.pause();
+      this.voice.srcObject = null;
+    }
+    this.voice = null;
   }
 
   onMain() {
@@ -531,6 +568,10 @@ class ElevenAgentsCard extends HTMLElement {
     this.keyboardOpen = false;
     this.ringOff();
     if (this.config.ringtone) this.stopRing = startRing();
+    this.voiceOff();
+    // Unlock the voice inside the tap, before the first await.
+    this.voice = unlockedVoice();
+    this.watchAudio();
     this.setState({ type: "start" });
     // Wait until the other card ends its session.
     await previous;
