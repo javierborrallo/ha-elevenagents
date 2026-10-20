@@ -200,3 +200,22 @@ export function endReason(details) {
 export function endedSummary(reason, seconds, actionCount, t) {
   return [t.endedShort[reason] || t.endedShort.error, formatClock(seconds), t.actions(actionCount)].join(" · ");
 }
+
+// Play the element. When the browser blocks it, mute it and add its audio
+// tracks to the stream of `voice`, an element that a tap started playing.
+// Return true when the tracks move to `voice`.
+export async function relayIfBlocked(element, voice) {
+  try {
+    await element.play();
+    return false;
+  } catch (err) {
+    const target = voice && voice.srcObject;
+    const source = element.srcObject;
+    if (!target || !source) return false;
+    const tracks = source.getAudioTracks();
+    if (!tracks.length) return false;
+    element.muted = true;
+    for (const track of tracks) target.addTrack(track);
+    return true;
+  }
+}
