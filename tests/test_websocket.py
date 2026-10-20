@@ -2134,3 +2134,22 @@ async def test_the_probe_without_any_address_makes_no_call(
 
     assert result == {"status": "problem", "detail": "no_public_url"}
     probe.assert_not_awaited()
+
+
+async def test_config_get_offers_for_control_only_entities_with_an_action(
+    hass, setup_entry, hass_ws_client: WebSocketGenerator
+) -> None:
+    """A sensor has no action, so the control list leaves it out."""
+    await async_setup_component(hass, "lock", {})
+    hass.states.async_set("lock.front", "locked", {"supported_features": 0})
+    hass.states.async_set("sensor.temperature", "21")
+    await hass.async_block_till_done()
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
+    )
+    result = (await client.receive_json())["result"]
+
+    assert "lock.front" in result["controllable_entity_ids"]
+    assert "sensor.temperature" not in result["controllable_entity_ids"]

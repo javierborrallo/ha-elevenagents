@@ -57,6 +57,7 @@ from .elevenlabs_client import (
 from .permissions import (
     Permissions,
     entity_id_for,
+    entity_services,
     granted_services,
     is_missing,
     resolve_target,
@@ -154,6 +155,16 @@ async def _available_actions(
     return result
 
 
+async def _controllable(hass: HomeAssistant) -> list[str]:
+    """Return every entity_id that has at least one service to control it."""
+    descriptions = await async_get_all_descriptions(hass)
+    return sorted(
+        entity_id
+        for entity_id in hass.states.async_entity_ids()
+        if entity_services(hass, entity_id, descriptions)
+    )
+
+
 def _missing(hass: HomeAssistant, options: Mapping[str, Any]) -> list[dict[str, Any]]:
     """Describe each stored key whose entity does not exist now."""
     read = set(options.get(OPT_READ_ENTITIES, ()))
@@ -242,6 +253,7 @@ async def config_get(
                 hass, dict(options.get(OPT_SENSITIVE, {}))
             ),
             "available_actions": await _available_actions(hass, control),
+            "controllable_entity_ids": await _controllable(hass),
             "missing": _missing(hass, options),
             "unregistered_entity_ids": _unregistered(hass),
             "unsynced_entity_ids": _unsynced(entry),

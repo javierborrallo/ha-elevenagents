@@ -201,23 +201,38 @@ def granted_services(
     entity_id = entity_id_for(hass, key)
     if entity_id is None:
         return set()
+    return entity_services(hass, entity_id, descriptions) - set(
+        perms.exceptions.get(key, ())
+    )
 
+
+def entity_services(
+    hass: HomeAssistant,
+    entity_id: str,
+    descriptions: Mapping[str, Mapping[str, Any]],
+) -> set[str]:
+    """
+    Return the services of the entity's own domain that act on the entity.
+
+    A service must target entities and match the supported features of the
+    entity. Services that write a file are left out.
+    """
     domain = entity_id.partition(".")[0]
     state = hass.states.get(entity_id)
     features = (
         0 if state is None else int(state.attributes.get("supported_features", 0))
     )
 
-    granted: set[str] = set()
+    services: set[str] = set()
     for service, description in descriptions.get(domain, {}).items():
         filters = description.get("target", {}).get("entity")
         # A service with no entity target does not act on an entity.
         if not filters:
             continue
         if any(matches_supported_features(features, one) for one in filters):
-            granted.add(f"{domain}.{service}")
+            services.add(f"{domain}.{service}")
 
-    return granted - FILE_WRITING_SERVICES - set(perms.exceptions.get(key, ()))
+    return services - FILE_WRITING_SERVICES
 
 
 def authorise_read(

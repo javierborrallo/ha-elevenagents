@@ -109,7 +109,8 @@ what **Configure** opens on the integration page. The first time, the panel walk
 2. **Prompt** — your agent's prompt beside the block this integration recommends, to copy
    across as much or as little as you want.
 3. **Read** — the entities the agent may read.
-4. **Control** — the entities it may act on.
+4. **Control** — the entities it may act on. Only entities with at least one action appear:
+   a sensor has none.
 5. **Restrictions** — actions to take back from a controlled entity. Skippable.
 6. **Confirm actions** — devices the agent must not move without a confirmation. Skippable. See
    [Sensitive devices](#sensitive-devices).

@@ -13,11 +13,19 @@ function areaIdOf(hass, entityId) {
 
 // Group every entity by area, sorted by area name, with the entities that
 // have no area in a final group.
-function groupsOf(hass, noAreaLabel) {
+// Return the entity_ids to list: all of them without an offer, else the
+// offered ones and the selected ones.
+export function offeredIds(allIds, offered, selected) {
+  if (!offered) return allIds;
+  const keep = new Set([...offered, ...selected]);
+  return allIds.filter((entityId) => keep.has(entityId));
+}
+
+function groupsOf(hass, noAreaLabel, offered, selected) {
   const areas = hass.areas || {};
   const byArea = new Map();
 
-  for (const entityId of Object.keys(hass.states || {})) {
+  for (const entityId of offeredIds(Object.keys(hass.states || {}), offered, selected)) {
     const areaId = areaIdOf(hass, entityId);
     if (!byArea.has(areaId)) byArea.set(areaId, []);
     const state = hass.states[entityId];
@@ -72,8 +80,13 @@ function entityIcon(hass, entityId) {
  * `selected` is the initial list of entity ids. Every change is reported
  * through `onChange` as a new sorted array.
  * `unsynced` is the list of entity ids the agent does not have.
+ * `offered`, when set, limits the list to those entity ids and the
+ * selected ones.
  */
-export function entityTree(hass, { selected, onChange, unregistered, unsynced }) {
+export function entityTree(
+  hass,
+  { selected, onChange, unregistered, unsynced, offered },
+) {
   const t = strings(hass.language);
   const chosen = new Set(selected);
   const outside = new Set(unregistered || []);
@@ -98,7 +111,7 @@ export function entityTree(hass, { selected, onChange, unregistered, unsynced })
   const list = el("div", "tree-list");
   host.appendChild(list);
 
-  const groups = groupsOf(hass, t.treeNoArea);
+  const groups = groupsOf(hass, t.treeNoArea, offered, selected);
 
   function report() {
     onChange([...chosen].sort());

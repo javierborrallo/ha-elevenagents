@@ -290,6 +290,7 @@ class ElevenAgentsPanel extends HTMLElement {
           selected: ids,
           unregistered: this._config.unregistered_entity_ids,
           unsynced: this._config.unsynced_entity_ids,
+          offered: kind === "control" ? this._config.controllable_entity_ids : null,
           onChange: (next) => {
             ids = next;
           },
@@ -675,6 +676,7 @@ class ElevenAgentsPanel extends HTMLElement {
             selected: this._draft[key],
             unregistered: this._config.unregistered_entity_ids,
             unsynced: this._config.unsynced_entity_ids,
+            offered: key === "control" ? this._config.controllable_entity_ids : null,
             onChange: (ids) => {
               this._draft[key] = ids;
             },
