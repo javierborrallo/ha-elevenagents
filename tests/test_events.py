@@ -251,6 +251,18 @@ async def test_recent_events_travel_as_context(hass, setup_entry, turn):
     assert text.index("Earlier events") < text.index("Movimiento en el salón.")
 
 
+async def test_recent_events_are_marked_as_handled(hass, setup_entry, turn):
+    """An order in an earlier event is not an order for this turn."""
+    await _send(hass, setup_entry, message="Apaga la luz.", event_type="order")
+    await _send(hass, setup_entry, message="Ha sonado el timbre.", event_type="bell")
+
+    text = _text(turn)
+    assert (
+        "Earlier events, already handled. Context only, do not act on them again:\n"
+        "- 0 min ago: Apaga la luz."
+    ) in text
+
+
 async def test_new_conversation_starts_without_history(hass, setup_entry, turn):
     """One event can start clean."""
     await _send(hass, setup_entry, message="uno", event_type="a")

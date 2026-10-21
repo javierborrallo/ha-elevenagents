@@ -45,6 +45,9 @@ _LOGGER = logging.getLogger(__name__)
 PRIORITY_HIGH = "high"
 HOUR = 3600.0
 HISTORY_SIZE = 20
+HISTORY_HEADER = (
+    "Earlier events, already handled. Context only, do not act on them again:"
+)
 
 SEND_EVENT_SCHEMA = vol.Schema(
     {
@@ -118,7 +121,7 @@ def compose_message(
         lines = [
             f"- {int((now - moment) // 60)} min ago: {text}" for moment, text in recent
         ]
-        parts.append("Earlier events:\n" + "\n".join(lines))
+        parts.append(HISTORY_HEADER + "\n" + "\n".join(lines))
     parts.append(f"Event: {message}")
     if projection:
         parts.append("Entity: " + json.dumps(projection, ensure_ascii=False))

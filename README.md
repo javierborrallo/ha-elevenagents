@@ -336,7 +336,13 @@ response_variable: reply
 Each delivered event is a short text conversation and **spends ElevenLabs credits**. Three settings
 in the panel keep that in hand: a cooldown for the same event (5 minutes; high priority skips it),
 a limit per hour (20; nothing skips it), and a memory window (30 minutes) during which recent events
-travel with the next one. A dropped event fires `elevenagents_event_dropped`; one that could not
+travel with the next one.
+
+Recent events travel marked as already handled, so the agent does not act on them again. The mark
+is an instruction to the model, not a guarantee. For an event that gives an order, set
+`new_conversation: true`: it travels alone, and no later event carries it either.
+
+A dropped event fires `elevenagents_event_dropped`; one that could not
 be delivered fires `elevenagents_event_failed` and fails the action with the reason.
 
 Every action the agent asks for fires `elevenagents_action` and shows in the logbook as
