@@ -1,28 +1,31 @@
-# Test dependencies.
+# Test dependencies for the newest Home Assistant release.
+# requirements_test_minimum.txt holds the same list for the minimum release.
 #
 # Core test tooling (pytest, pytest-asyncio, pytest-aiohttp, pytest-cov,
 # pytest-timeout, pytest-xdist, coverage, freezegun, requests-mock, respx) comes
 # from Home Assistant's own requirements_test.txt and is not repeated here.
 #
 # Each pytest-homeassistant-custom-component release pins one exact Home
-# Assistant version. 0.13.364 pins homeassistant==2026.9.1, which matches
-# requirements_dev.txt. Change both files together.
-pytest-homeassistant-custom-component==0.13.364
+# Assistant version. 0.13.373 pins homeassistant==2026.10.2, which matches
+# requirements_dev.txt. Change both files together. The homeassistant line
+# repeats that pin, and tests/test_requirements.py reads it.
+homeassistant==2026.10.2
+pytest-homeassistant-custom-component==0.13.373
 elevenlabs==2.51.0
 
 # Home Assistant's _load_services_file resolves supported_features enum names
 # by importing every base component, and those pull in real dependencies.
-# A clean runner has none of them. Pins match homeassistant 2026.9.1.
+# A clean runner has none of them. Pins match homeassistant 2026.10.2.
 # pymicro-vad and pyspeex-noise are built from source: they ship no wheel
 # for this Python, and the runner has the compiler.
 # panel_custom pulls in frontend, which ships the web assets.
 # The integration declares panel_custom so the 0.2 panel can register.
-home-assistant-frontend==20260826.6
+home-assistant-frontend==20260930.4
 PyTurboJPEG==1.8.3
 ha-ffmpeg==3.2.2
 gazetteer-matcher==1.1.0
-hassil==3.12.0
-home-assistant-intents==2026.8.28
+hassil==3.12.1
+home-assistant-intents==2026.10.6
 mutagen==1.48.1
 pymicro-vad==1.0.1
 pyspeex-noise==1.0.2

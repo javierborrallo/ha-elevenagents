@@ -44,7 +44,7 @@ agent, and keeps them aligned as your Home Assistant configuration changes.
 
 ## Requirements
 
-- Home Assistant 2026.7.0 or newer
+- Home Assistant 2026.9.0 or newer
 - An ElevenLabs account with an agent, and an API key scoped for ElevenAgents
   **write** access — a key scoped only to text-to-speech will not be able to
   synchronise tools
@@ -418,17 +418,20 @@ Not published yet.
 
 ## Home Assistant versions
 
-`hacs.json` declares **2026.7.0**, the minimum a user needs to install the integration. It is the
-first release whose own ElevenLabs integration pins `elevenlabs==2.51.0`, the floor this one needs;
-an older Home Assistant pins an older SDK, and the two integrations would fight over one package.
-`requirements_dev.txt` pins the newest release, which is what development and CI run against.
-Developing against the newest release surfaces deprecations early; keeping the minimum lower
-avoids excluding users who have not updated yet.
+`hacs.json` declares **2026.9.0**, the minimum a user needs to install the integration. It is the
+first release with `async_get_effective_area_id`, which tool synchronisation calls. Its own
+ElevenLabs integration pins `elevenlabs==2.51.0`, the floor this one needs; an older Home Assistant
+would pin an older SDK, and the two integrations would fight over one package.
+`requirements_dev.txt` pins the newest release, which development runs against.
 
-`pytest-homeassistant-custom-component` pins one exact Home Assistant version, so it moves with
-`requirements_dev.txt`. `elevenlabs` in `requirements_test.txt` moves with them too: it must equal the
-version that Home Assistant pins, and `tests/test_requirements.py` fails when it does not. Dependabot
-ignores all three.
+CI runs the tests on both releases: `requirements_test_minimum.txt` for the minimum,
+`requirements_test.txt` for the newest. Type checks run on the minimum only. Home Assistant 2026.10
+replaced voluptuous with probatio and aliases one to the other at run time, which mypy cannot see.
+
+`pytest-homeassistant-custom-component` pins one exact Home Assistant version, so each test file
+pins its own. `tests/test_requirements.py` fails when the minimum file disagrees with `hacs.json`,
+when the newest disagrees with `requirements_dev.txt`, or when `elevenlabs` differs from the version
+Home Assistant pins. Dependabot ignores these pins.
 
 ## Dependency updates
 

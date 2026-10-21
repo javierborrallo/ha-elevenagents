@@ -1,0 +1,16 @@
+# Test dependencies for the minimum Home Assistant release, the one hacs.json
+# declares. requirements_test.txt explains each entry.
+homeassistant==2026.9.0
+pytest-homeassistant-custom-component==0.13.363
+elevenlabs==2.51.0
+
+# Pins match homeassistant 2026.9.0.
+home-assistant-frontend==20260826.4
+PyTurboJPEG==1.8.3
+ha-ffmpeg==3.2.2
+gazetteer-matcher==1.1.0
+hassil==3.12.0
+home-assistant-intents==2026.8.28
+mutagen==1.48.1
+pymicro-vad==1.0.1
+pyspeex-noise==1.0.2
