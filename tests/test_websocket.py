@@ -1887,7 +1887,7 @@ async def _save_settings(hass, entry, hass_ws_client, data) -> tuple[dict, Async
 async def test_the_public_url_is_stored_as_an_origin_and_synchronised(
     hass, setup_entry, hass_ws_client: WebSocketGenerator
 ) -> None:
-    """The tools must carry the new address at once."""
+    """The tools must carry the new URL at once."""
     result, sync = await _save_settings(
         hass, setup_entry, hass_ws_client, {"public_url": "https://Hooks.example.com/"}
     )
@@ -1932,7 +1932,7 @@ async def test_an_empty_public_url_clears_it(
 async def test_clearing_the_only_address_is_refused(
     hass, setup_entry, hass_ws_client: WebSocketGenerator
 ) -> None:
-    """Without either address, every tool call would fail."""
+    """Without either URL, every tool call would fail."""
     hass.config_entries.async_update_entry(
         setup_entry, options={OPT_PUBLIC_URL: "https://hooks.example.com"}
     )
@@ -1950,7 +1950,7 @@ async def test_clearing_the_only_address_is_refused(
 async def test_a_settings_save_without_the_field_keeps_the_public_url(
     hass, setup_entry, hass_ws_client: WebSocketGenerator
 ) -> None:
-    """A panel that does not send the field leaves the address alone."""
+    """A panel that does not send the field leaves the URL alone."""
     hass.config_entries.async_update_entry(
         setup_entry, options={OPT_PUBLIC_URL: "https://hooks.example.com"}
     )
@@ -1964,7 +1964,7 @@ async def test_a_settings_save_without_the_field_keeps_the_public_url(
 async def test_config_get_returns_the_public_url(
     hass, setup_entry, hass_ws_client: WebSocketGenerator
 ) -> None:
-    """The panel shows an empty field when no address is set."""
+    """The panel shows an empty field when no URL is set."""
     client = await hass_ws_client(hass)
     await client.send_json_auto_id(
         {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
@@ -1984,7 +1984,7 @@ async def test_config_get_returns_the_public_url(
 async def test_config_get_returns_the_webhook_address(
     hass, setup_entry, hass_ws_client: WebSocketGenerator
 ) -> None:
-    """The panel shows the address ElevenLabs calls and the path a proxy forwards."""
+    """The panel shows the URL ElevenLabs calls and the path a proxy forwards."""
     path = f"/api/webhook/{setup_entry.data[CONF_WEBHOOK_ID]}"
     await hass.config.async_update(external_url="https://home.example")
     client = await hass_ws_client(hass)
@@ -2008,7 +2008,7 @@ async def test_config_get_returns_the_webhook_address(
 async def test_config_get_without_an_address_returns_an_empty_webhook_url(
     hass, setup_entry, hass_ws_client: WebSocketGenerator
 ) -> None:
-    """Without either address the panel shows no URL, only the path."""
+    """Without either URL the panel shows no URL, only the path."""
     await hass.config.async_update(
         internal_url="http://192.168.1.10:8123", external_url=None
     )
@@ -2074,7 +2074,7 @@ async def _probe(hass, entry, hass_ws_client, extra) -> tuple[dict, AsyncMock]:
 async def test_the_probe_calls_the_current_webhook_url(
     hass, setup_entry, hass_ws_client: WebSocketGenerator
 ) -> None:
-    """The panel checks the saved address when it opens."""
+    """The panel checks the saved URL when it opens."""
     result, probe = await _probe(hass, setup_entry, hass_ws_client, {})
 
     assert result == {"status": "ok", "detail": None}
@@ -2125,7 +2125,7 @@ async def test_the_probe_refuses_an_invalid_address_without_a_call(
 async def test_the_probe_without_any_address_makes_no_call(
     hass, setup_entry, hass_ws_client: WebSocketGenerator
 ) -> None:
-    """Without either address there is nothing to call."""
+    """Without either URL there is nothing to call."""
     await hass.config.async_update(
         internal_url="http://192.168.1.10:8123", external_url=None
     )

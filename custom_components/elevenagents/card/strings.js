@@ -37,7 +37,7 @@ export const STRINGS = {
     outcome: { read: "read", done: "done", no_change: "no change", unconfirmed: "not confirmed", failed: "failed", confirmation_required: "needs confirmation", error: "error" },
     ended: { user: "You hung up.", agent: "The conversation ended.", error: "The conversation stopped because of an error." },
     problem: {
-      https: { title: "The microphone needs HTTPS", body: "Open Home Assistant at an https:// address, for example Nabu Casa's, to talk from here." },
+      https: { title: "The microphone needs HTTPS", body: "Open Home Assistant at an https:// URL, for example Nabu Casa's, to talk from here." },
       microphone: { title: "No access to the microphone", body: "The browser blocked the microphone. Allow it in the site settings and try again." },
       start: { title: "The conversation could not start", body: "ElevenAgents is not set up, or ElevenLabs does not answer. Try again in a moment." },
     },
@@ -79,7 +79,7 @@ export const STRINGS = {
     outcome: { read: "leído", done: "hecho", no_change: "sin cambios", unconfirmed: "sin confirmar", failed: "no se hizo", confirmation_required: "necesita confirmación", error: "error" },
     ended: { user: "Has colgado.", agent: "La conversación ha terminado.", error: "La conversación se cortó por un error." },
     problem: {
-      https: { title: "El micrófono necesita HTTPS", body: "Abre Home Assistant con una dirección https://, por ejemplo la de Nabu Casa, para hablar desde aquí." },
+      https: { title: "El micrófono necesita HTTPS", body: "Abre Home Assistant con una URL https://, por ejemplo la de Nabu Casa, para hablar desde aquí." },
       microphone: { title: "No hay permiso para el micrófono", body: "El navegador ha bloqueado el micrófono. Permítelo en los ajustes del sitio y vuelve a intentarlo." },
       start: { title: "No se pudo abrir la conversación", body: "ElevenAgents no está configurado o ElevenLabs no responde. Inténtalo de nuevo en un momento." },
     },

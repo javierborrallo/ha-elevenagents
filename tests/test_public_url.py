@@ -1,4 +1,4 @@
-"""Tests for the address ElevenLabs uses to reach the webhook."""
+"""Tests for the URL ElevenLabs uses to reach the webhook."""
 
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ def test_anything_but_a_bare_https_origin_is_refused(value):
 
 
 async def test_the_public_url_takes_the_webhook_path(hass):
-    """The address replaces the external URL of Home Assistant."""
+    """The public URL replaces the external URL of Home Assistant."""
     await hass.config.async_update(external_url="https://home.example")
 
     url = webhook_url(hass, "abc", "https://hooks.example.com")
@@ -81,7 +81,7 @@ async def test_a_public_url_needs_no_external_url(hass):
 
 
 async def test_neither_address_raises(hass):
-    """No address means no tool, as before."""
+    """No URL means no tool, as before."""
     await hass.config.async_update(
         internal_url="http://192.168.1.10:8123", external_url=None
     )
@@ -91,7 +91,7 @@ async def test_neither_address_raises(hass):
 
 
 async def test_the_entry_supplies_both_values(hass, config_entry):
-    """The webhook id comes from data and the address from options."""
+    """The webhook id comes from data and the URL from options."""
     hass.config_entries.async_update_entry(
         config_entry, options={OPT_PUBLIC_URL: "https://hooks.example.com"}
     )
@@ -168,7 +168,7 @@ async def test_a_value_with_a_path_is_refused(hass):
 
 
 async def test_an_empty_value_without_an_external_url_is_refused(hass):
-    """Without either address every tool call would fail."""
+    """Without either URL every tool call would fail."""
     await hass.config.async_update(
         internal_url="http://192.168.1.10:8123", external_url=None
     )
@@ -180,7 +180,7 @@ async def test_an_empty_value_without_an_external_url_is_refused(hass):
 
 
 async def test_another_origin_needs_no_external_url(hass):
-    """A proxy address alone is enough."""
+    """A proxy URL alone is enough."""
     await hass.config.async_update(
         internal_url="http://192.168.1.10:8123", external_url=None
     )

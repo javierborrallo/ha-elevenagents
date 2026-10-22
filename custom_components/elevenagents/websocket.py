@@ -288,7 +288,7 @@ async def config_get(
 
 
 def _webhook_url(hass: HomeAssistant, entry: ElevenAgentsConfigEntry) -> str:
-    """Return the URL that ElevenLabs calls, or "" when no address exists."""
+    """Return the URL that ElevenLabs calls, or "" when no URL exists."""
     try:
         return entry_webhook_url(hass, entry)
     except NoURLAvailableError:
