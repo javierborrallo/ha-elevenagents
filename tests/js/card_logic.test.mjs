@@ -43,7 +43,7 @@ test("the card fills a resizable cell down to one row", () => {
 
 test("a write answer names the entity and the outcome", () => {
   const chip = chipFor({
-    tool_name: "ha_call_service", tool_call_id: "t1", is_error: false,
+    tool_name: "ha_perform_action", tool_call_id: "t1", is_error: false,
     full_tool_result: JSON.stringify({ outcome: "done", entity_id: "light.kitchen_lights", action: "light.turn_off", name: "Kitchen Lights", state: "off" }),
   });
   assert.deepEqual(chip, { id: "t1", kind: "write", target: "Kitchen Lights", outcome: "done", error: null, domain: "light" });
@@ -51,7 +51,7 @@ test("a write answer names the entity and the outcome", () => {
 
 test("a confirmation code never reaches the chip", () => {
   const chip = chipFor({
-    tool_name: "ha_call_service", tool_call_id: "t2", is_error: false,
+    tool_name: "ha_perform_action", tool_call_id: "t2", is_error: false,
     full_tool_result: JSON.stringify({ outcome: "confirmation_required", entity_id: "lock.front_door", action: "lock.unlock", name: "Front Door", confirmation_code: "4F2A9C" }),
   });
   assert.equal(chip.outcome, "confirmation_required");

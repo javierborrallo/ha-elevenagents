@@ -20,8 +20,8 @@ from .const import (
     DISCRIMINATOR_GET_STATE,
     OPT_AGENT_SETTINGS,
     SECRET_HEADER,
-    TOOL_CALL_SERVICE,
     TOOL_GET_STATE,
+    TOOL_PERFORM_ACTION,
 )
 from .elevenlabs_client import (
     ElevenLabsNotFoundError,
@@ -60,18 +60,18 @@ GET_STATE_DESCRIPTION = (
     "Never invent an entity id."
 )
 
-CALL_SERVICE_DESCRIPTION = (
+PERFORM_ACTION_DESCRIPTION = (
     "Perform one action on the one Home Assistant entity the user named. "
     "Call it only when an entity in the catalogue matches the user's words and "
     "can do what they asked. Otherwise do not call it: tell the user. "
     "If a call returns an outcome of unconfirmed, call ha_get_state to check "
     "the entity. Never repeat an action that returned unconfirmed."
     " If the outcome is confirmation_required, nothing ran: ask the user to confirm "
-    "this action on this device. If the user confirms, call again with the same "
-    "entity_id, action and service_data, and the confirmation_code. If not, do nothing."
+    "this action on this entity. If the user confirms, call again with the same "
+    "entity_id, action and data, and the confirmation_code. If not, do nothing."
     " If the outcome is no_change and the state is not what the user asked for, "
-    "say the command was sent and the device has not reported the change yet."
-    " If the error is invalid_value, correct the service_data from the detail "
+    "say the action was sent and the device has not reported the change yet."
+    " If the error is invalid_value, correct the data from the detail "
     "and call once more."
     " If the response carries moving true, the device is still moving: "
     "say it is on its way to what the user asked for."
@@ -287,7 +287,7 @@ def build_get_state(  # noqa: PLR0913 - a keyword-only settings argument joins t
     }
 
 
-def build_call_service(  # noqa: PLR0913, PLR0917 - each argument is part of the tool
+def build_perform_action(  # noqa: PLR0913, PLR0917 - each argument is part of the tool
     hass: HomeAssistant,
     perms: Permissions,
     descriptions: Mapping[str, Mapping[str, Any]],
@@ -299,7 +299,7 @@ def build_call_service(  # noqa: PLR0913, PLR0917 - each argument is part of the
     settings: dict[str, Any],
     with_history: bool = False,
 ) -> dict[str, Any]:
-    """Build the ha_call_service tool definition."""
+    """Build the ha_perform_action tool definition."""
     enum, catalogue = entity_catalogue(hass, perms.control)
     entity_description = (
         f"The entity the user named, from this catalogue:\n{catalogue}"
@@ -313,9 +313,9 @@ def build_call_service(  # noqa: PLR0913, PLR0917 - each argument is part of the
     properties = service_data_properties(descriptions, actions, translations)
 
     config: dict[str, Any] = {
-        "name": TOOL_CALL_SERVICE,
+        "name": TOOL_PERFORM_ACTION,
         "type": "webhook",
-        "description": CALL_SERVICE_DESCRIPTION,
+        "description": PERFORM_ACTION_DESCRIPTION,
         "response_timeout_secs": timeout,
         **settings,
         "api_schema": {
@@ -344,7 +344,7 @@ def build_call_service(  # noqa: PLR0913, PLR0917 - each argument is part of the
                         ),
                         "enum": sorted(actions),
                     },
-                    "service_data": {
+                    "data": {
                         "type": "object",
                         "description": (
                             "Extra parameters the action accepts. An entity may not "
@@ -525,7 +525,7 @@ async def async_build_definitions(
         TOOL_GET_STATE: build_get_state(
             hass, perms, url, secret, timeout, settings=settings
         ),
-        TOOL_CALL_SERVICE: build_call_service(
+        TOOL_PERFORM_ACTION: build_perform_action(
             hass,
             perms,
             descriptions,
@@ -579,7 +579,7 @@ async def _sync(
     await _attach(hass, entry, client, stored)
     if getattr(entry, "runtime_data", None) is runtime:
         runtime.catalogue = catalogue
-    async_check_timeouts(hass, entry, definitions[TOOL_CALL_SERVICE])
+    async_check_timeouts(hass, entry, definitions[TOOL_PERFORM_ACTION])
 
 
 async def async_sync_tools(

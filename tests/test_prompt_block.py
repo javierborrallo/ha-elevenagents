@@ -26,11 +26,11 @@ def test_the_panel_offers_the_block_the_readme_documents() -> None:
     assert _panel_block() == _readme_block()
 
 
-def test_the_block_opens_with_how_to_choose_the_device() -> None:
+def test_the_block_opens_with_how_to_choose_the_entity() -> None:
     """The choosing rule comes before the tools are described."""
     block = _readme_block()
 
-    assert block.index("## Choosing the device") < block.index("## Using the tools")
+    assert block.index("## Choosing the entity") < block.index("## Using the tools")
     assert "Changing something the user did not ask for is worse than" in block
 
 
@@ -40,3 +40,14 @@ def test_the_block_tells_the_agent_how_to_confirm() -> None:
 
     assert "`confirmation_required`" in block
     assert "`confirmation_code`" in block
+
+
+def test_the_block_reads_a_room_before_it_chooses() -> None:
+    """A room and a kind of device can name more than one entity."""
+    block = _readme_block()
+
+    assert (
+        "- The user names a room and a kind of device, not one entry: first call "
+        "`ha_get_state` on\n  every entry of that kind in that room, then apply the "
+        "two rules below to what it returns."
+    ) in block

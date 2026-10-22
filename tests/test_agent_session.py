@@ -157,11 +157,11 @@ async def test_a_turn_returns_the_answer_and_the_tools(hass, setup_entry, fake):
 
 async def test_a_full_payload_alone_records_the_tool(hass, setup_entry, fake):
     """A full payload frame without a plain response still records the tool."""
-    fake.behave = _standard(_full_payload("ha_call_service"), _response("Hecho."))
+    fake.behave = _standard(_full_payload("ha_perform_action"), _response("Hecho."))
 
     result = await _run(hass, setup_entry, "Evento: luz", {})
 
-    assert result.tools == [{"tool_name": "ha_call_service", "is_error": False}]
+    assert result.tools == [{"tool_name": "ha_perform_action", "is_error": False}]
 
 
 @pytest.mark.parametrize("full_first", [False, True])
@@ -169,14 +169,14 @@ async def test_both_response_frames_for_one_call_record_one_tool(
     hass, setup_entry, fake, full_first
 ):
     """The plain and the full payload frame of one call id count once."""
-    plain = _plain("ha_call_service")
-    full = _full_payload("ha_call_service")
+    plain = _plain("ha_perform_action")
+    full = _full_payload("ha_perform_action")
     frames = (full, plain) if full_first else (plain, full)
     fake.behave = _standard(*frames, _response("Hecho."))
 
     result = await _run(hass, setup_entry, "Evento: luz", {})
 
-    assert result.tools == [{"tool_name": "ha_call_service", "is_error": False}]
+    assert result.tools == [{"tool_name": "ha_perform_action", "is_error": False}]
 
 
 async def test_the_first_frames_ask_for_text_only_and_carry_the_variables(
@@ -227,7 +227,7 @@ async def test_a_message_after_the_answer_keeps_the_turn_open(hass, setup_entry,
         received.append(await ws.receive_json())
         await ws.send_json(_response("Un momento."))
         await asyncio.sleep(0.1)
-        await ws.send_json(_tool("ha_call_service"))
+        await ws.send_json(_tool("ha_perform_action"))
         await asyncio.sleep(0.1)
         await ws.send_json(_response("Hecho."))
         await _hold(ws)
@@ -237,7 +237,7 @@ async def test_a_message_after_the_answer_keeps_the_turn_open(hass, setup_entry,
     result = await _run(hass, setup_entry, "x", {})
 
     assert result.responses == ["Un momento.", "Hecho."]
-    assert result.tools == [{"tool_name": "ha_call_service", "is_error": False}]
+    assert result.tools == [{"tool_name": "ha_perform_action", "is_error": False}]
 
 
 async def test_the_turn_ends_at_the_idle_deadline_not_the_maximum(
@@ -367,11 +367,11 @@ async def test_a_pending_tool_keeps_the_turn_open_past_the_idle_time(
         await ws.send_json(
             {
                 "type": "agent_tool_request",
-                "agent_tool_request": {"tool_name": "ha_call_service"},
+                "agent_tool_request": {"tool_name": "ha_perform_action"},
             }
         )
         await asyncio.sleep(0.5)
-        await ws.send_json(_tool("ha_call_service"))
+        await ws.send_json(_tool("ha_perform_action"))
         await _hold(ws)
 
     fake.behave = behave
@@ -379,7 +379,7 @@ async def test_a_pending_tool_keeps_the_turn_open_past_the_idle_time(
     result = await _run(hass, setup_entry, "x", {})
 
     assert result.responses == ["Un momento."]
-    assert result.tools == [{"tool_name": "ha_call_service", "is_error": False}]
+    assert result.tools == [{"tool_name": "ha_perform_action", "is_error": False}]
     assert result.incomplete is False
 
 
@@ -444,19 +444,19 @@ async def test_agent_response_complete_waits_for_a_pending_tool(
         await ws.send_json(
             {
                 "type": "agent_tool_request",
-                "agent_tool_request": {"tool_name": "ha_call_service"},
+                "agent_tool_request": {"tool_name": "ha_perform_action"},
             }
         )
         await ws.send_json({"type": "agent_response_complete"})
         await asyncio.sleep(0.3)
-        await ws.send_json(_tool("ha_call_service"))
+        await ws.send_json(_tool("ha_perform_action"))
         await _hold(ws)
 
     fake.behave = behave
 
     result = await _run(hass, setup_entry, "x", {})
 
-    assert result.tools == [{"tool_name": "ha_call_service", "is_error": False}]
+    assert result.tools == [{"tool_name": "ha_perform_action", "is_error": False}]
     assert result.incomplete is False
 
 
@@ -469,7 +469,7 @@ async def test_a_close_after_a_tool_but_no_text_is_incomplete_not_failed(
         received.append(await ws.receive_json())
         await ws.send_json(_metadata())
         received.append(await ws.receive_json())
-        await ws.send_json(_tool("ha_call_service"))
+        await ws.send_json(_tool("ha_perform_action"))
         await ws.close(code=1000, message=b"done")
 
     fake.behave = behave
@@ -477,7 +477,7 @@ async def test_a_close_after_a_tool_but_no_text_is_incomplete_not_failed(
     result = await _run(hass, setup_entry, "x", {})
 
     assert result.conversation_id == "conv_1"
-    assert result.tools == [{"tool_name": "ha_call_service", "is_error": False}]
+    assert result.tools == [{"tool_name": "ha_perform_action", "is_error": False}]
     assert result.responses == []
     assert result.incomplete is True
 

@@ -28,7 +28,7 @@ from .const import (
     EVENT_ACTION,
     MAX_BODY_BYTES,
     MOVING_DEVICE_DOMAINS,
-    MOVING_DEVICE_WAIT_SECONDS,
+    MOVING_STATES,
     OPT_CONFIRM_TIMEOUT,
     OUTCOME_DONE,
     OUTCOME_FAILED,
@@ -38,6 +38,8 @@ from .const import (
     RATE_LIMIT_PER_SECOND,
     REASON_CONVERSATION_UNKNOWN,
     SECRET_HEADER,
+    STATE_AFTER_SERVICE,
+    WRITE_WAIT_SECONDS,
 )
 from .permissions import authorise_action, authorise_read, from_options, permission_key
 from .response import error_fields, malformed, project, read_results, write_result
@@ -286,7 +288,7 @@ def _parsed_write_payload(
     """
     Validate and unpack a call_service payload.
 
-    Returns the entity_id, action and service_data, or a malformed
+    Returns the entity_id, action and data, or a malformed
     response body when the shape is wrong.
     """
     entity_id = payload.get("entity_id")
@@ -296,14 +298,14 @@ def _parsed_write_payload(
     if action.count(".") != 1:
         return malformed("action must be domain.service")
 
-    service_data = payload.get("service_data") or {}
+    service_data = payload.get("data") or {}
     if not isinstance(service_data, dict):
-        return malformed("service_data must be an object")
+        return malformed("data must be an object")
     targets = TARGET_KEYS.intersection(service_data)
     if targets:
-        return malformed(f"service_data cannot carry {', '.join(sorted(targets))}")
+        return malformed(f"data cannot carry {', '.join(sorted(targets))}")
     if _has_template(service_data):
-        return malformed("service_data cannot carry a template")
+        return malformed("data cannot carry a template")
     return entity_id, action, service_data
 
 
@@ -364,7 +366,7 @@ def _refusal(
         return write_result(OUTCOME_FAILED, entity_id, action, extra={"error": error})
     undeclared = set(service_data) - service_data_keys(descriptions, action)
     if undeclared:
-        return malformed(f"service_data cannot carry {', '.join(sorted(undeclared))}")
+        return malformed(f"data cannot carry {', '.join(sorted(undeclared))}")
     return None
 
 
@@ -378,7 +380,7 @@ async def _wait_for_write(
     hass: HomeAssistant, entity_id: str, before: datetime | None
 ) -> bool:
     """
-    Wait for a state write by the entity, MOVING_DEVICE_WAIT_SECONDS at most.
+    Wait for a state write by the entity, WRITE_WAIT_SECONDS at most.
 
     Return True when the entity wrote its state.
     """
@@ -393,7 +395,7 @@ async def _wait_for_write(
         # A write between the check and the subscription ends the wait at once.
         if _last_updated(hass, entity_id) != before:
             return True
-        async with asyncio.timeout(MOVING_DEVICE_WAIT_SECONDS):
+        async with asyncio.timeout(WRITE_WAIT_SECONDS):
             await written.wait()
     except TimeoutError:
         return False
@@ -453,11 +455,13 @@ async def async_write(
         )
 
     moving = False
-    if (
-        domain in MOVING_DEVICE_DOMAINS
-        and _last_updated(hass, entity_id) == before_updated
-    ):
-        moving = await _wait_for_write(hass, entity_id, before_updated)
+    already = before is not None and before.state == STATE_AFTER_SERVICE.get(service)
+    if _last_updated(hass, entity_id) == before_updated and not already:
+        written = await _wait_for_write(hass, entity_id, before_updated)
+        moving = written and domain in MOVING_DEVICE_DOMAINS
+    if domain in MOVING_DEVICE_DOMAINS:
+        state = hass.states.get(entity_id)
+        moving = moving or (state is not None and state.state in MOVING_STATES)
 
     after_updated = _last_updated(hass, entity_id)
     outcome = OUTCOME_DONE if after_updated != before_updated else OUTCOME_NO_CHANGE

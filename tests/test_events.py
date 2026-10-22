@@ -225,7 +225,7 @@ async def test_a_close_after_a_tool_but_no_text_is_delivered_not_failed(
     turn.return_value = TurnResult(
         conversation_id="conv_1",
         responses=[],
-        tools=[{"tool_name": "ha_call_service", "is_error": False}],
+        tools=[{"tool_name": "ha_perform_action", "is_error": False}],
         incomplete=True,
     )
 

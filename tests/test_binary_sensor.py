@@ -150,12 +150,12 @@ async def test_a_plain_detail_is_one_attribute(hass, setup_entry):
     result = _result(tools_attached="problem")
     for item in result["checks"]:
         if item["check"] == "tools_attached":
-            item["detail"] = ["ha_call_service"]
+            item["detail"] = ["ha_perform_action"]
     await _announce(hass, setup_entry, result)
 
     state = hass.states.get(_entity_id(hass, setup_entry, "tools_attached"))
     assert state is not None
-    assert state.attributes["detail"] == ["ha_call_service"]
+    assert state.attributes["detail"] == ["ha_perform_action"]
 
 
 async def test_the_sensors_share_one_service_device(hass, setup_entry):

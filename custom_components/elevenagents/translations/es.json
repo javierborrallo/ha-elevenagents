@@ -10,7 +10,7 @@
         },
         "data_description": {
           "api_key": "Crea una clave en el panel de ElevenLabs, dentro de tu perfil. Dale permiso de escritura sobre ElevenAgents.",
-          "public_url": "La dirección https a la que llama ElevenLabs, sin ruta. Empieza con la URL externa de Home Assistant, o vacía si no la hay. Cámbiala si ElevenLabs no llega a esa URL: pon la dirección de un proxy que reenvíe /api/webhook/ a este Home Assistant."
+          "public_url": "La URL https a la que llama ElevenLabs, sin ruta. Empieza con la URL externa de Home Assistant, o vacía si no la hay. Cámbiala si ElevenLabs no llega a esa URL: pon la URL de un proxy que reenvíe /api/webhook/ a este Home Assistant."
         }
       },
       "agent": {
@@ -29,7 +29,7 @@
       },
       "duplicate": {
         "title": "Este agente ya tiene herramientas con estos nombres",
-        "description": "Este agente ya tiene una herramienta llamada ha_call_service o ha_get_state. Dos herramientas con el mismo nombre hacen que el agente elija de forma impredecible.\n\nEsta integración no ha creado esa, así que no se toca sin que lo digas. Desengancharla la deja en tu espacio de trabajo de ElevenLabs, donde puedes volver a engancharla cuando quieras.",
+        "description": "Este agente ya tiene una herramienta llamada ha_perform_action o ha_get_state. Dos herramientas con el mismo nombre hacen que el agente elija de forma impredecible.\n\nEsta integración no ha creado esa, así que no se toca sin que lo digas. Desengancharla la deja en tu espacio de trabajo de ElevenLabs, donde puedes volver a engancharla cuando quieras.",
         "menu_options": {
           "detach": "Desengancharlas de este agente",
           "keep": "Continuar igualmente"
@@ -38,8 +38,8 @@
     },
     "error": {
       "invalid_auth": "ElevenLabs ha rechazado esta clave. Comprueba que la copiaste entera y que no está revocada.",
-      "invalid_public_url": "Introduce una dirección https sin ruta: un host y, si hace falta, un puerto.",
-      "no_public_url": "Home Assistant no tiene URL externa. Pon la dirección de un proxy que reenvíe /api/webhook/ a este Home Assistant.",
+      "invalid_public_url": "Introduce una URL https sin ruta: un host y, si hace falta, un puerto.",
+      "no_public_url": "Home Assistant no tiene URL externa. Pon la URL de un proxy que reenvíe /api/webhook/ a este Home Assistant.",
       "insufficient_scope": "La clave funciona, pero puede que no alcance ElevenAgents. Ábrela en el panel de ElevenLabs y dale permiso de escritura sobre ElevenAgents.",
       "no_agents": "Esta clave no alcanza ningún agente. Crea uno en el panel de ElevenLabs y vuelve a añadir la integración.",
       "agent_not_found": "Ese agente ya no existe en el espacio de trabajo que alcanza esta clave.",

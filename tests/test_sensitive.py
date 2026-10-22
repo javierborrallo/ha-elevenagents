@@ -29,12 +29,12 @@ ARGS: dict[str, Any] = {
 def _history(code: str, *, user_after: bool) -> str:
     entries: list[dict[str, Any]] = [
         {"role": "user", "message": "Abre la puerta"},
-        {"role": "agent", "tool_requests": [{"tool_name": "ha_call_service"}]},
+        {"role": "agent", "tool_requests": [{"tool_name": "ha_perform_action"}]},
         {
             "role": "agent",
             "tool_results": [
                 {
-                    "tool_name": "ha_call_service",
+                    "tool_name": "ha_perform_action",
                     "result_value": f'{{"confirmation_code": "{code}"}}',
                 }
             ],
@@ -287,7 +287,7 @@ LIVE_HISTORY = json.dumps(
                 "role": "agent",
                 "tool_requests": [
                     {
-                        "tool_name": "ha_call_service",
+                        "tool_name": "ha_perform_action",
                         "params_as_json": {
                             **LIVE_CALL,
                             "tool": "call_service",
@@ -301,7 +301,7 @@ LIVE_HISTORY = json.dumps(
                 "role": "agent",
                 "tool_results": [
                     {
-                        "tool_name": "ha_call_service",
+                        "tool_name": "ha_perform_action",
                         "result_value": json.dumps(LIVE_RESULT),
                     }
                 ],
@@ -312,7 +312,7 @@ LIVE_HISTORY = json.dumps(
                 "role": "agent",
                 "tool_requests": [
                     {
-                        "tool_name": "ha_call_service",
+                        "tool_name": "ha_perform_action",
                         "params_as_json": {**LIVE_CALL, "confirmation_code": "ab12cd"},
                     }
                 ],
@@ -364,7 +364,7 @@ def _entries_after_code(*after: dict[str, Any]) -> str:
             "role": "agent",
             "tool_results": [
                 {
-                    "tool_name": "ha_call_service",
+                    "tool_name": "ha_perform_action",
                     "result_value": '{"confirmation_code": "ab12cd"}',
                 }
             ],
@@ -384,7 +384,7 @@ def test_heard_after_needs_the_agent_to_ask_before_the_user_answers() -> None:
         {"role": "agent", "message": "¿Abro la puerta?"},
     )
     agent_without_text = _entries_after_code(
-        {"role": "agent", "tool_requests": [{"tool_name": "ha_call_service"}]},
+        {"role": "agent", "tool_requests": [{"tool_name": "ha_perform_action"}]},
         {"role": "agent", "message": "  "},
         {"role": "user", "message": "Sí"},
     )
@@ -407,7 +407,7 @@ def test_heard_after_ignores_a_user_entry_without_text() -> None:
             "role": "agent",
             "tool_results": [
                 {
-                    "tool_name": "ha_call_service",
+                    "tool_name": "ha_perform_action",
                     "result_value": '{"confirmation_code": "ab12cd"}',
                 }
             ],

@@ -66,7 +66,7 @@ RATE_LIMIT_BURST: Final = 10
 RATE_LIMIT_PER_SECOND: Final = 1.0
 
 TOOL_GET_STATE: Final = "ha_get_state"
-TOOL_CALL_SERVICE: Final = "ha_call_service"
+TOOL_PERFORM_ACTION: Final = "ha_perform_action"
 
 # Discriminator values the tool definitions send.
 DISCRIMINATOR_GET_STATE: Final = "get_state"
@@ -101,8 +101,21 @@ REASON_NO_CONFIRMATION_HEARD: Final = "no_confirmation_heard"
 REASON_CONVERSATION_UNKNOWN: Final = "conversation_unknown"
 # Domains whose devices write their state when they start to move.
 MOVING_DEVICE_DOMAINS: Final = frozenset({"cover", "valve"})
-# Seconds a write to a moving device waits for a late state write.
-MOVING_DEVICE_WAIT_SECONDS: Final = 2.0
+# States of a moving device that is still on its way.
+MOVING_STATES: Final = frozenset({"opening", "closing"})
+# Seconds a write waits for a late state write.
+WRITE_WAIT_SECONDS: Final = 2.0
+# The state each service leaves. A write that finds this state does not wait.
+STATE_AFTER_SERVICE: Final = {
+    "turn_on": "on",
+    "turn_off": "off",
+    "open_cover": "open",
+    "close_cover": "closed",
+    "open_valve": "open",
+    "close_valve": "closed",
+    "lock": "locked",
+    "unlock": "unlocked",
+}
 # Seconds a confirmation code stays valid.
 CONFIRMATION_WINDOW_SECONDS: Final = 60.0
 # Seconds an event conversation id stays recognised after its turn ends.

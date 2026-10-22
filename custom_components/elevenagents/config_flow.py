@@ -32,8 +32,8 @@ from .const import (
     DOMAIN,
     OPT_PUBLIC_URL,
     PANEL_URL_PATH,
-    TOOL_CALL_SERVICE,
     TOOL_GET_STATE,
+    TOOL_PERFORM_ACTION,
 )
 from .elevenlabs_client import (
     ElevenLabsAuthError,
@@ -75,7 +75,7 @@ class ElevenAgentsConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for the ElevenAgents integration."""
 
     VERSION = 1
-    MINOR_VERSION = 1
+    MINOR_VERSION = 2
 
     def __init__(self) -> None:
         """Initialise the state carried between the key step and the agent step."""
@@ -179,7 +179,7 @@ class ElevenAgentsConfigFlow(ConfigFlow, domain=DOMAIN):
         if not attached:
             return []
 
-        ours = {TOOL_GET_STATE, TOOL_CALL_SERVICE}
+        ours = {TOOL_GET_STATE, TOOL_PERFORM_ACTION}
         page = await async_list_tools(client)
         return [
             tool.id

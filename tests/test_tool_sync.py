@@ -22,8 +22,8 @@ from custom_components.elevenagents.const import (
     OPT_PUBLIC_URL,
     OPT_READ_ENTITIES,
     OPT_SENSITIVE,
-    TOOL_CALL_SERVICE,
     TOOL_GET_STATE,
+    TOOL_PERFORM_ACTION,
 )
 from custom_components.elevenagents.elevenlabs_client import (
     ElevenLabsError,
@@ -32,8 +32,8 @@ from custom_components.elevenagents.elevenlabs_client import (
 from custom_components.elevenagents.permissions import Permissions
 from custom_components.elevenagents.tool_sync import (
     AGENT_SETTING_DEFAULTS,
-    CALL_SERVICE_DESCRIPTION,
     GET_STATE_DESCRIPTION,
+    PERFORM_ACTION_DESCRIPTION,
     ToolSyncError,
     _check_readback,
     _flatten_fields,
@@ -41,8 +41,8 @@ from custom_components.elevenagents.tool_sync import (
     agent_settings,
     async_build_definitions,
     async_sync_tools,
-    build_call_service,
     build_get_state,
+    build_perform_action,
     entity_catalogue,
     entity_enum,
     service_data_properties,
@@ -314,7 +314,7 @@ async def test_call_service_schema_shape(hass, entity_registry):
     hass.states.async_set(entry.entity_id, "on", {"supported_features": 0})
 
     perms = Permissions(read=frozenset(), control=frozenset({entry.id}), exceptions={})
-    config = build_call_service(
+    config = build_perform_action(
         hass,
         perms,
         DESCRIPTIONS,
@@ -385,7 +385,7 @@ async def test_get_state_reads_read_and_control_call_service_reads_control_only(
         20,
         settings=AGENT_SETTING_DEFAULTS,
     )
-    call_service = build_call_service(
+    call_service = build_perform_action(
         hass,
         perms,
         DESCRIPTIONS,
@@ -749,7 +749,7 @@ async def test_sync_never_touches_a_tool_id_it_does_not_own(
 
     assert setup_entry.data[CONF_TOOL_IDS]["unrelated"] == "tool_other"
     assert setup_entry.data[CONF_TOOL_IDS][TOOL_GET_STATE].startswith("tool_")
-    assert setup_entry.data[CONF_TOOL_IDS][TOOL_CALL_SERVICE].startswith("tool_")
+    assert setup_entry.data[CONF_TOOL_IDS][TOOL_PERFORM_ACTION].startswith("tool_")
 
 
 def test_the_write_tool_description_carries_the_never_repeat_rule() -> None:
@@ -761,10 +761,10 @@ def test_the_write_tool_description_carries_the_never_repeat_rule() -> None:
     the condition that this sentence ships. An earlier edit of the plan
     deleted it and nothing noticed.
     """
-    assert "unconfirmed" in CALL_SERVICE_DESCRIPTION
-    assert "ha_get_state" in CALL_SERVICE_DESCRIPTION
+    assert "unconfirmed" in PERFORM_ACTION_DESCRIPTION
+    assert "ha_get_state" in PERFORM_ACTION_DESCRIPTION
     rule = "Never repeat an action that returned unconfirmed."
-    assert rule in CALL_SERVICE_DESCRIPTION
+    assert rule in PERFORM_ACTION_DESCRIPTION
 
 
 def test_the_read_tool_description_forbids_inventing_an_entity() -> None:
@@ -787,7 +787,7 @@ def test_both_tool_configs_declare_their_type(hass) -> None:
         build_get_state(
             hass, perms, "https://x.invalid/h", "s", 20, settings=AGENT_SETTING_DEFAULTS
         ),
-        build_call_service(
+        build_perform_action(
             hass,
             perms,
             {},
@@ -885,7 +885,7 @@ def test_readback_catches_a_discarded_pre_tool_speech() -> None:
 
 
 def test_entity_enum_reads_both_tool_shapes():
-    """ha_get_state holds the enum under items; ha_call_service holds it directly."""
+    """ha_get_state holds the enum under items; ha_perform_action holds it directly."""
     get_state = {
         "api_schema": {
             "request_body_schema": {
@@ -921,11 +921,11 @@ def test_entity_enum_is_none_without_an_enum():
 
 def test_the_write_tool_description_limits_the_call_to_the_named_device() -> None:
     """The rule sits where the model reads it while it builds the call."""
-    assert "the one Home Assistant entity the user named" in CALL_SERVICE_DESCRIPTION
+    assert "the one Home Assistant entity the user named" in PERFORM_ACTION_DESCRIPTION
     assert "matches the user's words and can do what they asked" in (
-        CALL_SERVICE_DESCRIPTION
+        PERFORM_ACTION_DESCRIPTION
     )
-    assert "Otherwise do not call it: tell the user." in CALL_SERVICE_DESCRIPTION
+    assert "Otherwise do not call it: tell the user." in PERFORM_ACTION_DESCRIPTION
 
 
 async def test_the_write_catalogue_is_introduced_as_the_named_entity(
@@ -936,7 +936,7 @@ async def test_the_write_catalogue_is_introduced_as_the_named_entity(
     hass.states.async_set(entry.entity_id, "on", {"supported_features": 0})
     perms = Permissions(read=frozenset(), control=frozenset({entry.id}), exceptions={})
 
-    config = build_call_service(
+    config = build_perform_action(
         hass,
         perms,
         DESCRIPTIONS,
@@ -958,7 +958,7 @@ def test_an_empty_write_catalogue_keeps_its_plain_sentence(hass) -> None:
     """No lead-in points at a catalogue that does not exist."""
     perms = Permissions(read=frozenset(), control=frozenset(), exceptions={})
 
-    config = build_call_service(
+    config = build_perform_action(
         hass,
         perms,
         DESCRIPTIONS,
@@ -975,11 +975,34 @@ def test_an_empty_write_catalogue_keeps_its_plain_sentence(hass) -> None:
     )
 
 
-def test_action_and_service_data_state_their_limits(hass) -> None:
+def test_the_action_tool_uses_home_assistant_terms(hass) -> None:
+    """The tool is named after Perform action and takes its parameters as data."""
+    perms = Permissions(read=frozenset(), control=frozenset(), exceptions={})
+
+    config = build_perform_action(
+        hass,
+        perms,
+        DESCRIPTIONS,
+        {},
+        "https://example/hook",
+        "sekrit",
+        20,
+        settings=AGENT_SETTING_DEFAULTS,
+    )
+
+    properties = config["api_schema"]["request_body_schema"]["properties"]
+    assert config["name"] == "ha_perform_action"
+    assert "data" in properties
+    assert "service_data" not in properties
+    for word in ("service_data", "command", "this device"):
+        assert word not in PERFORM_ACTION_DESCRIPTION
+
+
+def test_action_and_data_state_their_limits(hass) -> None:
     """The action list is a union, and an unsupported parameter can pass in silence."""
     perms = Permissions(read=frozenset(), control=frozenset(), exceptions={})
 
-    config = build_call_service(
+    config = build_perform_action(
         hass,
         perms,
         DESCRIPTIONS,
@@ -996,7 +1019,7 @@ def test_action_and_service_data_state_their_limits(hass) -> None:
     )
     assert (
         "can ignore one it does not support without an error"
-        in properties["service_data"]["description"]
+        in properties["data"]["description"]
     )
 
 
@@ -1006,7 +1029,7 @@ def test_action_and_service_data_state_their_limits(hass) -> None:
 async def test_call_service_carries_the_conversation_id_and_the_code(hass) -> None:
     """The platform fills conversation_id; the model fills the code."""
     perms = Permissions(read=frozenset(), control=frozenset(), exceptions={})
-    config = build_call_service(
+    config = build_perform_action(
         hass,
         perms,
         DESCRIPTIONS,
@@ -1030,7 +1053,7 @@ async def test_call_service_carries_the_conversation_id_and_the_code(hass) -> No
 async def test_call_service_carries_the_history_only_when_asked(hass) -> None:
     """conversation_history is a property only when some mark asks for confirmation."""
     perms = Permissions(read=frozenset(), control=frozenset(), exceptions={})
-    config = build_call_service(
+    config = build_perform_action(
         hass,
         perms,
         DESCRIPTIONS,
@@ -1049,8 +1072,8 @@ async def test_call_service_carries_the_history_only_when_asked(hass) -> None:
 
 def test_the_write_tool_description_explains_confirmation() -> None:
     """The model learns the retry rule from the description, not a side channel."""
-    assert "confirmation_required" in CALL_SERVICE_DESCRIPTION
-    assert "confirmation_code" in CALL_SERVICE_DESCRIPTION
+    assert "confirmation_required" in PERFORM_ACTION_DESCRIPTION
+    assert "confirmation_code" in PERFORM_ACTION_DESCRIPTION
 
 
 async def test_conversation_id_and_history_carry_only_the_dynamic_variable(
@@ -1066,7 +1089,7 @@ async def test_conversation_id_and_history_carry_only_the_dynamic_variable(
     type and dynamic_variable, exactly like the `tool` discriminator.
     """
     perms = Permissions(read=frozenset(), control=frozenset(), exceptions={})
-    config = build_call_service(
+    config = build_perform_action(
         hass,
         perms,
         DESCRIPTIONS,
@@ -1094,7 +1117,7 @@ async def test_the_synced_definitions_carry_history_only_when_a_mark_confirms(
 ) -> None:
     """async_build_definitions ties with_history to whether any mark confirms."""
     without_marks = await async_build_definitions(hass, setup_entry)
-    schema = without_marks[TOOL_CALL_SERVICE]["api_schema"]["request_body_schema"]
+    schema = without_marks[TOOL_PERFORM_ACTION]["api_schema"]["request_body_schema"]
     assert "conversation_history" not in schema["properties"]
 
     hass.config_entries.async_update_entry(
@@ -1102,36 +1125,36 @@ async def test_the_synced_definitions_carry_history_only_when_a_mark_confirms(
     )
 
     with_marks = await async_build_definitions(hass, setup_entry)
-    schema = with_marks[TOOL_CALL_SERVICE]["api_schema"]["request_body_schema"]
+    schema = with_marks[TOOL_PERFORM_ACTION]["api_schema"]["request_body_schema"]
     assert "conversation_history" in schema["properties"]
 
 
-def test_the_call_service_description_says_how_to_read_a_no_change():
+def test_the_perform_action_description_says_how_to_read_a_no_change():
     """A slow device reads as no_change while it still moves."""
     assert (
         "If the outcome is no_change and the state is not what the user asked for, "
-        "say the command was sent and the device has not reported the change yet."
-    ) in CALL_SERVICE_DESCRIPTION
+        "say the action was sent and the device has not reported the change yet."
+    ) in PERFORM_ACTION_DESCRIPTION
 
 
-def test_the_call_service_description_says_how_to_correct_an_invalid_value():
+def test_the_perform_action_description_says_how_to_correct_an_invalid_value():
     """The detail of invalid_value names what to change."""
     assert (
-        "If the error is invalid_value, correct the service_data from the detail "
+        "If the error is invalid_value, correct the data from the detail "
         "and call once more."
-    ) in CALL_SERVICE_DESCRIPTION
+    ) in PERFORM_ACTION_DESCRIPTION
 
 
-def test_the_call_service_description_says_how_to_read_moving():
+def test_the_perform_action_description_says_how_to_read_moving():
     """A moving device reports a position on its way, not where it stops."""
     assert (
         "If the response carries moving true, the device is still moving: "
         "say it is on its way to what the user asked for."
-    ) in CALL_SERVICE_DESCRIPTION
+    ) in PERFORM_ACTION_DESCRIPTION
 
 
 async def test_both_tools_call_the_public_url_when_one_is_set(hass, setup_entry):
-    """ElevenLabs reaches a private Home Assistant through the public address."""
+    """ElevenLabs reaches a private Home Assistant through the public URL."""
     hass.config_entries.async_update_entry(
         setup_entry, options={OPT_PUBLIC_URL: "https://hooks.example.com"}
     )
@@ -1140,13 +1163,13 @@ async def test_both_tools_call_the_public_url_when_one_is_set(hass, setup_entry)
 
     expected = "https://hooks.example.com/api/webhook/webhook_test"
     assert definitions[TOOL_GET_STATE]["api_schema"]["url"] == expected
-    assert definitions[TOOL_CALL_SERVICE]["api_schema"]["url"] == expected
+    assert definitions[TOOL_PERFORM_ACTION]["api_schema"]["url"] == expected
 
 
 async def test_both_tools_call_the_external_url_without_a_public_url(hass, setup_entry):
-    """An empty field keeps the address of earlier versions."""
+    """An empty field keeps the URL of earlier versions."""
     definitions = await async_build_definitions(hass, setup_entry)
 
     expected = "https://home.example/api/webhook/webhook_test"
     assert definitions[TOOL_GET_STATE]["api_schema"]["url"] == expected
-    assert definitions[TOOL_CALL_SERVICE]["api_schema"]["url"] == expected
+    assert definitions[TOOL_PERFORM_ACTION]["api_schema"]["url"] == expected

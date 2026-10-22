@@ -1,7 +1,8 @@
 """
 Replay of recorded agent request bodies.
 
-Recorded during the spike on 10 September 2026.
+Recorded during the spike on 10 September 2026, and RECORDED_DATA on
+22 October 2026, after the rename to ha_perform_action and data.
 Do not edit these payloads to make a test pass: they are evidence.
 """
 
@@ -44,11 +45,11 @@ RECORDED_DENIED = {
     "entity_id": "cover.garage_door",
 }
 
-RECORDED_SERVICE_DATA = {
+RECORDED_DATA = {
     "tool": "call_service",
+    "entity_id": "climate.hvac",
     "action": "climate.set_temperature",
-    "entity_id": "climate.heatpump",
-    "service_data": {"temperature": 24},
+    "data": {"temperature": 21},
 }
 
 
@@ -65,6 +66,8 @@ async def spike_house(hass, config_entry, entity_registry):
         ("light", "living_room_rgbww_lights", "off"),
         ("light", "entrance_color_white_lights", "off"),
         ("climate", "heatpump", "heat"),
+        # The development house of 22 October 2026 adds this entity.
+        ("climate", "hvac", "cool"),
         ("cover", "garage_door", "closed"),
     ):
         entry = entity_registry.async_get_or_create(
@@ -149,19 +152,19 @@ async def test_recorded_denied_write_leaves_the_entity_alone(
     assert hass.states.get("cover.garage_door").state == "closed"
 
 
-async def test_recorded_service_data(hass, config_entry, spike_house):
-    """The agent nested service_data without prompting, and picked the key."""
+async def test_recorded_data(hass, config_entry, spike_house):
+    """The agent nests the parameters under data and picks the key."""
 
     async def set_temperature(call) -> None:
         hass.states.async_set(
-            "climate.heatpump",
-            "heat",
+            "climate.hvac",
+            "cool",
             {"supported_features": 0, "temperature": call.data["temperature"]},
         )
 
     hass.services.async_register("climate", "set_temperature", set_temperature)
 
-    body = await async_write(hass, config_entry, RECORDED_SERVICE_DATA)
+    body = await async_write(hass, config_entry, RECORDED_DATA)
 
     assert body["outcome"] == OUTCOME_DONE
-    assert body["temperature"] == 24
+    assert body["temperature"] == 21

@@ -10,7 +10,7 @@
         },
         "data_description": {
           "api_key": "Create a key in the ElevenLabs dashboard, under your profile. Give it write access to ElevenAgents.",
-          "public_url": "The https address ElevenLabs calls, without a path. It starts as the external URL of Home Assistant, or empty when there is none. Change it when ElevenLabs cannot reach that URL: enter the address of a proxy that forwards /api/webhook/ to this Home Assistant."
+          "public_url": "The https URL ElevenLabs calls, without a path. It starts as the external URL of Home Assistant, or empty when there is none. Change it when ElevenLabs cannot reach that URL: enter the URL of a proxy that forwards /api/webhook/ to this Home Assistant."
         }
       },
       "agent": {
@@ -29,7 +29,7 @@
       },
       "duplicate": {
         "title": "This agent already has tools with these names",
-        "description": "This agent already has a tool called ha_call_service or ha_get_state. Two tools with the same name make the agent choose unpredictably.\n\nThis integration did not create that one, so it is not touched without your say-so. Detaching leaves it in your ElevenLabs workspace, where you can attach it again at any time.",
+        "description": "This agent already has a tool called ha_perform_action or ha_get_state. Two tools with the same name make the agent choose unpredictably.\n\nThis integration did not create that one, so it is not touched without your say-so. Detaching leaves it in your ElevenLabs workspace, where you can attach it again at any time.",
         "menu_options": {
           "detach": "Detach them from this agent",
           "keep": "Continue anyway"
@@ -38,8 +38,8 @@
     },
     "error": {
       "invalid_auth": "ElevenLabs rejected this key. Check that you copied it whole, and that it has not been revoked.",
-      "invalid_public_url": "Enter an https address without a path: a host and, if needed, a port.",
-      "no_public_url": "Home Assistant has no external URL. Enter the address of a proxy that forwards /api/webhook/ to this Home Assistant.",
+      "invalid_public_url": "Enter an https URL without a path: a host and, if needed, a port.",
+      "no_public_url": "Home Assistant has no external URL. Enter the URL of a proxy that forwards /api/webhook/ to this Home Assistant.",
       "insufficient_scope": "This key works, but it may not reach ElevenAgents. Open the key in the ElevenLabs dashboard and give it write access to ElevenAgents.",
       "no_agents": "This key reaches no agents. Create an agent in the ElevenLabs dashboard first, then add this integration again.",
       "agent_not_found": "This agent no longer exists in the workspace this key reaches.",

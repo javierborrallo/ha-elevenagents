@@ -255,7 +255,7 @@ def _public_url_marker(schema: vol.Schema) -> vol.Marker:
 
 
 async def test_the_webhook_url_starts_as_the_external_url(hass):
-    """The user sees the address ElevenLabs will call and may change it."""
+    """The user sees the URL ElevenLabs will call and may change it."""
     with _patch_client_and_url(agents=AGENTS_RESPONSE):
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": "user"}
@@ -267,7 +267,7 @@ async def test_the_webhook_url_starts_as_the_external_url(hass):
 
 
 async def test_the_webhook_url_starts_empty_without_an_external_url(hass):
-    """A private Home Assistant has no address to offer."""
+    """A private Home Assistant has no URL to offer."""
     with _patch_client_and_url(agents=AGENTS_RESPONSE, external=False):
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": "user"}
@@ -354,7 +354,7 @@ async def test_a_public_url_overrides_an_external_url_in_the_flow(hass):
 
 
 async def test_the_public_url_reaches_the_options_of_the_entry(hass):
-    """The tools call the public address from the first sync."""
+    """The tools call the public URL from the first sync."""
     with _patch_client_and_url(agents=AGENTS_RESPONSE, external=False):
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": "user"}
@@ -393,7 +393,7 @@ async def test_an_internal_url_alone_is_not_enough(hass) -> None:
     MEASURED 12 September 2026 against a running instance with no external
     URL: the flow created the entry and would have written
     http://192.168.1.10:8123/api/webhook/... into the user's ElevenLabs
-    workspace, an address the agent can never reach. The flow now asks for
+    workspace, a URL the agent can never reach. The flow now asks for
     a public URL instead.
     """
     await hass.config.async_update(
@@ -492,7 +492,7 @@ async def test_a_colliding_name_on_the_agent_stops_to_ask(hass) -> None:
     with _patch_client_and_url(
         agents=AGENTS_RESPONSE,
         attached=["tool_old"],
-        tools=[_tool("tool_old", "ha_call_service")],
+        tools=[_tool("tool_old", "ha_perform_action")],
     ):
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": "user"}
@@ -521,7 +521,7 @@ async def test_the_same_name_unattached_is_not_the_agents_problem(hass) -> None:
         attached=["tool_theirs"],
         tools=[
             _tool("tool_theirs", "weather"),
-            _tool("tool_old", "ha_call_service"),
+            _tool("tool_old", "ha_perform_action"),
         ],
     ):
         result = await hass.config_entries.flow.async_init(
@@ -544,7 +544,7 @@ async def test_detach_removes_only_the_colliding_tools(hass) -> None:
             agents=AGENTS_RESPONSE,
             attached=["tool_old", "tool_theirs"],
             tools=[
-                _tool("tool_old", "ha_call_service"),
+                _tool("tool_old", "ha_perform_action"),
                 _tool("tool_theirs", "weather"),
             ],
         ),
@@ -576,7 +576,7 @@ async def test_continuing_anyway_touches_nothing(hass) -> None:
         _patch_client_and_url(
             agents=AGENTS_RESPONSE,
             attached=["tool_old"],
-            tools=[_tool("tool_old", "ha_call_service")],
+            tools=[_tool("tool_old", "ha_perform_action")],
         ),
         patch(
             "custom_components.elevenagents.config_flow.async_patch_agent"
@@ -601,7 +601,7 @@ async def test_continuing_anyway_touches_nothing(hass) -> None:
 
 @pytest.mark.parametrize("value", ["", "   "])
 async def test_an_empty_public_url_is_refused_without_an_external_url(hass, value):
-    """Without either address the tools would point nowhere."""
+    """Without either URL the tools would point nowhere."""
     with _patch_client_and_url(agents=AGENTS_RESPONSE, external=False):
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": "user"}

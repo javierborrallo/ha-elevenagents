@@ -18,6 +18,7 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.network import NoURLAvailableError
 from homeassistant.setup import async_setup_component
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.elevenagents.const import (
     CONF_TOOL_IDS,
@@ -341,7 +342,7 @@ async def test_a_reload_after_an_auth_error_loads_cleanly(hass, config_entry, ca
 
 
 async def test_a_public_url_loads_without_an_external_url(hass, config_entry):
-    """A Home Assistant on a private network sets up through the public address."""
+    """A Home Assistant on a private network sets up through the public URL."""
     await hass.config.async_update(external_url=None)
     hass.config_entries.async_update_entry(
         config_entry, options={OPT_PUBLIC_URL: "https://hooks.example.com"}
@@ -351,3 +352,37 @@ async def test_a_public_url_loads_without_an_external_url(hass, config_entry):
         await hass.async_block_till_done()
 
     assert config_entry.state is ConfigEntryState.LOADED
+
+
+# --- 0.7: the action tool rename -------------------------------------------
+
+
+async def test_setup_moves_the_stored_id_of_the_renamed_tool(hass, config_entry):
+    """The tool keeps its id, so the next sync renames it in place."""
+    hass.config_entries.async_update_entry(
+        config_entry,
+        data={
+            **config_entry.data,
+            CONF_TOOL_IDS: {"ha_get_state": "tool_get", "ha_call_service": "tool_call"},
+        },
+    )
+
+    with patch("custom_components.elevenagents.async_sync_tools", AsyncMock()):
+        assert await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert config_entry.data[CONF_TOOL_IDS] == {
+        "ha_get_state": "tool_get",
+        "ha_perform_action": "tool_call",
+    }
+    assert config_entry.minor_version == 2
+    await hass.config_entries.async_unload(config_entry.entry_id)
+
+
+async def test_setup_refuses_an_entry_from_a_newer_version(hass):
+    """An entry written by a newer major version is not read."""
+    entry = MockConfigEntry(domain=DOMAIN, version=2, data={}, options={})
+    entry.add_to_hass(hass)
+
+    assert not await hass.config_entries.async_setup(entry.entry_id)
+    assert entry.state is ConfigEntryState.MIGRATION_ERROR

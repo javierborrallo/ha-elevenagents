@@ -403,6 +403,62 @@ async def test_write_that_writes_nothing_is_no_change_not_a_failure(
     assert "error" not in body
 
 
+async def _turn_on_a_switch(
+    hass, config_entry, entity_registry, state: str, delay: float | None
+) -> tuple[dict[str, object], float]:
+    """
+    Run turn_on on a switch that writes "on" delay seconds after the call.
+
+    A delay of None never writes. Return the body and the seconds it took.
+    """
+    switch = entity_registry.async_get_or_create("switch", "demo", "zigbee")
+    hass.states.async_set(switch.entity_id, state)
+
+    async def turn_on(call) -> None:
+        if delay is not None:
+            hass.loop.call_later(delay, hass.states.async_set, switch.entity_id, "on")
+
+    hass.services.async_register("switch", "turn_on", turn_on)
+    hass.config_entries.async_update_entry(
+        config_entry, options={OPT_CONTROL_ENTITIES: [switch.id]}
+    )
+
+    start = asyncio.get_running_loop().time()
+    body = await async_write(
+        hass,
+        config_entry,
+        {
+            "tool": "call_service",
+            "entity_id": switch.entity_id,
+            "action": "switch.turn_on",
+        },
+    )
+    return body, asyncio.get_running_loop().time() - start
+
+
+async def test_a_switch_that_reports_after_the_call_is_done(
+    hass, config_entry, entity_registry
+):
+    """A Zigbee switch through MQTT writes its state after the call returns."""
+    body, _ = await _turn_on_a_switch(hass, config_entry, entity_registry, "off", 0.1)
+
+    assert body["outcome"] == OUTCOME_DONE
+    assert body["state"] == "on"
+    assert "moving" not in body
+
+
+async def test_a_switch_already_on_answers_at_once(hass, config_entry, entity_registry):
+    """Nothing will write when the state is already the one asked for."""
+    with patch("custom_components.elevenagents.webhook.WRITE_WAIT_SECONDS", 1.0):
+        body, took = await _turn_on_a_switch(
+            hass, config_entry, entity_registry, "on", None
+        )
+
+    assert body["outcome"] == OUTCOME_NO_CHANGE
+    assert body["state"] == "on"
+    assert took < 0.5
+
+
 async def _write_a_late_device(
     hass, config_entry, entity_registry, domain: str, delay: float | None
 ) -> tuple[dict[str, object], float]:
@@ -459,9 +515,7 @@ async def test_a_cover_that_never_moves_is_no_change_after_the_wait(
     hass, config_entry, entity_registry
 ):
     """The wait ends at its limit, and the answer is no_change."""
-    with patch(
-        "custom_components.elevenagents.webhook.MOVING_DEVICE_WAIT_SECONDS", 0.2
-    ):
+    with patch("custom_components.elevenagents.webhook.WRITE_WAIT_SECONDS", 0.2):
         body, took = await _write_a_late_device(
             hass, config_entry, entity_registry, "cover", None
         )
@@ -470,6 +524,43 @@ async def test_a_cover_that_never_moves_is_no_change_after_the_wait(
     assert body["state"] == "closed"
     assert "moving" not in body
     assert took >= 0.2
+
+
+@pytest.mark.parametrize(
+    ("domain", "state"),
+    [("cover", "closing"), ("cover", "opening"), ("valve", "closing")],
+)
+async def test_a_device_still_moving_when_the_call_returns_is_moving(
+    hass, config_entry, entity_registry, domain, state
+):
+    """A position written on the way is not where the device stops."""
+    device = entity_registry.async_get_or_create(domain, "demo", "on_its_way")
+    attributes = {"supported_features": 4, "current_position": 70}
+    hass.states.async_set(device.entity_id, "open", attributes)
+
+    async def set_position(call) -> None:
+        hass.states.async_set(device.entity_id, state, attributes)
+
+    service = f"set_{domain}_position"
+    hass.services.async_register(domain, service, set_position)
+    hass.config_entries.async_update_entry(
+        config_entry, options={OPT_CONTROL_ENTITIES: [device.id]}
+    )
+
+    body = await async_write(
+        hass,
+        config_entry,
+        {
+            "tool": "call_service",
+            "entity_id": device.entity_id,
+            "action": f"{domain}.{service}",
+            "data": {"position": 20},
+        },
+    )
+
+    assert body["outcome"] == OUTCOME_DONE
+    assert body["state"] == state
+    assert body["moving"] is True
 
 
 async def test_a_cover_that_writes_during_the_call_is_not_moving(
@@ -501,31 +592,6 @@ async def test_a_cover_that_writes_during_the_call_is_not_moving(
     assert "moving" not in body
 
 
-async def test_a_light_does_not_wait_for_a_late_write(
-    hass, config_entry, entity_registry
-):
-    """Only covers and valves wait; a light answers at once."""
-    one = entity_registry.async_get_or_create("light", "demo", "one")
-    hass.states.async_set(one.entity_id, "off", {})
-
-    async def turn_on(call) -> None:
-        hass.loop.call_later(0.1, hass.states.async_set, one.entity_id, "on", {})
-
-    hass.services.async_register("light", "turn_on", turn_on)
-    hass.config_entries.async_update_entry(
-        config_entry, options={OPT_CONTROL_ENTITIES: [one.id]}
-    )
-
-    body = await async_write(
-        hass,
-        config_entry,
-        {"tool": "call_service", "entity_id": one.entity_id, "action": "light.turn_on"},
-    )
-
-    assert body["outcome"] == OUTCOME_NO_CHANGE
-    await asyncio.sleep(0.15)
-
-
 async def test_write_that_changes_only_an_attribute_is_still_done(
     hass, config_entry, entity_registry
 ):
@@ -553,7 +619,7 @@ async def test_write_that_changes_only_an_attribute_is_still_done(
             "tool": "call_service",
             "entity_id": thermostat.entity_id,
             "action": "climate.set_temperature",
-            "service_data": {"temperature": 21},
+            "data": {"temperature": 21},
         },
     )
 
@@ -623,7 +689,7 @@ async def test_write_validation_error_relays_the_translation_key(
             "tool": "call_service",
             "entity_id": thermostat.entity_id,
             "action": "climate.set_temperature",
-            "service_data": {"temperature": 45},
+            "data": {"temperature": 45},
         },
     )
 
@@ -852,10 +918,8 @@ async def test_an_event_conversation_survives_an_entry_reload(
 @pytest.mark.parametrize(
     "key", ["entity_id", "device_id", "area_id", "floor_id", "label_id"]
 )
-async def test_service_data_cannot_retarget_the_call(
-    hass, config_entry, entity_registry, key
-):
-    """A target inside service_data would reach entities the agent may not control."""
+async def test_data_cannot_retarget_the_call(hass, config_entry, entity_registry, key):
+    """A target inside data would reach entities the agent may not control."""
     allowed = entity_registry.async_get_or_create("light", "demo", "allowed")
     other = entity_registry.async_get_or_create("light", "demo", "other")
     for entry in (allowed, other):
@@ -877,7 +941,7 @@ async def test_service_data_cannot_retarget_the_call(
             "tool": "call_service",
             "entity_id": allowed.entity_id,
             "action": "light.turn_on",
-            "service_data": {key: other.entity_id},
+            "data": {key: other.entity_id},
         },
     )
 
@@ -919,12 +983,12 @@ async def _granted_light(hass, config_entry, entity_registry) -> tuple[str, list
     return light.entity_id, calls
 
 
-def _turn_on(entity_id: str, service_data: dict[str, object]) -> dict[str, object]:
+def _turn_on(entity_id: str, data: dict[str, object]) -> dict[str, object]:
     return {
         "tool": "call_service",
         "entity_id": entity_id,
         "action": "light.turn_on",
-        "service_data": service_data,
+        "data": data,
     }
 
 
@@ -938,9 +1002,7 @@ def _turn_on(entity_id: str, service_data: dict[str, object]) -> dict[str, objec
         {"nested": "{{ 1 }}"},
     ],
 )
-async def test_service_data_cannot_carry_a_template(
-    hass, config_entry, entity_registry, value
-):
+async def test_data_cannot_carry_a_template(hass, config_entry, entity_registry, value):
     """Home Assistant would render a template with every state in reach."""
     entity_id, calls = await _granted_light(hass, config_entry, entity_registry)
 
@@ -952,9 +1014,7 @@ async def test_service_data_cannot_carry_a_template(
     assert calls == []
 
 
-async def test_service_data_keys_must_be_declared_scalars(
-    hass, config_entry, entity_registry
-):
+async def test_data_keys_must_be_declared_scalars(hass, config_entry, entity_registry):
     """A key the tool schema does not declare is refused before the call."""
     entity_id, calls = await _granted_light(hass, config_entry, entity_registry)
 
@@ -1063,10 +1123,10 @@ async def test_a_refused_action_fires_an_action_event_with_the_error(
     assert set(heard[0]) == ACTION_KEYS
 
 
-async def test_the_action_event_never_carries_service_data(
+async def test_the_action_event_never_carries_data(
     hass, hass_client_no_auth, setup_entry, entity_registry
 ):
-    """No key and no value of service_data reaches the event."""
+    """No key and no value of data reaches the event."""
     light = entity_registry.async_get_or_create("light", "demo", "one")
     hass.states.async_set(light.entity_id, "off", {"friendly_name": "One"})
     hass.services.async_register("light", "turn_on", AsyncMock())
@@ -1083,13 +1143,13 @@ async def test_the_action_event_never_carries_service_data(
             "tool": "call_service",
             "entity_id": light.entity_id,
             "action": "light.turn_on",
-            "service_data": {"brightness": 4242, "code": "s3cr3t-code"},
+            "data": {"brightness": 4242, "code": "s3cr3t-code"},
         },
     )
 
     assert len(heard) == 1
     assert set(heard[0]) == ACTION_KEYS
-    assert "service_data" not in heard[0]
+    assert "data" not in heard[0]
     text = json.dumps(heard[0])
     assert "4242" not in text
     assert "s3cr3t-code" not in text

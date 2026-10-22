@@ -15,7 +15,13 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.network import NoURLAvailableError
 
 from .card import async_register_card
-from .const import CONF_AGENT_ID, CONF_API_KEY, CONF_TOOL_IDS, DOMAIN
+from .const import (
+    CONF_AGENT_ID,
+    CONF_API_KEY,
+    CONF_TOOL_IDS,
+    DOMAIN,
+    TOOL_PERFORM_ACTION,
+)
 from .elevenlabs_client import (
     ElevenLabsAuthError,
     ElevenLabsError,
@@ -78,6 +84,32 @@ async def async_setup(
     await async_register_panel(hass)
     await async_register_card(hass)
     async_register_commands(hass)
+    return True
+
+
+# Tool names that 0.7.0 changed, old name to new name.
+RENAMED_TOOLS: dict[str, str] = {"ha_call_service": TOOL_PERFORM_ACTION}
+
+
+async def async_migrate_entry(
+    hass: HomeAssistant, entry: ElevenAgentsConfigEntry
+) -> bool:
+    """
+    Migrate an entry to the current version.
+
+    Minor version 2 stores each tool id under the tool's new name.
+    Return False for an entry from a newer major version.
+    """
+    if entry.version > 1:
+        return False
+    if entry.minor_version < 2:  # noqa: PLR2004 - the version this step writes
+        stored = {
+            RENAMED_TOOLS.get(name, name): tool_id
+            for name, tool_id in entry.data.get(CONF_TOOL_IDS, {}).items()
+        }
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_TOOL_IDS: stored}, minor_version=2
+        )
     return True
 
 

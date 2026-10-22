@@ -23,8 +23,8 @@ from custom_components.elevenagents.const import (
     OPT_CONFIRM_TIMEOUT,
     OPT_PUBLIC_URL,
     OPT_READ_ENTITIES,
-    TOOL_CALL_SERVICE,
     TOOL_GET_STATE,
+    TOOL_PERFORM_ACTION,
 )
 from custom_components.elevenagents.elevenlabs_client import (
     ElevenLabsAuthError,
@@ -44,7 +44,7 @@ pytestmark = pytest.mark.filterwarnings(
     "ignore::aiohttp.web_exceptions.NotAppKeyWarning"
 )
 
-TOOL_IDS = {TOOL_GET_STATE: "tool_get", TOOL_CALL_SERVICE: "tool_call"}
+TOOL_IDS = {TOOL_GET_STATE: "tool_get", TOOL_PERFORM_ACTION: "tool_call"}
 
 
 def _agent(*, protected: bool = True, tool_ids: list[str] | None = None) -> Any:
@@ -153,7 +153,7 @@ async def test_a_detached_tool_is_named(hass, setup_entry, elevenlabs):
     result = await async_run_check(hass, setup_entry)
 
     assert _status(result)["tools_attached"] == "problem"
-    assert _detail(result, "tools_attached") == [TOOL_CALL_SERVICE]
+    assert _detail(result, "tools_attached") == [TOOL_PERFORM_ACTION]
 
 
 async def test_a_stale_tool_is_named(hass, setup_entry, entity_registry, elevenlabs):
@@ -182,10 +182,10 @@ async def test_a_tool_deleted_in_elevenlabs_is_named(hass, setup_entry, elevenla
 
     assert _status(result)["tools_current"] == "problem"
     assert _detail(result, "tools_current") == {
-        "tools": [TOOL_CALL_SERVICE, TOOL_GET_STATE],
+        "tools": [TOOL_GET_STATE, TOOL_PERFORM_ACTION],
         "missing": [],
         "extra": [],
-        "unreadable": [TOOL_CALL_SERVICE, TOOL_GET_STATE],
+        "unreadable": [TOOL_GET_STATE, TOOL_PERFORM_ACTION],
     }
 
 
@@ -197,10 +197,10 @@ async def test_a_tool_read_that_errors_is_unreadable(hass, setup_entry, elevenla
 
     assert _status(result)["tools_current"] == "problem"
     assert _detail(result, "tools_current") == {
-        "tools": [TOOL_CALL_SERVICE, TOOL_GET_STATE],
+        "tools": [TOOL_GET_STATE, TOOL_PERFORM_ACTION],
         "missing": [],
         "extra": [],
-        "unreadable": [TOOL_CALL_SERVICE, TOOL_GET_STATE],
+        "unreadable": [TOOL_GET_STATE, TOOL_PERFORM_ACTION],
     }
 
 
@@ -214,10 +214,10 @@ async def test_a_tool_read_that_cannot_reach_elevenlabs_is_unreadable(
 
     assert _status(result)["tools_current"] == "problem"
     assert _detail(result, "tools_current") == {
-        "tools": [TOOL_CALL_SERVICE, TOOL_GET_STATE],
+        "tools": [TOOL_GET_STATE, TOOL_PERFORM_ACTION],
         "missing": [],
         "extra": [],
-        "unreadable": [TOOL_CALL_SERVICE, TOOL_GET_STATE],
+        "unreadable": [TOOL_GET_STATE, TOOL_PERFORM_ACTION],
     }
 
 
@@ -358,7 +358,7 @@ async def test_a_changed_description_names_the_tool_only(hass, setup_entry, elev
 
     assert _status(result)["tools_current"] == "problem"
     assert _detail(result, "tools_current") == {
-        "tools": [TOOL_CALL_SERVICE],
+        "tools": [TOOL_PERFORM_ACTION],
         "missing": [],
         "extra": [],
         "unreadable": [],
@@ -574,7 +574,7 @@ async def test_no_external_url_is_a_problem(hass, setup_entry, elevenlabs):
 async def test_the_webhook_probe_calls_the_public_url(
     hass, setup_entry, elevenlabs, aioclient_mock
 ):
-    """The probe tests the address ElevenLabs calls, not the external URL."""
+    """The probe tests the URL ElevenLabs calls, not the external URL."""
     public = "https://hooks.example.com/api/webhook/webhook_test"
     aioclient_mock.post(public, status=401)
     await hass.config.async_update(external_url=None)
