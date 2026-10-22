@@ -43,7 +43,7 @@ async def test_the_sdk_is_served_beside_the_card(hass, setup_entry, hass_client)
     """The pinned SDK is served from the same versioned path."""
     base = _card_url(hass).rsplit("/", 1)[0]
     client = await hass_client()
-    response = await client.get(f"{base}/vendor/elevenlabs-client-1.28.0.iife.js")
+    response = await client.get(f"{base}/vendor/elevenlabs-client-1.30.0.iife.js")
 
     assert response.status == 200
     assert (await response.text()).startswith("var ElevenLabsClient")

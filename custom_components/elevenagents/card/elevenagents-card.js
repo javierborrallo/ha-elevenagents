@@ -4,16 +4,13 @@ import {
   STATES, nextState, preflightProblem, gridOptions, formFor,
   chipFor, mergeChip, chipLabel, chipIcon, chipTone, endReason, endedSummary, cardConfig,
   limitsFrom, progress, addLine, cutLastAgentLine, createHold,
-  relayIfBlocked,
+  sessionStart, microphoneRefused, keepRunning,
 } from "./logic.js";
 import { stringsFor } from "./strings.js";
 import { el, icon } from "./dom.js";
 import "./sheet.js";
 
-const SDK_URL = new URL("./vendor/elevenlabs-client-1.28.0.iife.js", import.meta.url).href;
-const RING_LEVEL = 0.015;
-const RING_PERIOD = 2;
-const RING_CYCLES = 30;
+const SDK_URL = new URL("./vendor/elevenlabs-client-1.30.0.iife.js", import.meta.url).href;
 const HOLD_SLOP = 8;
 const BAR_SCALES = [10, 22, 36, 26, 14, 6];
 const NO_LIMITS = Object.freeze({ maxSeconds: null, silenceSeconds: null });
@@ -40,45 +37,6 @@ function loadSdk() {
     });
   }
   return sdkPromise;
-}
-
-// Return an audio element that plays an empty stream, started inside the
-// tap. The tracks added to the stream later play without a new play().
-function unlockedVoice() {
-  const voice = new Audio();
-  voice.autoplay = true;
-  voice.srcObject = new MediaStream();
-  voice.play().catch(() => {});
-  return voice;
-}
-
-// Play a soft ring through Web Audio. Return a function that stops it.
-function startRing() {
-  const Context = window.AudioContext || window.webkitAudioContext;
-  if (!Context) return () => {};
-  const context = new Context();
-  const gain = context.createGain();
-  gain.gain.value = 0;
-  gain.connect(context.destination);
-  for (const frequency of [440, 480]) {
-    const oscillator = context.createOscillator();
-    oscillator.frequency.value = frequency;
-    oscillator.connect(gain);
-    oscillator.start();
-  }
-  const start = context.currentTime + 0.05;
-  for (let cycle = 0; cycle < RING_CYCLES; cycle += 1) {
-    for (const offset of [0, 0.5]) {
-      const on = start + cycle * RING_PERIOD + offset;
-      gain.gain.setValueAtTime(0, on);
-      gain.gain.linearRampToValueAtTime(RING_LEVEL, on + 0.02);
-      gain.gain.setValueAtTime(RING_LEVEL, on + 0.33);
-      gain.gain.linearRampToValueAtTime(0, on + 0.35);
-    }
-  }
-  return () => {
-    context.close().catch(() => {});
-  };
 }
 
 const STYLE = `
@@ -177,9 +135,6 @@ class ElevenAgentsCard extends HTMLElement {
     this.startedAt = null;
     this.endedAt = null;
     this.clock = null;
-    this.stopRing = null;
-    this.voice = null;
-    this.audioWatch = null;
     this.endedReason = null;
     this.problem = null;
     this.frame = null;
@@ -192,7 +147,7 @@ class ElevenAgentsCard extends HTMLElement {
   }
 
   static getStubConfig() {
-    return { show_transcript: true, ringtone: true };
+    return { show_transcript: true };
   }
 
   setConfig(config) {
@@ -500,42 +455,12 @@ class ElevenAgentsCard extends HTMLElement {
 
   setState(event) {
     this.state = nextState(this.state, event);
-    if (this.state !== STATES.CONNECTING) this.ringOff();
-    if (this.state === STATES.READY || this.state === STATES.ENDED) this.voiceOff();
     if (this.isOpen() && this.clock === null) this.clock = setInterval(() => this.render(), 1000);
     if (!this.isOpen() && this.clock !== null) {
       clearInterval(this.clock);
       this.clock = null;
     }
     this.render();
-  }
-
-  ringOff() {
-    if (this.stopRing) this.stopRing();
-    this.stopRing = null;
-  }
-
-  // Relay each audio element that the SDK adds while a session runs.
-  watchAudio() {
-    const voice = this.voice;
-    this.audioWatch = new MutationObserver((records) => {
-      for (const record of records) {
-        for (const node of record.addedNodes) {
-          if (node.tagName === "AUDIO") relayIfBlocked(node, voice);
-        }
-      }
-    });
-    this.audioWatch.observe(document.body, { childList: true });
-  }
-
-  voiceOff() {
-    if (this.audioWatch) this.audioWatch.disconnect();
-    this.audioWatch = null;
-    if (this.voice) {
-      this.voice.pause();
-      this.voice.srcObject = null;
-    }
-    this.voice = null;
   }
 
   onMain() {
@@ -566,67 +491,47 @@ class ElevenAgentsCard extends HTMLElement {
     this.endedReason = null;
     this.muted = false;
     this.keyboardOpen = false;
-    this.ringOff();
-    if (this.config.ringtone) this.stopRing = startRing();
-    this.voiceOff();
-    // Unlock the voice inside the tap, before the first await.
-    this.voice = unlockedVoice();
-    this.watchAudio();
     this.setState({ type: "start" });
     // Wait until the other card ends its session.
     await previous;
     if (run !== this.run) return;
-    const micCheck = navigator.mediaDevices.getUserMedia({ audio: true }).then(
-      (probe) => {
-        for (const track of probe.getTracks()) track.stop();
-        return null;
-      },
-      (err) => err,
-    );
-    const tokenFetch = this._hass.callWS({ type: "elevenagents/conversation_token" });
-    tokenFetch.catch(() => {});
-    const micError = await micCheck;
-    if (run !== this.run) return;
-    if (micError) {
-      console.warn("ElevenAgents card: microphone refused", micError.name);
-      this.problem = "microphone";
-      this.setState({ type: "cancel" });
-      return;
-    }
     try {
-      const result = await tokenFetch;
+      const result = await this._hass.callWS({ type: "elevenagents/conversation_url" });
       if (run !== this.run) return;
       this.limits = limitsFrom(result);
       const sdk = await loadSdk();
       if (run !== this.run) return;
-      const conversation = await sdk.Conversation.startSession(this.sessionOptions(result.token, run));
+      const conversation = await sdk.Conversation.startSession(this.sessionOptions(result.signed_url, run));
       if (run !== this.run || this.state !== STATES.CONNECTING) {
         await conversation.endSession().catch(() => {});
         return;
       }
       this.conversation = conversation;
+      keepRunning(conversation.input && conversation.input.context);
       this.startedAt = Date.now();
       this.setState({ type: "connected" });
       this.tick();
     } catch (err) {
-      console.warn("ElevenAgents card: the conversation could not start", err && err.message);
       if (run !== this.run) return;
-      this.problem = "start";
+      if (microphoneRefused(err)) {
+        console.warn("ElevenAgents card: microphone refused", err.name);
+        this.problem = "microphone";
+      } else {
+        console.warn("ElevenAgents card: the conversation could not start", err && err.message);
+        this.problem = "start";
+      }
       this.setState({ type: "cancel" });
     }
   }
 
   // Build the SDK callbacks. A callback of an earlier run does nothing.
-  sessionOptions(token, run) {
+  sessionOptions(signedUrl, run) {
     const current = (fn) => (...args) => {
       if (run === this.run) fn(...args);
     };
     return {
-      conversationToken: token,
-      connectionType: "webrtc",
-      onConnect: current(() => this.ringOff()),
+      ...sessionStart(signedUrl),
       onModeChange: current(({ mode }) => {
-        this.ringOff();
         this.setState({ type: "mode", mode });
       }),
       onMessage: current(({ source, message }) => {
@@ -739,11 +644,10 @@ class ElevenAgentsCardEditor extends HTMLElement {
       this.append(this.form);
     }
     this.form.hass = this._hass;
-    this.form.data = { show_transcript: true, ringtone: true, ...this.config };
+    this.form.data = { show_transcript: true, ...this.config };
     this.form.schema = [
       { name: "title", selector: { text: {} } },
       { name: "show_transcript", selector: { boolean: {} } },
-      { name: "ringtone", selector: { boolean: {} } },
     ];
     this.form.computeLabel = (schema) => t[schema.name];
   }

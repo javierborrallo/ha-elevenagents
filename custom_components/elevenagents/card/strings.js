@@ -41,7 +41,7 @@ export const STRINGS = {
       microphone: { title: "No access to the microphone", body: "The browser blocked the microphone. Allow it in the site settings and try again." },
       start: { title: "The conversation could not start", body: "ElevenAgents is not set up, or ElevenLabs does not answer. Try again in a moment." },
     },
-    editor: { title: "Title", show_transcript: "Show the transcript", ringtone: "Ring while connecting" },
+    editor: { title: "Title", show_transcript: "Show the transcript" },
   },
   es: {
     defaultTitle: "ElevenAgents",
@@ -83,7 +83,7 @@ export const STRINGS = {
       microphone: { title: "No hay permiso para el micrófono", body: "El navegador ha bloqueado el micrófono. Permítelo en los ajustes del sitio y vuelve a intentarlo." },
       start: { title: "No se pudo abrir la conversación", body: "ElevenAgents no está configurado o ElevenLabs no responde. Inténtalo de nuevo en un momento." },
     },
-    editor: { title: "Título", show_transcript: "Mostrar la transcripción", ringtone: "Tono de llamada al conectar" },
+    editor: { title: "Título", show_transcript: "Mostrar la transcripción" },
   },
 };
 

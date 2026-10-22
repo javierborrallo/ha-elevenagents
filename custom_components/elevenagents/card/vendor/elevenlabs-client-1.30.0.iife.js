@@ -106,7 +106,7 @@ var ElevenLabsClient = (function(exports) {
 	//#region src/sourceInfo.ts
 	let sourceInfo = Object.freeze({
 		name: "js_sdk",
-		version: "1.28.0"
+		version: "1.30.0"
 	});
 	//#endregion
 	//#region src/utils/events.ts
@@ -27293,11 +27293,13 @@ class AudioConcatProcessor extends AudioWorkletProcessor {
           break;
         case "buffer":
           this.wasInterrupted = false;
-          this.buffers.push(
-            this.format === "ulaw"
-              ? new Uint8Array(data.buffer)
-              : new Int16Array(data.buffer)
-          );
+          this.buffers.push({
+            samples:
+              this.format === "ulaw"
+                ? new Uint8Array(data.buffer)
+                : new Int16Array(data.buffer),
+            chunkId: data.chunkId,
+          });
           break;
         case "interrupt":
           this.wasInterrupted = true;
@@ -27320,7 +27322,11 @@ class AudioConcatProcessor extends AudioWorkletProcessor {
           finished = true;
           break;
         }
-        this.currentBuffer = this.buffers.shift();
+        const { samples, chunkId } = this.buffers.shift();
+        this.currentBuffer = samples;
+        if (chunkId !== undefined) {
+          this.port.postMessage({ type: "chunk_start", chunkId });
+        }
         if (this.resampler) {
           this.currentBuffer = this.resampler.full(this.currentBuffer);
         }
@@ -27468,6 +27474,9 @@ registerProcessor("audioConcatProcessor", AudioConcatProcessor);
 		}
 		volume = 1;
 		interrupted = false;
+		listeners = /* @__PURE__ */ new Set();
+		chunkMetadata = /* @__PURE__ */ new Map();
+		nextChunkId = 0;
 		interruptTimeout = null;
 		volumeProvider;
 		constructor(context, analyser, gain, worklet, audioElement) {
@@ -27476,6 +27485,7 @@ registerProcessor("audioConcatProcessor", AudioConcatProcessor);
 			this.gain = gain;
 			this.worklet = worklet;
 			this.audioElement = audioElement;
+			this.worklet.port.addEventListener("message", this.handleWorkletMessage);
 			this.worklet.port.start();
 			this.volumeProvider = createAnalyserVolumeProvider(analyser, context.sampleRate);
 		}
@@ -27489,16 +27499,33 @@ registerProcessor("audioConcatProcessor", AudioConcatProcessor);
 			this.volumeProvider.getByteFrequencyData(buffer);
 		}
 		addListener(listener) {
-			this.worklet.port.addEventListener("message", listener);
+			this.listeners.add(listener);
 		}
 		removeListener(listener) {
-			this.worklet.port.removeEventListener("message", listener);
+			this.listeners.delete(listener);
 		}
+		handleWorkletMessage = (event) => {
+			let playbackEvent = event;
+			if (event.data.type === "chunk_start") {
+				const { chunkId } = event.data;
+				const metadata = this.chunkMetadata.get(chunkId);
+				for (const id of this.chunkMetadata.keys()) {
+					if (id > chunkId) break;
+					this.chunkMetadata.delete(id);
+				}
+				if (!metadata) return;
+				playbackEvent = new MessageEvent("message", { data: {
+					type: "chunk_start",
+					...metadata
+				} });
+			}
+			for (const listener of this.listeners) listener(playbackEvent);
+		};
 		setVolume(volume) {
 			this.volume = volume;
 			this.gain.gain.value = volume;
 		}
-		playAudio(chunk) {
+		playAudio(chunk, metadata) {
 			this.gain.gain.cancelScheduledValues(this.context.currentTime);
 			this.gain.gain.value = this.volume;
 			if (this.interruptTimeout) {
@@ -27506,9 +27533,15 @@ registerProcessor("audioConcatProcessor", AudioConcatProcessor);
 				this.interruptTimeout = null;
 			}
 			this.worklet.port.postMessage({ type: "clearInterrupted" });
+			let chunkId;
+			if (metadata) {
+				chunkId = ++this.nextChunkId;
+				this.chunkMetadata.set(chunkId, metadata);
+			}
 			this.worklet.port.postMessage({
 				type: "buffer",
-				buffer: chunk
+				buffer: chunk,
+				chunkId
 			});
 		}
 		interrupt(resetDuration = 2e3) {
@@ -27995,7 +28028,14 @@ registerProcessor("rawAudioProcessor", RawAudioProcessor);
 		handleMessage(parsedEvent) {
 			super.handleMessage(parsedEvent);
 			if (parsedEvent.type === "audio" && parsedEvent.audio_event.audio_base_64) {
-				const audioEvent = { audio_base_64: parsedEvent.audio_event.audio_base_64 };
+				const { audio_base_64, event_id, alignment } = parsedEvent.audio_event;
+				const audioEvent = alignment ? {
+					audio_base_64,
+					metadata: {
+						event_id,
+						alignment
+					}
+				} : { audio_base_64 };
 				if (this.outputListeners.size === 0) {
 					this.pendingAudioEvents.push(audioEvent);
 					return;
@@ -28020,7 +28060,7 @@ registerProcessor("rawAudioProcessor", RawAudioProcessor);
 	//#region src/utils/attachConnectionToOutput.ts
 	function attachConnectionToOutput(connection, output) {
 		const listener = (event) => {
-			output.playAudio(base64ToArrayBuffer(event.audio_base_64));
+			output.playAudio(base64ToArrayBuffer(event.audio_base_64), event.metadata);
 		};
 		connection.addListener(listener);
 		return () => {
@@ -28595,6 +28635,16 @@ registerProcessor("scribeAudioProcessor", ScribeAudioProcessor);
 		return throttled;
 	}
 	//#endregion
+	//#region src/utils/audioTags.ts
+	const AUDIO_TAG_PATTERN = /\[[\w\s]+\](?!\()/g;
+	/**
+	* Removes expressive audio tags such as `[laughs]` or `[whispers]` from agent
+	* text.
+	*/
+	function stripAudioTags(text) {
+		return text.replace(AUDIO_TAG_PATTERN, "").trim();
+	}
+	//#endregion
 	//#region src/BaseConversation.ts
 	const END_CALL_DETAILS = {
 		reason: "agent",
@@ -28721,14 +28771,21 @@ registerProcessor("scribeAudioProcessor", ScribeAudioProcessor);
 			if (this.options.onMessage) this.options.onMessage({
 				source: "ai",
 				role: "agent",
-				message: event.agent_response_event.agent_response,
+				message: this.options.stripAudioTags ? stripAudioTags(event.agent_response_event.agent_response) : event.agent_response_event.agent_response,
 				event_id: event.agent_response_event.event_id,
 				...event.agent_response_event.response_id ? { response_id: event.agent_response_event.response_id } : {},
 				attachments: event.agent_response_event.attachments
 			});
 		}
 		handleAgentResponseCorrection(event) {
-			if (this.options.onAgentResponseCorrection) this.options.onAgentResponseCorrection(event.agent_response_correction_event);
+			if (this.options.onAgentResponseCorrection) {
+				const correction = event.agent_response_correction_event;
+				this.options.onAgentResponseCorrection(this.options.stripAudioTags ? {
+					...correction,
+					original_agent_response: stripAudioTags(correction.original_agent_response),
+					corrected_agent_response: stripAudioTags(correction.corrected_agent_response)
+				} : correction);
+			}
 		}
 		handleUserTranscript(event) {
 			if (this.options.onMessage) this.options.onMessage({
@@ -29190,8 +29247,22 @@ registerProcessor("scribeAudioProcessor", ScribeAudioProcessor);
 		inputFrequencyData;
 		outputFrequencyData;
 		handlePlaybackEvent = (event) => {
-			if (event.data.type === "process") this.updateMode(event.data.finished ? "listening" : "speaking");
+			switch (event.data.type) {
+				case "process":
+					this.updateMode(event.data.finished ? "listening" : "speaking");
+					break;
+				case "chunk_start":
+					this.emitAlignmentPlayback(event.data.event_id, event.data.alignment);
+					break;
+			}
 		};
+		emitAlignmentPlayback(eventId, alignment) {
+			if (eventId < this.lastInterruptTimestamp) return;
+			this.options.onAudioAlignmentPlayback?.({
+				event_id: eventId,
+				alignment
+			});
+		}
 		constructor(options, connection, input, output, playbackEventTarget, cleanUp) {
 			super(options, connection);
 			this.input = input;
@@ -29888,6 +29959,7 @@ registerProcessor("scribeAudioProcessor", ScribeAudioProcessor);
 	exports.WebSocketConnection = WebSocketConnection;
 	exports.createConnection = createConnection;
 	exports.postOverallFeedback = postOverallFeedback;
+	exports.stripAudioTags = stripAudioTags;
 	return exports;
 })({});
 

@@ -377,8 +377,8 @@ captions and a chip for each tool the agent uses.
 Press and hold the card to open its sheet: the time used against the agent's maximum, every action
 of the conversation, the full text, and a field to type in.
 
-The browser talks to ElevenLabs directly. Home Assistant hands it a short-lived token and never
-the API key. The agent acts through the same two tools and the same rules as on any other channel.
+The browser talks to ElevenLabs directly. Home Assistant hands it a signed URL and never the API
+key. The agent acts through the same two tools and the same rules as on any other channel.
 
 The microphone works only when you open Home Assistant over `https://`, for example through
 Nabu Casa. Without it the card says so and starts nothing.
@@ -387,19 +387,17 @@ Nabu Casa. Without it the card says so and starts nothing.
 type: custom:elevenagents-card
 title: Kitchen assistant
 show_transcript: true
-ringtone: true
 ```
 
 - `title`: the card title. The default is "ElevenAgents".
 - `show_transcript`: show the captions and chips on the card. The sheet always shows the
   transcript and the text field. The default is `true`.
-- `ringtone`: play a soft ring while the card connects. The default is `true`.
 
 A card conversation **spends ElevenLabs credits** like any other channel. Place the card on shared
 dashboards on purpose. The agent's maximum conversation length and silence timeout end a
 conversation. Set both under **Agent settings** in the panel, or in ElevenLabs.
 
-The card ships `@elevenlabs/client` 1.28.0 under its MIT licence. The licence text is in
+The card ships `@elevenlabs/client` 1.30.0 under its MIT licence. The licence text is in
 `card/vendor/LICENSE-elevenlabs-client.txt`.
 
 ## Uninstalling

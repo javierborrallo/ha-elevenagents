@@ -15,7 +15,6 @@ export function cardConfig(config) {
   return {
     title: config.title || "",
     show_transcript: config.show_transcript !== false,
-    ringtone: config.ringtone !== false,
   };
 }
 
@@ -201,21 +200,41 @@ export function endedSummary(reason, seconds, actionCount, t) {
   return [t.endedShort[reason] || t.endedShort.error, formatClock(seconds), t.actions(actionCount)].join(" · ");
 }
 
-// Play the element. When the browser blocks it, mute it and add its audio
-// tracks to the stream of `voice`, an element that a tap started playing.
-// Return true when the tracks move to `voice`.
-export async function relayIfBlocked(element, voice) {
-  try {
-    await element.play();
-    return false;
-  } catch (err) {
-    const target = voice && voice.srcObject;
-    const source = element.srcObject;
-    if (!target || !source) return false;
-    const tracks = source.getAudioTracks();
-    if (!tracks.length) return false;
-    element.muted = true;
-    for (const track of tracks) target.addTrack(track);
-    return true;
-  }
+// Return the options that start a session the way the ElevenLabs widget does:
+// a signed WebSocket URL, a 300 ms connection delay on every platform, and the
+// audio tags taken out of the text.
+export function sessionStart(signedUrl) {
+  return {
+    signedUrl,
+    connectionType: "websocket",
+    connectionDelay: { default: 300 },
+    stripAudioTags: true,
+  };
+}
+
+// Errors that getUserMedia raises when the microphone is refused, missing or busy.
+const MICROPHONE_ERRORS = new Set([
+  "NotAllowedError",
+  "NotFoundError",
+  "NotReadableError",
+  "SecurityError",
+]);
+
+// Return true when a start failure comes from the microphone.
+export function microphoneRefused(err) {
+  return Boolean(err) && MICROPHONE_ERRORS.has(err.name);
+}
+
+// States in which an audio context does not process audio until it resumes.
+const PAUSED_STATES = new Set(["suspended", "interrupted"]);
+
+// Resume an audio context now when it is paused, and again each time it pauses.
+// On Android the capture context of the SDK can stay suspended after the start.
+export function keepRunning(context) {
+  if (!context) return;
+  const wake = () => {
+    if (PAUSED_STATES.has(context.state)) context.resume().catch(() => {});
+  };
+  context.addEventListener("statechange", wake);
+  wake();
 }

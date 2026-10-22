@@ -4,6 +4,7 @@ import {
   STATES, nextState, preflightProblem, gridOptions, formFor, FORM_LIMITS,
   formatClock, progress, limitsFrom, addLine, cutLastAgentLine, HOLD_MS, createHold,
   chipFor, mergeChip, chipLabel, chipIcon, chipTone, endReason, endedSummary, cardConfig,
+  sessionStart, microphoneRefused, keepRunning,
 } from "../../custom_components/elevenagents/card/logic.js";
 
 test("a tap on Talk starts connecting from ready or ended", () => {
@@ -249,18 +250,73 @@ test("the end summary names the reason, the time and the actions", () => {
   assert.equal(endedSummary("error", 5, 0, T), "Cut off · 0:05 · 0 actions");
 });
 
-test("the card config turns the transcript and the ringtone on by default", () => {
-  assert.deepEqual(cardConfig({}), { title: "", show_transcript: true, ringtone: true });
+test("the card config turns the transcript on by default", () => {
+  assert.deepEqual(cardConfig({}), { title: "", show_transcript: true });
 });
 
 test("the card config turns off only on an explicit false", () => {
   assert.deepEqual(
-    cardConfig({ title: "Kitchen", show_transcript: false, ringtone: false }),
-    { title: "Kitchen", show_transcript: false, ringtone: false },
+    cardConfig({ title: "Kitchen", show_transcript: false }),
+    { title: "Kitchen", show_transcript: false },
   );
-  assert.equal(cardConfig({ ringtone: 0 }).ringtone, true);
+  assert.equal(cardConfig({ show_transcript: 0 }).show_transcript, true);
+});
+
+test("the card config drops the ringtone option", () => {
+  assert.equal("ringtone" in cardConfig({ ringtone: true }), false);
 });
 
 test("the card config drops the text input option", () => {
   assert.equal("show_text_input" in cardConfig({ show_text_input: false }), false);
+});
+
+test("a session starts like the ElevenLabs widget", () => {
+  assert.deepEqual(sessionStart("wss://example/convai"), {
+    signedUrl: "wss://example/convai",
+    connectionType: "websocket",
+    connectionDelay: { default: 300 },
+    stripAudioTags: true,
+  });
+});
+
+test("a refused or missing microphone is told apart from other start failures", () => {
+  for (const name of ["NotAllowedError", "NotFoundError", "NotReadableError", "SecurityError"]) {
+    assert.equal(microphoneRefused({ name }), true);
+  }
+  assert.equal(microphoneRefused(new Error("SDK failed to load")), false);
+  assert.equal(microphoneRefused(null), false);
+});
+
+function fakeContext(state) {
+  const listeners = [];
+  const context = {
+    state,
+    resumed: 0,
+    addEventListener: (type, fn) => { if (type === "statechange") listeners.push(fn); },
+    resume() { context.resumed += 1; context.state = "running"; return Promise.resolve(); },
+    pause(next) { context.state = next; for (const fn of listeners) fn(); },
+  };
+  return context;
+}
+
+test("the capture resumes when Android leaves it suspended", () => {
+  const context = fakeContext("suspended");
+  keepRunning(context);
+  assert.equal(context.resumed, 1);
+  assert.equal(context.state, "running");
+});
+
+test("the capture resumes again each time Android pauses it", () => {
+  const context = fakeContext("running");
+  keepRunning(context);
+  assert.equal(context.resumed, 0);
+  context.pause("interrupted");
+  context.pause("suspended");
+  assert.equal(context.resumed, 2);
+  context.pause("closed");
+  assert.equal(context.resumed, 2);
+});
+
+test("a session without a capture context needs nothing", () => {
+  assert.doesNotThrow(() => keepRunning(undefined));
 });

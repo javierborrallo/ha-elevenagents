@@ -50,7 +50,7 @@ from .const import (
 from .elevenlabs_client import (
     ElevenLabsError,
     async_get_agent,
-    async_get_conversation_token,
+    async_get_signed_url,
     async_get_tool,
     async_patch_agent,
 )
@@ -761,29 +761,29 @@ def _agent_limits(agent: Any) -> dict[str, Any]:
 
 
 @websocket_api.websocket_command(
-    {vol.Required("type"): "elevenagents/conversation_token"}
+    {vol.Required("type"): "elevenagents/conversation_url"}
 )
 @websocket_api.async_response
-async def conversation_token(
+async def conversation_url(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Return a conversation token and the agent's limits. Any user may ask."""
+    """Return a signed WebSocket URL and the agent's limits. Any user may ask."""
     entry, _ = _sole_entry(hass)
     if entry is None or entry.state is not ConfigEntryState.LOADED:
         connection.send_error(msg["id"], "not_configured", "ElevenAgents is not set up")
         return
     client = entry.runtime_data.client
     agent_id = entry.data[CONF_AGENT_ID]
-    token, agent = await asyncio.gather(
-        async_get_conversation_token(client, agent_id),
+    signed_url, agent = await asyncio.gather(
+        async_get_signed_url(client, agent_id),
         async_get_agent(client, agent_id),
         return_exceptions=True,
     )
-    if isinstance(token, ElevenLabsError):
-        connection.send_error(msg["id"], "unreachable", type(token).__name__)
+    if isinstance(signed_url, ElevenLabsError):
+        connection.send_error(msg["id"], "unreachable", type(signed_url).__name__)
         return
-    if isinstance(token, BaseException):
-        raise token
+    if isinstance(signed_url, BaseException):
+        raise signed_url
     if isinstance(agent, BaseException):
         _LOGGER.debug("The agent read for the limits failed: %s", type(agent).__name__)
         limits: dict[str, Any] = {
@@ -792,7 +792,7 @@ async def conversation_token(
         }
     else:
         limits = _agent_limits(agent)
-    connection.send_result(msg["id"], {"token": token, "limits": limits})
+    connection.send_result(msg["id"], {"signed_url": signed_url, "limits": limits})
 
 
 def async_register_commands(hass: HomeAssistant) -> None:
@@ -804,4 +804,4 @@ def async_register_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, rotate)
     websocket_api.async_register_command(hass, check)
     websocket_api.async_register_command(hass, webhook_probe)
-    websocket_api.async_register_command(hass, conversation_token)
+    websocket_api.async_register_command(hass, conversation_url)

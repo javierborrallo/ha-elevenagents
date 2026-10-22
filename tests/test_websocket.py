@@ -1712,7 +1712,7 @@ async def test_config_save_stores_sensitive_marks_by_key(
     }
 
 
-_FETCH_PATH = "custom_components.elevenagents.websocket.async_get_conversation_token"
+_FETCH_PATH = "custom_components.elevenagents.websocket.async_get_signed_url"
 
 _AGENT_PATH = "custom_components.elevenagents.websocket.async_get_agent"
 _LIMITS = {"max_duration_seconds": 180, "silence_end_call_timeout": 60.0}
@@ -1726,77 +1726,85 @@ def _agent_with_limits(max_duration: int | None, silence: float | None) -> Magic
     return agent
 
 
-async def test_conversation_token_is_open_to_a_non_admin(
+async def test_conversation_url_is_open_to_a_non_admin(
     hass, setup_entry, hass_read_only_access_token, hass_ws_client: WebSocketGenerator
 ) -> None:
     """Any authenticated user may open a conversation from a dashboard."""
     client = await hass_ws_client(hass, hass_read_only_access_token)
     with (
-        patch(_FETCH_PATH, AsyncMock(return_value="tok-123")) as fetch,
+        patch(
+            _FETCH_PATH, AsyncMock(return_value="wss://elevenlabs.example/tok-123")
+        ) as fetch,
         patch(_AGENT_PATH, AsyncMock(return_value=_agent_with_limits(180, 60.0))),
     ):
-        await client.send_json_auto_id({"type": "elevenagents/conversation_token"})
+        await client.send_json_auto_id({"type": "elevenagents/conversation_url"})
         msg = await client.receive_json()
 
     assert msg["success"]
-    assert msg["result"] == {"token": "tok-123", "limits": _LIMITS}
+    assert msg["result"] == {
+        "signed_url": "wss://elevenlabs.example/tok-123",
+        "limits": _LIMITS,
+    }
     assert fetch.await_args is not None
     assert fetch.await_args.args[1] == setup_entry.data[CONF_AGENT_ID]
 
 
-async def test_conversation_token_works_for_an_admin(
+async def test_conversation_url_works_for_an_admin(
     hass, setup_entry, hass_ws_client: WebSocketGenerator
 ) -> None:
     """An administrator gets the same answer."""
     client = await hass_ws_client(hass)
     with (
-        patch(_FETCH_PATH, AsyncMock(return_value="tok-123")),
+        patch(_FETCH_PATH, AsyncMock(return_value="wss://elevenlabs.example/tok-123")),
         patch(_AGENT_PATH, AsyncMock(return_value=_agent_with_limits(180, 60.0))),
     ):
-        await client.send_json_auto_id({"type": "elevenagents/conversation_token"})
+        await client.send_json_auto_id({"type": "elevenagents/conversation_url"})
         msg = await client.receive_json()
 
     assert msg["success"]
-    assert msg["result"] == {"token": "tok-123", "limits": _LIMITS}
+    assert msg["result"] == {
+        "signed_url": "wss://elevenlabs.example/tok-123",
+        "limits": _LIMITS,
+    }
 
 
-async def test_conversation_token_still_answers_when_the_agent_read_fails(
+async def test_conversation_url_still_answers_when_the_agent_read_fails(
     hass, setup_entry, hass_ws_client: WebSocketGenerator
 ) -> None:
     """The limits are optional. A failed agent read does not stop the conversation."""
     client = await hass_ws_client(hass)
     with (
-        patch(_FETCH_PATH, AsyncMock(return_value="tok-123")),
+        patch(_FETCH_PATH, AsyncMock(return_value="wss://elevenlabs.example/tok-123")),
         patch(_AGENT_PATH, AsyncMock(side_effect=ElevenLabsAuthError("key text"))),
     ):
-        await client.send_json_auto_id({"type": "elevenagents/conversation_token"})
+        await client.send_json_auto_id({"type": "elevenagents/conversation_url"})
         msg = await client.receive_json()
 
     assert msg["success"]
     assert msg["result"] == {
-        "token": "tok-123",
+        "signed_url": "wss://elevenlabs.example/tok-123",
         "limits": {"max_duration_seconds": None, "silence_end_call_timeout": None},
     }
 
 
-async def test_conversation_token_logs_only_the_class_of_a_failed_agent_read(
+async def test_conversation_url_logs_only_the_class_of_a_failed_agent_read(
     hass, setup_entry, hass_ws_client: WebSocketGenerator, caplog
 ) -> None:
     """The debug record names the exception class and never its text."""
     caplog.set_level("DEBUG", logger="custom_components.elevenagents.websocket")
     client = await hass_ws_client(hass)
     with (
-        patch(_FETCH_PATH, AsyncMock(return_value="tok-123")),
+        patch(_FETCH_PATH, AsyncMock(return_value="wss://elevenlabs.example/tok-123")),
         patch(_AGENT_PATH, AsyncMock(side_effect=ElevenLabsAuthError("key text"))),
     ):
-        await client.send_json_auto_id({"type": "elevenagents/conversation_token"})
+        await client.send_json_auto_id({"type": "elevenagents/conversation_url"})
         await client.receive_json()
 
     assert "ElevenLabsAuthError" in caplog.text
     assert "key text" not in caplog.text
 
 
-async def test_conversation_token_without_conversation_settings(
+async def test_conversation_url_without_conversation_settings(
     hass, setup_entry, hass_ws_client: WebSocketGenerator
 ) -> None:
     """An agent without conversation or turn settings gives None limits."""
@@ -1805,10 +1813,10 @@ async def test_conversation_token_without_conversation_settings(
     agent.conversation_config.turn = None
     client = await hass_ws_client(hass)
     with (
-        patch(_FETCH_PATH, AsyncMock(return_value="tok-123")),
+        patch(_FETCH_PATH, AsyncMock(return_value="wss://elevenlabs.example/tok-123")),
         patch(_AGENT_PATH, AsyncMock(return_value=agent)),
     ):
-        await client.send_json_auto_id({"type": "elevenagents/conversation_token"})
+        await client.send_json_auto_id({"type": "elevenagents/conversation_url"})
         msg = await client.receive_json()
 
     assert msg["result"]["limits"] == {
@@ -1817,19 +1825,19 @@ async def test_conversation_token_without_conversation_settings(
     }
 
 
-async def test_conversation_token_without_an_entry(hass, hass_ws_client) -> None:
+async def test_conversation_url_without_an_entry(hass, hass_ws_client) -> None:
     """No configured entry answers not_configured."""
     assert await async_setup_component(hass, DOMAIN, {})
     client = await hass_ws_client(hass)
 
-    await client.send_json_auto_id({"type": "elevenagents/conversation_token"})
+    await client.send_json_auto_id({"type": "elevenagents/conversation_url"})
     msg = await client.receive_json()
 
     assert not msg["success"]
     assert msg["error"]["code"] == "not_configured"
 
 
-async def test_conversation_token_reports_an_elevenlabs_failure(
+async def test_conversation_url_reports_an_elevenlabs_failure(
     hass, setup_entry, hass_ws_client: WebSocketGenerator
 ) -> None:
     """A refused key answers unreachable with the class name only."""
@@ -1838,24 +1846,24 @@ async def test_conversation_token_reports_an_elevenlabs_failure(
         patch(_FETCH_PATH, AsyncMock(side_effect=ElevenLabsAuthError("key text"))),
         patch(_AGENT_PATH, AsyncMock(return_value=_agent_with_limits(180, 60.0))),
     ):
-        await client.send_json_auto_id({"type": "elevenagents/conversation_token"})
+        await client.send_json_auto_id({"type": "elevenagents/conversation_url"})
         msg = await client.receive_json()
 
     assert not msg["success"]
     assert msg["error"] == {"code": "unreachable", "message": "ElevenLabsAuthError"}
 
 
-async def test_conversation_token_never_reaches_the_log(
+async def test_conversation_url_never_reaches_the_log(
     hass, setup_entry, hass_ws_client: WebSocketGenerator, caplog
 ) -> None:
-    """The token is a credential. No log line of this integration carries it."""
+    """The signed URL is a credential. No log line of this integration carries it."""
     caplog.set_level(logging.DEBUG)
     client = await hass_ws_client(hass)
     with (
         patch(_FETCH_PATH, AsyncMock(return_value="tok-secret-987")),
         patch(_AGENT_PATH, AsyncMock(return_value=_agent_with_limits(180, 60.0))),
     ):
-        await client.send_json_auto_id({"type": "elevenagents/conversation_token"})
+        await client.send_json_auto_id({"type": "elevenagents/conversation_url"})
         await client.receive_json()
 
     ours = [
