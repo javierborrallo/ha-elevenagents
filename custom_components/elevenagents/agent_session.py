@@ -15,6 +15,7 @@ from .const import TURN_IDLE_SECONDS, TURN_MAX_SECONDS
 from .elevenlabs_client import (
     ElevenLabsAuthError,
     ElevenLabsError,
+    async_get_agent,
     async_get_signed_url,
 )
 
@@ -26,10 +27,11 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-CONVERSATION_OVERRIDE = {
-    "conversation": {"text_only": True},
-    "agent": {"first_message": ""},
-}
+CONVERSATION_OVERRIDE = {"conversation": {"text_only": True}}
+# Seconds the event waits for the agent's greeting before it is sent.
+GREETING_WAIT_SECONDS = 3.0
+# The close code ElevenLabs sends when it refuses the conversation's settings.
+CLOSE_REJECTED = 1008
 # Extra time, over the turn's own maximum, allowed for the connect and the
 # close handshake around it.
 CONNECT_CLOSE_MARGIN = 5.0
@@ -45,7 +47,8 @@ class SessionError(Exception):
     """
     A turn that could not run.
 
-    `reason` is refused, busy, unreachable, quota_exceeded, protocol or closed.
+    `reason` is refused, busy, unreachable, quota_exceeded, protocol, rejected or
+    closed.
     """
 
     def __init__(self, reason: str) -> None:
@@ -96,10 +99,14 @@ class _TurnState:
     pending_tools: set[str] = field(default_factory=set)
     answered_tools: set[str] = field(default_factory=set)
     on_started: Callable[[str], None] | None = None
+    greeting: bool = False
+    started_at: float | None = None
 
 
 def _idle_wait(state: _TurnState, remaining: float, now: float) -> float:
     """Return how long to wait for the next frame."""
+    if not state.sent and state.started_at is not None:
+        return min(remaining, state.started_at + GREETING_WAIT_SECONDS - now)
     if state.last_content is None or state.pending_tools:
         return remaining
     return min(remaining, state.last_content + TURN_IDLE_SECONDS - now)
@@ -108,6 +115,15 @@ def _idle_wait(state: _TurnState, remaining: float, now: float) -> float:
 def _mark_ended(state: _TurnState) -> None:
     """Set incomplete: nothing arrived yet, or a tool is still pending."""
     state.result.incomplete = state.last_content is None or bool(state.pending_tools)
+
+
+async def _send_event(
+    ws: aiohttp.ClientWebSocketResponse, state: _TurnState, text: str
+) -> None:
+    """Send the event as the user message, once."""
+    if not state.sent:
+        await ws.send_json({"type": "user_message", "text": text})
+        state.sent = True
 
 
 async def _apply_frame(
@@ -133,11 +149,14 @@ async def _apply_frame(
         state.result.conversation_id = conversation_id
         if state.on_started is not None:
             state.on_started(conversation_id)
-        if not state.sent:
-            await ws.send_json({"type": "user_message", "text": text})
-            state.sent = True
+        state.started_at = loop.time()
+        if not state.greeting:
+            await _send_event(ws, state, text)
     elif kind == "agent_response":
-        if state.sent:
+        if not state.sent:
+            # The agent's greeting is not an answer. The event follows it.
+            await _send_event(ws, state, text)
+        else:
             state.result.responses.append(
                 str(payload["agent_response_event"]["agent_response"]).strip()
             )
@@ -162,11 +181,18 @@ async def _collect(
     ws: aiohttp.ClientWebSocketResponse,
     text: str,
     on_started: Callable[[str], None] | None,
+    *,
+    greeting: bool,
 ) -> TurnResult:
-    """Send the user message after the metadata, then read until the turn ends."""
+    """
+    Send the user message, then read until the turn ends.
+
+    Without a greeting the message goes out after the metadata. With a
+    greeting it goes out after the greeting, or after GREETING_WAIT_SECONDS.
+    """
     loop = asyncio.get_running_loop()
     deadline = loop.time() + TURN_MAX_SECONDS
-    state = _TurnState(on_started=on_started)
+    state = _TurnState(on_started=on_started, greeting=greeting)
     while True:
         remaining = deadline - loop.time()
         if remaining <= 0:
@@ -176,9 +202,15 @@ async def _collect(
         try:
             message = await ws.receive(timeout=wait)
         except TimeoutError:
+            if not state.sent and state.started_at is not None:
+                await _send_event(ws, state, text)
+                continue
             _mark_ended(state)
             return state.result
         if message.type in _ENDED:
+            if message.data == CLOSE_REJECTED and state.last_content is None:
+                reason = "rejected"
+                raise SessionError(reason)
             if state.result.conversation_id is not None:
                 state.result.incomplete = True
                 return state.result
@@ -188,6 +220,19 @@ async def _collect(
         payload = json.loads(message.data)
         if await _apply_frame(ws, state, text, payload):
             return state.result
+
+
+def _has_greeting(agent: Any) -> bool:
+    """Return True when the agent read carries a greeting. A failed read has none."""
+    if isinstance(agent, BaseException):
+        _LOGGER.debug(
+            "The agent read for the greeting failed: %s", type(agent).__name__
+        )
+        return False
+    try:
+        return bool(agent.conversation_config.agent.first_message)
+    except AttributeError:
+        return False
 
 
 _HANDSHAKE_AUTH_STATUSES = (401, 403)
@@ -219,8 +264,16 @@ async def async_run_turn(  # noqa: PLR0913 - each argument is part of one turn
     the agent answers. on_started, when given, is called with the
     conversation id as soon as it is known, before the user message is sent.
     """
+    url_read, agent_read = await asyncio.gather(
+        async_get_signed_url(client, agent_id),
+        async_get_agent(client, agent_id),
+        return_exceptions=True,
+    )
+    greeting = _has_greeting(agent_read)
     try:
-        url = await async_get_signed_url(client, agent_id)
+        if isinstance(url_read, BaseException):
+            raise url_read
+        url = url_read
     except ElevenLabsAuthError as err:
         reason = "refused"
         raise SessionError(reason) from err
@@ -239,7 +292,7 @@ async def async_run_turn(  # noqa: PLR0913 - each argument is part of one turn
                     "dynamic_variables": dynamic_variables,
                 }
             )
-            return await _collect(ws, text, on_started)
+            return await _collect(ws, text, on_started, greeting=greeting)
     except TimeoutError as err:
         reason = "unreachable"
         raise SessionError(reason) from err

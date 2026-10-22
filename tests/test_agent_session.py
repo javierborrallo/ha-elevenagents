@@ -6,7 +6,7 @@ import asyncio
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
@@ -34,6 +34,7 @@ pytestmark = pytest.mark.filterwarnings(
 )
 
 SIGNED = "custom_components.elevenagents.agent_session.async_get_signed_url"
+AGENT = "custom_components.elevenagents.agent_session.async_get_agent"
 Behaviour = Callable[[web.WebSocketResponse, list[dict[str, Any]]], Awaitable[None]]
 
 
@@ -64,6 +65,9 @@ def fast_turns():
 async def fake(socket_enabled) -> AsyncGenerator[SimpleNamespace]:
     """Serve a fake ElevenLabs WebSocket endpoint. Each test sets `behave`."""
     state = SimpleNamespace(behave=None, received=[])
+    agent = MagicMock()
+    agent.conversation_config.agent.first_message = ""
+    state.agent = agent
 
     async def handler(request: web.Request) -> web.WebSocketResponse:
         ws = web.WebSocketResponse()
@@ -77,7 +81,10 @@ async def fake(socket_enabled) -> AsyncGenerator[SimpleNamespace]:
     server = TestServer(app)
     await server.start_server()
     state.url = str(server.make_url("/ws"))
-    with patch(SIGNED, AsyncMock(return_value=state.url)) as signed:
+    with (
+        patch(SIGNED, AsyncMock(return_value=state.url)) as signed,
+        patch(AGENT, AsyncMock(return_value=agent)),
+    ):
         state.signed = signed
         yield state
     await server.close()
@@ -190,10 +197,7 @@ async def test_the_first_frames_ask_for_text_only_and_carry_the_variables(
     init, user = fake.received
     assert init == {
         "type": "conversation_initiation_client_data",
-        "conversation_config_override": {
-            "conversation": {"text_only": True},
-            "agent": {"first_message": ""},
-        },
+        "conversation_config_override": {"conversation": {"text_only": True}},
         "dynamic_variables": {"event_type": "door"},
     }
     assert user == {"type": "user_message", "text": "Evento: puerta"}
@@ -317,17 +321,78 @@ async def test_an_agent_response_before_the_metadata_is_not_the_answer(
     assert result.responses == ["Son 10 grados."]
 
 
-async def test_the_initiation_overrides_the_greeting_away(hass, setup_entry, fake):
-    """The override silences the agent's own greeting, not only text_only."""
+async def test_the_initiation_leaves_the_greeting_alone(hass, setup_entry, fake):
+    """An agent may refuse a greeting override, so the event sends none."""
     fake.behave = _standard(_response("Vale."))
 
     await _run(hass, setup_entry, "x", {})
 
     init, _user = fake.received
-    assert init["conversation_config_override"] == {
-        "conversation": {"text_only": True},
-        "agent": {"first_message": ""},
-    }
+    assert init["conversation_config_override"] == {"conversation": {"text_only": True}}
+
+
+async def test_the_greeting_is_dropped_and_the_event_follows_it(
+    hass, setup_entry, fake
+):
+    """The agent's own greeting is not an answer to the event."""
+    fake.agent.conversation_config.agent.first_message = "Hola, ¿en qué te ayudo?"
+
+    async def behave(ws, received) -> None:
+        received.append(await ws.receive_json())
+        await ws.send_json(_metadata())
+        await ws.send_json(_response("Hola, ¿en qué te ayudo?"))
+        received.append(await ws.receive_json())
+        await ws.send_json(_response("Vale."))
+        await _hold(ws)
+
+    fake.behave = behave
+
+    result = await _run(hass, setup_entry, "Evento: timbre", {})
+
+    assert result.responses == ["Vale."]
+    assert fake.received[1] == {"type": "user_message", "text": "Evento: timbre"}
+
+
+async def test_a_greeting_that_never_comes_does_not_hold_the_event(
+    hass, setup_entry, fake
+):
+    """The event goes out after a short wait when no greeting arrives."""
+    fake.agent.conversation_config.agent.first_message = "Hola"
+    fake.behave = _standard(_response("Vale."))
+
+    with patch(
+        "custom_components.elevenagents.agent_session.GREETING_WAIT_SECONDS", 0.2
+    ):
+        result = await _run(hass, setup_entry, "x", {})
+
+    assert result.responses == ["Vale."]
+
+
+async def test_an_unreadable_agent_sends_the_event_at_once(hass, setup_entry, fake):
+    """Without the agent's settings the event does not wait for a greeting."""
+    fake.behave = _standard(_response("Vale."))
+
+    with patch(AGENT, AsyncMock(side_effect=ElevenLabsError("500"))):
+        result = await _run(hass, setup_entry, "x", {})
+
+    assert result.responses == ["Vale."]
+
+
+async def test_a_start_the_agent_rejects_is_a_failed_delivery(hass, setup_entry, fake):
+    """A policy close before any answer means the agent refused the conversation."""
+
+    async def behave(ws, received) -> None:
+        received.append(await ws.receive_json())
+        await ws.send_json(_metadata())
+        received.append(await ws.receive_json())
+        await ws.close(code=1008, message=b"Override is not allowed by config.")
+
+    fake.behave = behave
+
+    with pytest.raises(SessionError) as err:
+        await _run(hass, setup_entry, "x", {})
+
+    assert err.value.reason == "rejected"
 
 
 async def test_pings_do_not_keep_the_turn_open(hass, setup_entry, fake):
