@@ -12,8 +12,8 @@ Assistant, through tools this integration writes and keeps up to date for you.
 > **Beta.** A new version may break your configuration.
 
 <p align="center">
-  <img src="images/card.jpg" alt="The dashboard card during a conversation" width="300">
-  <img src="images/panel.jpg" alt="The configuration panel" width="300">
+  <img src="images/card.jpg" alt="The dashboard card during a conversation" height="600">
+  <img src="images/panel.jpg" alt="The configuration panel" height="600">
 </p>
 
 ## What this is
