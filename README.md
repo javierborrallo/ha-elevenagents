@@ -11,6 +11,9 @@ Assistant, through tools this integration writes and keeps up to date for you.
 > [!WARNING]
 > **Beta.** A new version may break your configuration.
 
+An unofficial integration. It is not made, endorsed or supported by ElevenLabs. ElevenLabs and
+ElevenAgents are trademarks of ElevenLabs.
+
 <p align="center">
   <img src="images/card.jpg" alt="The dashboard card during a conversation" height="600">
   <img src="images/panel.jpg" alt="The configuration panel" height="600">
