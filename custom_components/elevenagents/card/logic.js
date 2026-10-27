@@ -238,3 +238,14 @@ export function keepRunning(context) {
   context.addEventListener("statechange", wake);
   wake();
 }
+
+// Stop the tracks of the SDK's output element and release its stream. The SDK
+// closes its contexts at the end of a session but leaves this stream live.
+// Return true when a stream was released.
+export function releaseOutput(conversation) {
+  const element = conversation && conversation.output && conversation.output.audioElement;
+  if (!element || !element.srcObject) return false;
+  for (const track of element.srcObject.getTracks()) track.stop();
+  element.srcObject = null;
+  return true;
+}

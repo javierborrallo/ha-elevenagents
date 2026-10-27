@@ -4,7 +4,7 @@ import {
   STATES, nextState, preflightProblem, gridOptions, formFor,
   chipFor, mergeChip, chipLabel, chipIcon, chipTone, endReason, endedSummary, cardConfig,
   limitsFrom, progress, addLine, cutLastAgentLine, createHold,
-  sessionStart, microphoneRefused, keepRunning,
+  sessionStart, microphoneRefused, keepRunning, releaseOutput,
 } from "./logic.js";
 import { stringsFor } from "./strings.js";
 import { el, icon } from "./dom.js";
@@ -550,6 +550,7 @@ class ElevenAgentsCard extends HTMLElement {
         this.render();
       }),
       onDisconnect: current((details) => {
+        releaseOutput(this.conversation);
         this.endedReason = this.endedReason || endReason(details);
         this.endedAt = Date.now();
         this.conversation = null;
@@ -590,13 +591,16 @@ class ElevenAgentsCard extends HTMLElement {
     const conversation = this.conversation;
     const run = this.run;
     this.conversation = null;
-    return conversation.endSession().catch((err) => {
-      console.warn("ElevenAgents card:", err && err.message);
-      if (run !== this.run) return;
-      this.endedAt = Date.now();
-      if (activeCard === this) activeCard = null;
-      this.setState({ type: "ended" });
-    });
+    return conversation
+      .endSession()
+      .catch((err) => {
+        console.warn("ElevenAgents card:", err && err.message);
+        if (run !== this.run) return;
+        this.endedAt = Date.now();
+        if (activeCard === this) activeCard = null;
+        this.setState({ type: "ended" });
+      })
+      .finally(() => releaseOutput(conversation));
   }
 
   onMute() {

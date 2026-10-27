@@ -4,7 +4,7 @@ import {
   STATES, nextState, preflightProblem, gridOptions, formFor, FORM_LIMITS,
   formatClock, progress, limitsFrom, addLine, cutLastAgentLine, HOLD_MS, createHold,
   chipFor, mergeChip, chipLabel, chipIcon, chipTone, endReason, endedSummary, cardConfig,
-  sessionStart, microphoneRefused, keepRunning,
+  sessionStart, microphoneRefused, keepRunning, releaseOutput,
 } from "../../custom_components/elevenagents/card/logic.js";
 
 test("a tap on Talk starts connecting from ready or ended", () => {
@@ -319,4 +319,22 @@ test("the capture resumes again each time Android pauses it", () => {
 
 test("a session without a capture context needs nothing", () => {
   assert.doesNotThrow(() => keepRunning(undefined));
+});
+
+function fakeTrack() {
+  return { readyState: "live", stop() { this.readyState = "ended"; } };
+}
+
+test("the output stream is stopped and released after the session", () => {
+  const track = fakeTrack();
+  const element = { srcObject: { getTracks: () => [track] } };
+  assert.equal(releaseOutput({ output: { audioElement: element } }), true);
+  assert.equal(track.readyState, "ended");
+  assert.equal(element.srcObject, null);
+});
+
+test("a session without an output stream needs nothing", () => {
+  assert.equal(releaseOutput(null), false);
+  assert.equal(releaseOutput({ output: {} }), false);
+  assert.equal(releaseOutput({ output: { audioElement: { srcObject: null } } }), false);
 });
