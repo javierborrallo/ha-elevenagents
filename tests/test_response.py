@@ -215,7 +215,7 @@ def test_home_assistant_error_becomes_execution_failed():
 
 
 def test_read_results_has_no_top_level_ok():
-    """A call that resolved some entities and not others is neither."""
+    """Partly resolved is neither ok nor failed; the payload carries the time."""
     payload = read_results(
         [
             {"entity_id": "light.one", "state": "on"},
@@ -223,7 +223,7 @@ def test_read_results_has_no_top_level_ok():
         ]
     )
 
-    assert set(payload) == {"results"}
+    assert set(payload) == {"results", "now"}
     assert len(payload["results"]) == 2
 
 

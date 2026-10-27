@@ -180,9 +180,15 @@ def write_result(
     return result
 
 
+def changed_at(hass: HomeAssistant, entity_id: str) -> str | None:
+    """Return when the entity's state last changed, in local time."""
+    state = hass.states.get(entity_id)
+    return None if state is None else _local_time(state.last_changed)
+
+
 def read_results(results: list[dict[str, Any]]) -> dict[str, Any]:
-    """Wrap per-entity read results. There is no top-level ok."""
-    return {"results": results}
+    """Wrap per-entity read results with the local time. There is no top-level ok."""
+    return {"results": results, "now": _local_time(dt_util.utcnow())}
 
 
 def error_fields(exc: Exception) -> tuple[str, dict[str, Any]]:

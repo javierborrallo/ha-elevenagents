@@ -304,6 +304,42 @@ async def test_read_returns_one_result_per_entity_and_one_failure_does_not_fail_
     assert body["results"][1] == {"entity_id": "light.gone", "error": "not_found"}
 
 
+async def test_read_says_when_each_state_changed_and_what_time_it_is(
+    hass, config_entry, entity_registry, freezer
+):
+    """The agent can answer since when, and only a new state moves the time."""
+    freezer.move_to("2026-10-27 08:00:00+00:00")
+    door = entity_registry.async_get_or_create("binary_sensor", "demo", "door")
+    hass.states.async_set(door.entity_id, "on", {"friendly_name": "Door"})
+    changed = dt_util.utcnow()
+    freezer.tick(timedelta(minutes=20))
+    hass.states.async_set(door.entity_id, "on", {"friendly_name": "Door", "x": 1})
+    hass.config_entries.async_update_entry(
+        config_entry, options={OPT_READ_ENTITIES: [door.id]}
+    )
+
+    body = await async_read(
+        hass, config_entry, {"tool": "get_state", "entity_id": [door.entity_id]}
+    )
+
+    local = dt_util.as_local
+    assert body["results"][0]["last_changed"] == local(changed).isoformat(
+        timespec="seconds"
+    )
+    assert body["now"] == local(dt_util.utcnow()).isoformat(timespec="seconds")
+
+
+async def test_a_failed_read_entry_carries_no_last_changed(
+    hass, config_entry, entity_registry
+):
+    """An entity the agent may not read reveals no time either."""
+    body = await async_read(
+        hass, config_entry, {"tool": "get_state", "entity_id": ["light.gone"]}
+    )
+
+    assert body["results"] == [{"entity_id": "light.gone", "error": "not_found"}]
+
+
 async def test_read_of_an_unselected_entity_is_not_found(
     hass, config_entry, entity_registry
 ):

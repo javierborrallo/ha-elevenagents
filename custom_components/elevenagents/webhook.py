@@ -42,7 +42,14 @@ from .const import (
     WRITE_WAIT_SECONDS,
 )
 from .permissions import authorise_action, authorise_read, from_options, permission_key
-from .response import error_fields, malformed, project, read_results, write_result
+from .response import (
+    changed_at,
+    error_fields,
+    malformed,
+    project,
+    read_results,
+    write_result,
+)
 from .sensitive import sensitive_mark
 from .tool_sync import service_data_keys
 
@@ -254,6 +261,8 @@ async def async_read(
             results.append({"entity_id": entity_id, "error": ERROR_NOT_FOUND})
             continue
         projected = project(hass, entity_id)
+        if projected:
+            projected["last_changed"] = changed_at(hass, entity_id)
         results.append(projected or {"entity_id": entity_id, "error": ERROR_NOT_FOUND})
 
     _LOGGER.debug(
