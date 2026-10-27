@@ -303,14 +303,31 @@ async def test_config_get_refuses_an_entry_from_another_integration(
     assert message["error"]["code"] == "not_found"
 
 
-async def test_config_get_refuses_a_non_admin(
-    hass, setup_entry, hass_read_only_access_token, hass_ws_client: WebSocketGenerator
+@pytest.mark.parametrize(
+    "command",
+    [
+        {"type": "elevenagents/config/get"},
+        {
+            "type": "elevenagents/config/save",
+            "block": "auto_expose",
+            "data": {"read": True, "control": True, "areas": []},
+        },
+        {"type": "elevenagents/agent/get"},
+        {"type": "elevenagents/agent/save", "prompt": "x"},
+        {"type": "elevenagents/rotate", "what": "secret"},
+    ],
+    ids=["config_get", "config_save", "agent_get", "agent_save", "rotate"],
+)
+async def test_a_panel_command_refuses_a_non_admin(
+    hass,
+    setup_entry,
+    hass_read_only_access_token,
+    hass_ws_client: WebSocketGenerator,
+    command: dict[str, Any],
 ) -> None:
-    """The screen that grants actions on a lock is for administrators."""
+    """Every panel command except the conversation URL is for administrators."""
     client = await hass_ws_client(hass, hass_read_only_access_token)
-    await client.send_json_auto_id(
-        {"type": "elevenagents/config/get", "entry_id": setup_entry.entry_id}
-    )
+    await client.send_json_auto_id({**command, "entry_id": setup_entry.entry_id})
     message = await client.receive_json()
 
     assert message["success"] is False
@@ -445,25 +462,6 @@ async def test_saving_to_an_entry_that_is_not_loaded_reports_saved_not_sent(
     # Restore the real state so teardown can unload the entry and cancel
     # the timer expose.py armed when the entity above was registered.
     setup_entry.mock_state(hass, ConfigEntryState.LOADED)
-
-
-async def test_config_save_refuses_a_non_admin(
-    hass, setup_entry, hass_read_only_access_token, hass_ws_client: WebSocketGenerator
-) -> None:
-    """Granting a voice agent control of a lock is for administrators."""
-    client = await hass_ws_client(hass, hass_read_only_access_token)
-    await client.send_json_auto_id(
-        {
-            "type": "elevenagents/config/save",
-            "entry_id": setup_entry.entry_id,
-            "block": "auto_expose",
-            "data": {"read": True, "control": True, "areas": []},
-        }
-    )
-    message = await client.receive_json()
-
-    assert message["success"] is False
-    assert message["error"]["code"] == "unauthorized"
 
 
 async def test_saving_exceptions_stores_by_permission_key_and_synchronises(
@@ -833,20 +831,6 @@ async def test_agent_get_returns_the_accounts_own_setting(
     assert get_tool.await_args.args[1] == "tool_123"
 
 
-async def test_agent_get_refuses_a_non_admin(
-    hass, setup_entry, hass_read_only_access_token, hass_ws_client: WebSocketGenerator
-) -> None:
-    """Reading the agent's system prompt is for administrators."""
-    client = await hass_ws_client(hass, hass_read_only_access_token)
-    await client.send_json_auto_id(
-        {"type": "elevenagents/agent/get", "entry_id": setup_entry.entry_id}
-    )
-    message = await client.receive_json()
-
-    assert message["success"] is False
-    assert message["error"]["code"] == "unauthorized"
-
-
 async def test_agent_get_refuses_an_entry_that_is_not_loaded(
     hass, setup_entry, hass_ws_client: WebSocketGenerator
 ) -> None:
@@ -1043,24 +1027,6 @@ async def test_agent_save_writes_nothing_when_nothing_is_sent(
     assert patched.await_count == 0
 
 
-async def test_agent_save_refuses_a_non_admin(
-    hass, setup_entry, hass_read_only_access_token, hass_ws_client: WebSocketGenerator
-) -> None:
-    """Rewriting the agent's system prompt is for administrators."""
-    client = await hass_ws_client(hass, hass_read_only_access_token)
-    await client.send_json_auto_id(
-        {
-            "type": "elevenagents/agent/save",
-            "entry_id": setup_entry.entry_id,
-            "prompt": "x",
-        }
-    )
-    message = await client.receive_json()
-
-    assert message["success"] is False
-    assert message["error"]["code"] == "unauthorized"
-
-
 async def test_agent_save_reports_a_refused_write(
     hass, setup_entry, hass_ws_client: WebSocketGenerator
 ) -> None:
@@ -1103,24 +1069,6 @@ async def test_agent_save_refuses_an_entry_that_is_not_loaded(
     assert result["outcome"] == "failed"
 
     setup_entry.mock_state(hass, ConfigEntryState.LOADED)
-
-
-async def test_rotate_refuses_a_non_admin(
-    hass, setup_entry, hass_read_only_access_token, hass_ws_client: WebSocketGenerator
-) -> None:
-    """Rotating the shared secret protecting the webhook is for administrators."""
-    client = await hass_ws_client(hass, hass_read_only_access_token)
-    await client.send_json_auto_id(
-        {
-            "type": "elevenagents/rotate",
-            "entry_id": setup_entry.entry_id,
-            "what": "secret",
-        }
-    )
-    message = await client.receive_json()
-
-    assert message["success"] is False
-    assert message["error"]["code"] == "unauthorized"
 
 
 async def test_rotating_the_secret_replaces_it_and_syncs(
