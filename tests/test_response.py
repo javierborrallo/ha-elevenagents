@@ -29,10 +29,10 @@ from custom_components.elevenagents.response import (
 async def test_projection_is_flat_and_drops_unlisted_attributes(hass):
     """Listed attributes sit beside state; everything else is dropped."""
     hass.states.async_set(
-        "climate.salon",
+        "climate.living_room",
         "heat",
         {
-            "friendly_name": "Termostato salon",
+            "friendly_name": "Living room thermostat",
             "current_temperature": 19.5,
             "temperature": 21.0,
             "hvac_action": "heating",
@@ -41,9 +41,9 @@ async def test_projection_is_flat_and_drops_unlisted_attributes(hass):
         },
     )
 
-    assert project(hass, "climate.salon") == {
-        "entity_id": "climate.salon",
-        "name": "Termostato salon",
+    assert project(hass, "climate.living_room") == {
+        "entity_id": "climate.living_room",
+        "name": "Living room thermostat",
         "area": None,
         "state": "heat",
         "current_temperature": 19.5,
@@ -93,13 +93,13 @@ async def test_missing_entity_projects_to_nothing(hass):
 def test_done_and_no_change_carry_the_projection():
     """Both outcomes that observed a state send it."""
     projection = {
-        "entity_id": "light.salon",
-        "name": "Salon",
+        "entity_id": "light.living_room",
+        "name": "Living Room",
         "area": None,
         "state": "on",
     }
 
-    done = write_result(OUTCOME_DONE, "light.salon", "light.turn_on", projection)
+    done = write_result(OUTCOME_DONE, "light.living_room", "light.turn_on", projection)
 
     assert done["outcome"] == OUTCOME_DONE
     assert done["action"] == "light.turn_on"
@@ -109,7 +109,7 @@ def test_done_and_no_change_carry_the_projection():
 
 def test_unconfirmed_carries_no_state_but_steers_to_a_read():
     """The call never returned, so there is nothing trustworthy to send."""
-    result = write_result(OUTCOME_UNCONFIRMED, "light.salon", "light.turn_on")
+    result = write_result(OUTCOME_UNCONFIRMED, "light.living_room", "light.turn_on")
 
     assert result["outcome"] == OUTCOME_UNCONFIRMED
     assert result["check_state_next"] is True
@@ -119,14 +119,14 @@ def test_unconfirmed_carries_no_state_but_steers_to_a_read():
 def test_unconfirmed_drops_a_projection_even_when_the_caller_passes_one():
     """A projection reaching write_result for an unconfirmed call is never trusted."""
     projection = {
-        "entity_id": "light.salon",
-        "name": "Salon",
+        "entity_id": "light.living_room",
+        "name": "Living Room",
         "area": None,
         "state": "on",
     }
 
     result = write_result(
-        OUTCOME_UNCONFIRMED, "light.salon", "light.turn_on", projection
+        OUTCOME_UNCONFIRMED, "light.living_room", "light.turn_on", projection
     )
 
     assert result["check_state_next"] is True
@@ -138,14 +138,14 @@ def test_unconfirmed_drops_a_projection_even_when_the_caller_passes_one():
 def test_no_change_is_not_a_failure():
     """no_change reports that nothing was written, not that nothing worked."""
     projection = {
-        "entity_id": "light.salon",
-        "name": "Salon",
+        "entity_id": "light.living_room",
+        "name": "Living Room",
         "area": None,
         "state": "off",
     }
 
     result = write_result(
-        OUTCOME_NO_CHANGE, "light.salon", "light.turn_off", projection
+        OUTCOME_NO_CHANGE, "light.living_room", "light.turn_off", projection
     )
 
     assert result["outcome"] == OUTCOME_NO_CHANGE

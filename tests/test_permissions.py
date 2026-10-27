@@ -36,7 +36,7 @@ async def test_resolve_target_includes_entity_area_and_device_area(
     hass, entity_registry, device_registry, area_registry
 ):
     """A target resolves entities by their own area and by their device's."""
-    area = area_registry.async_create("Salon")
+    area = area_registry.async_create("Living Room")
 
     own = entity_registry.async_get_or_create(
         "light", "demo", "own", suggested_object_id="own"

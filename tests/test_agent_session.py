@@ -154,7 +154,7 @@ async def test_a_turn_returns_the_answer_and_the_tools(hass, setup_entry, fake):
     """One user message in; the agent's text, its tools and the id out."""
     fake.behave = _standard(_tool("ha_get_state"), _response(" Son 10 grados. "))
 
-    result = await _run(hass, setup_entry, "Evento: frío", {"priority": "high"})
+    result = await _run(hass, setup_entry, "Event: cold", {"priority": "high"})
 
     assert result.conversation_id == "conv_1"
     assert result.responses == ["Son 10 grados."]
@@ -166,7 +166,7 @@ async def test_a_full_payload_alone_records_the_tool(hass, setup_entry, fake):
     """A full payload frame without a plain response still records the tool."""
     fake.behave = _standard(_full_payload("ha_perform_action"), _response("Hecho."))
 
-    result = await _run(hass, setup_entry, "Evento: luz", {})
+    result = await _run(hass, setup_entry, "Event: light", {})
 
     assert result.tools == [{"tool_name": "ha_perform_action", "is_error": False}]
 
@@ -181,7 +181,7 @@ async def test_both_response_frames_for_one_call_record_one_tool(
     frames = (full, plain) if full_first else (plain, full)
     fake.behave = _standard(*frames, _response("Hecho."))
 
-    result = await _run(hass, setup_entry, "Evento: luz", {})
+    result = await _run(hass, setup_entry, "Event: light", {})
 
     assert result.tools == [{"tool_name": "ha_perform_action", "is_error": False}]
 
@@ -190,9 +190,9 @@ async def test_the_first_frames_ask_for_text_only_and_carry_the_variables(
     hass, setup_entry, fake
 ):
     """The initiation sets the text-only override; then the user message follows."""
-    fake.behave = _standard(_response("Vale."))
+    fake.behave = _standard(_response("OK."))
 
-    await _run(hass, setup_entry, "Evento: puerta", {"event_type": "door"})
+    await _run(hass, setup_entry, "Event: door", {"event_type": "door"})
 
     init, user = fake.received
     assert init == {
@@ -200,7 +200,7 @@ async def test_the_first_frames_ask_for_text_only_and_carry_the_variables(
         "conversation_config_override": {"conversation": {"text_only": True}},
         "dynamic_variables": {"event_type": "door"},
     }
-    assert user == {"type": "user_message", "text": "Evento: puerta"}
+    assert user == {"type": "user_message", "text": "Event: door"}
 
 
 async def test_a_ping_gets_its_pong(hass, setup_entry, fake):
@@ -212,7 +212,7 @@ async def test_a_ping_gets_its_pong(hass, setup_entry, fake):
         received.append(await ws.receive_json())
         await ws.send_json(_metadata())
         received.append(await ws.receive_json())
-        await ws.send_json(_response("Vale."))
+        await ws.send_json(_response("OK."))
         await _hold(ws)
 
     fake.behave = behave
@@ -248,7 +248,7 @@ async def test_the_turn_ends_at_the_idle_deadline_not_the_maximum(
     hass, setup_entry, fake
 ):
     """After the answer, the turn ends at the idle deadline, not the maximum."""
-    fake.behave = _standard(_response("Vale."))
+    fake.behave = _standard(_response("OK."))
 
     start = asyncio.get_running_loop().time()
     await _run(hass, setup_entry, "x", {})
@@ -308,7 +308,7 @@ async def test_an_agent_response_before_the_metadata_is_not_the_answer(
 
     async def behave(ws, received) -> None:
         received.append(await ws.receive_json())
-        await ws.send_json(_response("Hola, ¿en qué te ayudo?"))
+        await ws.send_json(_response("Hi, how can I help?"))
         await ws.send_json(_metadata())
         received.append(await ws.receive_json())
         await ws.send_json(_response("Son 10 grados."))
@@ -323,7 +323,7 @@ async def test_an_agent_response_before_the_metadata_is_not_the_answer(
 
 async def test_the_initiation_leaves_the_greeting_alone(hass, setup_entry, fake):
     """An agent may refuse a greeting override, so the event sends none."""
-    fake.behave = _standard(_response("Vale."))
+    fake.behave = _standard(_response("OK."))
 
     await _run(hass, setup_entry, "x", {})
 
@@ -335,47 +335,47 @@ async def test_the_greeting_is_dropped_and_the_event_follows_it(
     hass, setup_entry, fake
 ):
     """The agent's own greeting is not an answer to the event."""
-    fake.agent.conversation_config.agent.first_message = "Hola, ¿en qué te ayudo?"
+    fake.agent.conversation_config.agent.first_message = "Hi, how can I help?"
 
     async def behave(ws, received) -> None:
         received.append(await ws.receive_json())
         await ws.send_json(_metadata())
-        await ws.send_json(_response("Hola, ¿en qué te ayudo?"))
+        await ws.send_json(_response("Hi, how can I help?"))
         received.append(await ws.receive_json())
-        await ws.send_json(_response("Vale."))
+        await ws.send_json(_response("OK."))
         await _hold(ws)
 
     fake.behave = behave
 
-    result = await _run(hass, setup_entry, "Evento: timbre", {})
+    result = await _run(hass, setup_entry, "Event: doorbell", {})
 
-    assert result.responses == ["Vale."]
-    assert fake.received[1] == {"type": "user_message", "text": "Evento: timbre"}
+    assert result.responses == ["OK."]
+    assert fake.received[1] == {"type": "user_message", "text": "Event: doorbell"}
 
 
 async def test_a_greeting_that_never_comes_does_not_hold_the_event(
     hass, setup_entry, fake
 ):
     """The event goes out after a short wait when no greeting arrives."""
-    fake.agent.conversation_config.agent.first_message = "Hola"
-    fake.behave = _standard(_response("Vale."))
+    fake.agent.conversation_config.agent.first_message = "Hi"
+    fake.behave = _standard(_response("OK."))
 
     with patch(
         "custom_components.elevenagents.agent_session.GREETING_WAIT_SECONDS", 0.2
     ):
         result = await _run(hass, setup_entry, "x", {})
 
-    assert result.responses == ["Vale."]
+    assert result.responses == ["OK."]
 
 
 async def test_an_unreadable_agent_sends_the_event_at_once(hass, setup_entry, fake):
     """Without the agent's settings the event does not wait for a greeting."""
-    fake.behave = _standard(_response("Vale."))
+    fake.behave = _standard(_response("OK."))
 
     with patch(AGENT, AsyncMock(side_effect=ElevenLabsError("500"))):
         result = await _run(hass, setup_entry, "x", {})
 
-    assert result.responses == ["Vale."]
+    assert result.responses == ["OK."]
 
 
 async def test_a_start_the_agent_rejects_is_a_failed_delivery(hass, setup_entry, fake):
@@ -402,7 +402,7 @@ async def test_pings_do_not_keep_the_turn_open(hass, setup_entry, fake):
         received.append(await ws.receive_json())
         await ws.send_json(_metadata())
         received.append(await ws.receive_json())
-        await ws.send_json(_response("Vale."))
+        await ws.send_json(_response("OK."))
         for event_id in range(60):
             await asyncio.sleep(0.05)
             await ws.send_json({"type": "ping", "ping_event": {"event_id": event_id}})
@@ -414,7 +414,7 @@ async def test_pings_do_not_keep_the_turn_open(hass, setup_entry, fake):
     result = await _run(hass, setup_entry, "x", {})
     elapsed = asyncio.get_running_loop().time() - start
 
-    assert result.responses == ["Vale."]
+    assert result.responses == ["OK."]
     assert result.incomplete is False
     assert elapsed < 1.0
 
@@ -482,7 +482,7 @@ async def test_agent_response_complete_ends_the_turn_before_the_idle_time(
         received.append(await ws.receive_json())
         await ws.send_json(_metadata())
         received.append(await ws.receive_json())
-        await ws.send_json(_response("Vale."))
+        await ws.send_json(_response("OK."))
         await ws.send_json({"type": "agent_response_complete"})
         await _hold(ws)
 
@@ -492,7 +492,7 @@ async def test_agent_response_complete_ends_the_turn_before_the_idle_time(
     result = await _run(hass, setup_entry, "x", {})
     elapsed = asyncio.get_running_loop().time() - start
 
-    assert result.responses == ["Vale."]
+    assert result.responses == ["OK."]
     assert elapsed < 0.1
 
 
@@ -554,14 +554,14 @@ async def test_a_close_right_after_the_answer_still_returns_it(hass, setup_entry
         received.append(await ws.receive_json())
         await ws.send_json(_metadata())
         received.append(await ws.receive_json())
-        await ws.send_json(_response("Vale."))
+        await ws.send_json(_response("OK."))
         await ws.close(code=1000, message=b"done")
 
     fake.behave = behave
 
     result = await _run(hass, setup_entry, "x", {})
 
-    assert result.responses == ["Vale."]
+    assert result.responses == ["OK."]
 
 
 async def test_another_close_before_an_answer_is_closed(hass, setup_entry, fake):
@@ -605,7 +605,7 @@ async def test_a_server_that_is_not_there_is_unreachable(hass, setup_entry, fake
 
 async def test_the_signed_url_never_reaches_the_log(hass, setup_entry, fake, caplog):
     """The token in the URL opens a conversation with the agent."""
-    fake.behave = _standard(_response("Vale."))
+    fake.behave = _standard(_response("OK."))
 
     await _run(hass, setup_entry, "x", {})
 
@@ -786,7 +786,7 @@ async def test_the_conversation_id_is_reported_before_the_user_message(
         received.append(await ws.receive_json())
         await ws.send_json(_metadata("conv_9"))
         received.append(await ws.receive_json())
-        await ws.send_json(_response("Vale."))
+        await ws.send_json(_response("OK."))
         await _hold(ws)
 
     fake.behave = behave

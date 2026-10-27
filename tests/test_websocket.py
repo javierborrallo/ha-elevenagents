@@ -560,7 +560,7 @@ async def test_saving_auto_expose_does_not_synchronise(
                 "type": "elevenagents/config/save",
                 "entry_id": setup_entry.entry_id,
                 "block": "auto_expose",
-                "data": {"read": True, "control": True, "areas": ["salon"]},
+                "data": {"read": True, "control": True, "areas": ["living_room"]},
             }
         )
         result = (await client.receive_json())["result"]
@@ -568,7 +568,7 @@ async def test_saving_auto_expose_does_not_synchronise(
     assert result["outcome"] == "ok"
     assert setup_entry.options[OPT_AUTO_EXPOSE] is True
     assert setup_entry.options[OPT_AUTO_CONTROL] is True
-    assert setup_entry.options[OPT_AUTO_EXPOSE_AREAS] == ["salon"]
+    assert setup_entry.options[OPT_AUTO_EXPOSE_AREAS] == ["living_room"]
     assert sync.await_count == 0
 
 
@@ -611,7 +611,7 @@ async def test_saving_auto_expose_honours_each_switch_independently(
                 "type": "elevenagents/config/save",
                 "entry_id": setup_entry.entry_id,
                 "block": "auto_expose",
-                "data": {"control": True, "areas": ["salon"]},
+                "data": {"control": True, "areas": ["living_room"]},
             }
         )
         result = (await client.receive_json())["result"]
@@ -690,7 +690,7 @@ async def test_an_unknown_block_is_refused_by_the_schema(
 def _agent_with_prompt(text: str, first_message: str = "") -> MagicMock:
     """Build the nested response shape the SDK returns."""
     agent = MagicMock()
-    agent.name = "Casa"
+    agent.name = "Home"
     agent.conversation_config.agent.prompt.prompt = text
     agent.conversation_config.agent.first_message = first_message
     agent.conversation_config.conversation.max_duration_seconds = None
@@ -706,14 +706,14 @@ async def test_agent_get_returns_the_prompt_that_is_there(
 
     with patch(
         "custom_components.elevenagents.websocket.async_get_agent",
-        AsyncMock(return_value=_agent_with_prompt("Eres un asistente.")),
+        AsyncMock(return_value=_agent_with_prompt("You are an assistant.")),
     ):
         await client.send_json_auto_id(
             {"type": "elevenagents/agent/get", "entry_id": setup_entry.entry_id}
         )
         result = (await client.receive_json())["result"]
 
-    assert result["prompt"] == "Eres un asistente."
+    assert result["prompt"] == "You are an assistant."
 
 
 async def test_agent_get_returns_the_opening_line_and_the_agent_name(
@@ -724,22 +724,22 @@ async def test_agent_get_returns_the_opening_line_and_the_agent_name(
 
     with patch(
         "custom_components.elevenagents.websocket.async_get_agent",
-        AsyncMock(return_value=_agent_with_prompt("Eres un asistente.", "Hola.")),
+        AsyncMock(return_value=_agent_with_prompt("You are an assistant.", "Hi.")),
     ):
         await client.send_json_auto_id(
             {"type": "elevenagents/agent/get", "entry_id": setup_entry.entry_id}
         )
         result = (await client.receive_json())["result"]
 
-    assert result["first_message"] == "Hola."
-    assert result["name"] == "Casa"
+    assert result["first_message"] == "Hi."
+    assert result["name"] == "Home"
 
 
 async def test_agent_get_returns_the_conversation_limits(
     hass, setup_entry, hass_ws_client: WebSocketGenerator
 ) -> None:
     """The settings screen opens on the limits the agent already carries."""
-    agent = _agent_with_prompt("Eres un asistente.")
+    agent = _agent_with_prompt("You are an assistant.")
     agent.conversation_config.conversation.max_duration_seconds = 180
     agent.conversation_config.turn.silence_end_call_timeout = -1.0
     client = await hass_ws_client(hass)
@@ -763,7 +763,7 @@ async def test_agent_get_returns_no_limits_when_the_agent_has_none(
     hass, setup_entry, hass_ws_client: WebSocketGenerator
 ) -> None:
     """A missing conversation or turn object reads as unset, not as an error."""
-    agent = _agent_with_prompt("Eres un asistente.")
+    agent = _agent_with_prompt("You are an assistant.")
     agent.conversation_config.conversation = None
     agent.conversation_config.turn = None
     client = await hass_ws_client(hass)
@@ -791,7 +791,7 @@ async def test_agent_get_falls_back_to_the_default_settings_when_never_synced(
 
     with patch(
         "custom_components.elevenagents.websocket.async_get_agent",
-        AsyncMock(return_value=_agent_with_prompt("Eres un asistente.")),
+        AsyncMock(return_value=_agent_with_prompt("You are an assistant.")),
     ):
         await client.send_json_auto_id(
             {"type": "elevenagents/agent/get", "entry_id": setup_entry.entry_id}
@@ -816,7 +816,7 @@ async def test_agent_get_returns_the_accounts_own_setting(
     with (
         patch(
             "custom_components.elevenagents.websocket.async_get_agent",
-            AsyncMock(return_value=_agent_with_prompt("Eres un asistente.")),
+            AsyncMock(return_value=_agent_with_prompt("You are an assistant.")),
         ),
         patch(
             "custom_components.elevenagents.websocket.async_get_tool",
@@ -902,7 +902,7 @@ async def test_agent_save_writes_the_opening_line(
             {
                 "type": "elevenagents/agent/save",
                 "entry_id": setup_entry.entry_id,
-                "first_message": "Hola, soy tu casa.",
+                "first_message": "Hi, I am your home.",
             }
         )
         result = (await client.receive_json())["result"]
@@ -910,7 +910,7 @@ async def test_agent_save_writes_the_opening_line(
     assert result["outcome"] == "ok"
     assert patched.await_args is not None
     sent = patched.await_args.kwargs["conversation_config"]
-    assert sent["agent"] == {"first_message": "Hola, soy tu casa."}
+    assert sent["agent"] == {"first_message": "Hi, I am your home."}
 
 
 async def _save_agent(
@@ -966,7 +966,7 @@ async def test_agent_save_sends_the_opening_line_and_both_limits_in_one_patch(
         hass,
         hass_ws_client,
         setup_entry,
-        first_message="Hola.",
+        first_message="Hi.",
         max_duration_seconds=300,
         silence_end_call_timeout=20.5,
     )
@@ -975,7 +975,7 @@ async def test_agent_save_sends_the_opening_line_and_both_limits_in_one_patch(
     assert patched.await_count == 1
     assert patched.await_args is not None
     assert patched.await_args.kwargs["conversation_config"] == {
-        "agent": {"first_message": "Hola."},
+        "agent": {"first_message": "Hi."},
         "conversation": {"max_duration_seconds": 300},
         "turn": {"silence_end_call_timeout": 20.5},
     }

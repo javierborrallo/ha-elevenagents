@@ -93,15 +93,15 @@ async def test_entity_catalogue_pairs_the_enum_with_readable_lines(
     hass, entity_registry, area_registry
 ):
     """The description carries the mapping from spoken name to entity_id."""
-    area = area_registry.async_create("Salon")
-    entry = entity_registry.async_get_or_create("light", "demo", "salon")
+    area = area_registry.async_create("Living Room")
+    entry = entity_registry.async_get_or_create("light", "demo", "living_room")
     entity_registry.async_update_entity(entry.entity_id, area_id=area.id)
-    hass.states.async_set(entry.entity_id, "on", {"friendly_name": "Lampara"})
+    hass.states.async_set(entry.entity_id, "on", {"friendly_name": "Lamp"})
 
     enum, description = entity_catalogue(hass, {entry.id})
 
     assert enum == [entry.entity_id]
-    assert f"{entry.entity_id} = Lampara (Salon)" in description
+    assert f"{entry.entity_id} = Lamp (Living Room)" in description
 
 
 async def test_entity_with_no_area_has_no_empty_parenthesis(hass, entity_registry):

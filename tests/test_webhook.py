@@ -632,7 +632,7 @@ async def test_write_that_changes_only_an_attribute_is_still_done(
     hass, config_entry, entity_registry
 ):
     """last_updated advances even when the state string stays the same."""
-    thermostat = entity_registry.async_get_or_create("climate", "demo", "salon")
+    thermostat = entity_registry.async_get_or_create("climate", "demo", "living_room")
     hass.states.async_set(
         thermostat.entity_id, "heat", {"supported_features": 1, "temperature": 19}
     )
@@ -700,7 +700,7 @@ async def test_write_validation_error_relays_the_translation_key(
     hass, config_entry, entity_registry
 ):
     """Home Assistant's own vocabulary reaches the agent unchanged."""
-    thermostat = entity_registry.async_get_or_create("climate", "demo", "salon")
+    thermostat = entity_registry.async_get_or_create("climate", "demo", "living_room")
     # TARGET_TEMPERATURE. climate.set_temperature filters on it, and the
     # handler authorises against the real service descriptions.
     hass.states.async_set(thermostat.entity_id, "heat", {"supported_features": 1})
@@ -757,12 +757,12 @@ async def _sensitive_lock(
 ) -> tuple[er.RegistryEntry, list[object]]:
     """Register a sensitive lock and return it with its recorded unlock calls."""
     lock = entity_registry.async_get_or_create("lock", "demo", "front")
-    hass.states.async_set(lock.entity_id, "locked", {"friendly_name": "Puerta"})
+    hass.states.async_set(lock.entity_id, "locked", {"friendly_name": "Door"})
     calls: list[object] = []
 
     async def unlock(call) -> None:
         calls.append(call)
-        hass.states.async_set(lock.entity_id, "unlocked", {"friendly_name": "Puerta"})
+        hass.states.async_set(lock.entity_id, "unlocked", {"friendly_name": "Door"})
 
     hass.services.async_register("lock", "unlock", unlock)
     hass.config_entries.async_update_entry(
@@ -803,8 +803,8 @@ async def test_a_sensitive_action_asks_first_and_runs_after_the_user_confirms(
                     "role": "agent",
                     "tool_results": [{"result_value": json.dumps(first)}],
                 },
-                {"role": "agent", "message": "¿Abro la puerta?"},
-                {"role": "user", "message": "sí"},
+                {"role": "agent", "message": "Shall I open the door?"},
+                {"role": "user", "message": "yes"},
             ]
         }
     )

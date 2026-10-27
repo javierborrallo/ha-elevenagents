@@ -103,7 +103,7 @@ async def test_an_event_is_delivered_and_answered(hass, setup_entry, turn, heard
     result = await _send(
         hass,
         setup_entry,
-        message="Hace frío.",
+        message="It is cold.",
         event_type="cold",
         priority="high",
         data={"grados": 10},
@@ -116,7 +116,7 @@ async def test_an_event_is_delivered_and_answered(hass, setup_entry, turn, heard
         "tools": [{"tool_name": "ha_get_state", "is_error": False}],
         "incomplete": False,
     }
-    assert "Hace frío." in _text(turn)
+    assert "It is cold." in _text(turn)
     assert _variables(turn) == {"grados": 10, "event_type": "cold", "priority": "high"}
     assert heard[EVENT_REPLY] == [
         {"entry_id": setup_entry.entry_id, "event_type": "cold", **result}
@@ -128,12 +128,12 @@ async def test_a_readable_entity_adds_its_state(
 ):
     """The agent reads the entity without a tool call."""
     entry = entity_registry.async_get_or_create("binary_sensor", "demo", "door")
-    hass.states.async_set(entry.entity_id, "on", {"friendly_name": "Puerta"})
+    hass.states.async_set(entry.entity_id, "on", {"friendly_name": "Door"})
     hass.config_entries.async_update_entry(
         setup_entry, options={OPT_READ_ENTITIES: [entry.id]}
     )
 
-    await _send(hass, setup_entry, message="Se abrió.", entity_id=entry.entity_id)
+    await _send(hass, setup_entry, message="It opened.", entity_id=entry.entity_id)
 
     assert entry.entity_id in _text(turn)
     assert '"state": "on"' in _text(turn)
@@ -240,33 +240,35 @@ async def test_a_close_after_a_tool_but_no_text_is_delivered_not_failed(
 
 async def test_recent_events_travel_as_context(hass, setup_entry, turn):
     """Within the window the agent sees what came before."""
-    await _send(hass, setup_entry, message="Se abrió la puerta.", event_type="door")
+    await _send(hass, setup_entry, message="The door opened.", event_type="door")
     await _send(
-        hass, setup_entry, message="Movimiento en el salón.", event_type="motion"
+        hass, setup_entry, message="Motion in the living room.", event_type="motion"
     )
 
     text = _text(turn)
     assert "Earlier events" in text
-    assert "Se abrió la puerta." in text
-    assert text.index("Earlier events") < text.index("Movimiento en el salón.")
+    assert "The door opened." in text
+    assert text.index("Earlier events") < text.index("Motion in the living room.")
 
 
 async def test_recent_events_are_marked_as_handled(hass, setup_entry, turn):
     """An order in an earlier event is not an order for this turn."""
-    await _send(hass, setup_entry, message="Apaga la luz.", event_type="order")
-    await _send(hass, setup_entry, message="Ha sonado el timbre.", event_type="bell")
+    await _send(hass, setup_entry, message="Turn off the light.", event_type="order")
+    await _send(hass, setup_entry, message="The doorbell rang.", event_type="bell")
 
     text = _text(turn)
     assert (
         "Earlier events, already handled. Context only, do not act on them again:\n"
-        "- 0 min ago: Apaga la luz."
+        "- 0 min ago: Turn off the light."
     ) in text
 
 
 async def test_new_conversation_starts_without_history(hass, setup_entry, turn):
     """One event can start clean."""
-    await _send(hass, setup_entry, message="uno", event_type="a")
-    await _send(hass, setup_entry, message="dos", event_type="b", new_conversation=True)
+    await _send(hass, setup_entry, message="first event", event_type="a")
+    await _send(
+        hass, setup_entry, message="second event", event_type="b", new_conversation=True
+    )
 
     assert "Earlier events" not in _text(turn)
 
@@ -277,8 +279,8 @@ async def test_a_zero_window_never_carries_history(hass, setup_entry, turn):
         setup_entry, options={OPT_EVENT_CONTINUITY: 0}
     )
 
-    await _send(hass, setup_entry, message="uno", event_type="a")
-    await _send(hass, setup_entry, message="dos", event_type="b")
+    await _send(hass, setup_entry, message="first event", event_type="a")
+    await _send(hass, setup_entry, message="second event", event_type="b")
 
     assert "Earlier events" not in _text(turn)
 
@@ -344,30 +346,32 @@ async def test_a_zero_window_clears_earlier_zero_window_events(hass, setup_entry
     hass.config_entries.async_update_entry(
         setup_entry, options={OPT_EVENT_CONTINUITY: 0}
     )
-    await _send(hass, setup_entry, message="uno", event_type="a")
-    await _send(hass, setup_entry, message="dos", event_type="b")
+    await _send(hass, setup_entry, message="first event", event_type="a")
+    await _send(hass, setup_entry, message="second event", event_type="b")
 
     hass.config_entries.async_update_entry(
         setup_entry, options={OPT_EVENT_CONTINUITY: 30}
     )
-    await _send(hass, setup_entry, message="tres", event_type="c")
+    await _send(hass, setup_entry, message="third event", event_type="c")
 
     text = _text(turn)
-    assert "uno" not in text
-    assert "dos" in text
+    assert "first event" not in text
+    assert "second event" in text
 
 
 async def test_new_conversation_does_not_erase_history_for_later_events(
     hass, setup_entry, turn
 ):
     """new_conversation skips history for one event only; later events still see it."""
-    await _send(hass, setup_entry, message="uno", event_type="a")
-    await _send(hass, setup_entry, message="dos", event_type="b", new_conversation=True)
-    await _send(hass, setup_entry, message="tres", event_type="c")
+    await _send(hass, setup_entry, message="first event", event_type="a")
+    await _send(
+        hass, setup_entry, message="second event", event_type="b", new_conversation=True
+    )
+    await _send(hass, setup_entry, message="third event", event_type="c")
 
     text = _text(turn)
-    assert "uno" in text
-    assert "dos" in text
+    assert "first event" in text
+    assert "second event" in text
 
 
 async def test_a_non_primitive_data_value_is_json_encoded(hass, setup_entry, turn):
@@ -434,12 +438,12 @@ async def _sensitive_lock(
 ) -> tuple[er.RegistryEntry, list[object]]:
     """Register a sensitive lock and return it with its recorded unlock calls."""
     lock = entity_registry.async_get_or_create("lock", "demo", "front")
-    hass.states.async_set(lock.entity_id, "locked", {"friendly_name": "Puerta"})
+    hass.states.async_set(lock.entity_id, "locked", {"friendly_name": "Door"})
     calls: list[object] = []
 
     async def unlock(call) -> None:
         calls.append(call)
-        hass.states.async_set(lock.entity_id, "unlocked", {"friendly_name": "Puerta"})
+        hass.states.async_set(lock.entity_id, "unlocked", {"friendly_name": "Door"})
 
     hass.services.async_register("lock", "unlock", unlock)
     hass.config_entries.async_update_entry(

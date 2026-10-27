@@ -100,7 +100,7 @@ async def test_a_new_entity_in_a_watched_area_becomes_readable(
     hass, setup_entry, entity_registry, area_registry, freezer
 ) -> None:
     """The switch is what the user turned on, so it must do this."""
-    area = area_registry.async_create("Salon")
+    area = area_registry.async_create("Living Room")
     hass.config_entries.async_update_entry(
         setup_entry,
         options={
@@ -121,7 +121,7 @@ async def test_reading_alone_never_grants_control(
     hass, setup_entry, entity_registry, area_registry, freezer
 ) -> None:
     """The two switches are separate decisions. This is the whole point of them."""
-    area = area_registry.async_create("Salon")
+    area = area_registry.async_create("Living Room")
     hass.config_entries.async_update_entry(
         setup_entry,
         options={
@@ -166,7 +166,7 @@ async def test_an_entity_outside_the_selected_areas_is_ignored(
     hass, setup_entry, entity_registry, area_registry, freezer
 ) -> None:
     """The switch says "the areas you already selected", not "everything"."""
-    watched = area_registry.async_create("Salon")
+    watched = area_registry.async_create("Living Room")
     other = area_registry.async_create("Garaje")
     hass.config_entries.async_update_entry(
         setup_entry,
@@ -185,7 +185,7 @@ async def test_nothing_happens_when_both_switches_are_off(
     hass, setup_entry, entity_registry, area_registry, freezer
 ) -> None:
     """Off by default means off."""
-    area = area_registry.async_create("Salon")
+    area = area_registry.async_create("Living Room")
     hass.config_entries.async_update_entry(
         setup_entry, options={OPT_READ_TARGET: {"area_id": [area.id]}}
     )
@@ -202,7 +202,7 @@ async def test_a_burst_produces_one_write(
     hass, setup_entry, entity_registry, area_registry, freezer
 ) -> None:
     """Installing an integration must not mean dozens of writes to someone's account."""
-    area = area_registry.async_create("Salon")
+    area = area_registry.async_create("Living Room")
     hass.config_entries.async_update_entry(
         setup_entry,
         options={OPT_READ_TARGET: {"area_id": [area.id]}, OPT_AUTO_EXPOSE: True},
@@ -234,7 +234,7 @@ async def test_an_entity_with_no_area_is_ignored(
     hass, setup_entry, entity_registry, area_registry, freezer
 ) -> None:
     """A new entity nobody placed anywhere is in no selected area."""
-    area = area_registry.async_create("Salon")
+    area = area_registry.async_create("Living Room")
     hass.config_entries.async_update_entry(
         setup_entry,
         options={OPT_READ_TARGET: {"area_id": [area.id]}, OPT_AUTO_EXPOSE: True},
@@ -258,7 +258,7 @@ async def test_a_written_allowlist_is_synchronised_with_the_agent(
     other test in this module passing while the tool schema silently stops
     matching the options.
     """
-    area = area_registry.async_create("Salon")
+    area = area_registry.async_create("Living Room")
     hass.config_entries.async_update_entry(
         setup_entry,
         options={OPT_READ_TARGET: {"area_id": [area.id]}, OPT_AUTO_EXPOSE: True},
@@ -279,7 +279,7 @@ async def test_moving_an_existing_entity_into_the_area_does_not_expose_it(
     hass, setup_entry, entity_registry, area_registry, freezer
 ) -> None:
     """Automatic exposure reacts to a new entity, never to a later registry update."""
-    watched = area_registry.async_create("Salon")
+    watched = area_registry.async_create("Living Room")
     other = area_registry.async_create("Garaje")
     hass.config_entries.async_update_entry(
         setup_entry,
@@ -304,7 +304,7 @@ async def test_a_target_selecting_a_floor_also_works(
 ) -> None:
     """A target is resolved as a whole, not read for its area_id key alone."""
     floor = fr.async_get(hass).async_create("Upstairs")
-    area = area_registry.async_create("Dormitorio")
+    area = area_registry.async_create("Bedroom")
     area_registry.async_update(area.id, floor_id=floor.floor_id)
     hass.config_entries.async_update_entry(
         setup_entry,
@@ -326,7 +326,7 @@ async def test_tearing_down_before_the_debounce_elapses_writes_nothing(
     hass, setup_entry, entity_registry, area_registry, freezer
 ) -> None:
     """An armed flush must not survive the entry it belongs to."""
-    area = area_registry.async_create("Salon")
+    area = area_registry.async_create("Living Room")
     hass.config_entries.async_update_entry(
         setup_entry,
         options={OPT_READ_TARGET: {"area_id": [area.id]}, OPT_AUTO_EXPOSE: True},
@@ -348,7 +348,7 @@ async def test_the_areas_key_drives_both_switches_when_present(
     hass, setup_entry, entity_registry, area_registry, freezer
 ) -> None:
     """The panel writes one area list; both switches watch it independently."""
-    area = area_registry.async_create("Salon")
+    area = area_registry.async_create("Living Room")
     hass.config_entries.async_update_entry(
         setup_entry,
         options={
@@ -371,7 +371,7 @@ async def test_the_areas_key_lets_only_the_control_switch_grant_control(
     hass, setup_entry, entity_registry, area_registry, freezer
 ) -> None:
     """With only control on, reading stays untouched even with the areas key set."""
-    area = area_registry.async_create("Salon")
+    area = area_registry.async_create("Living Room")
     hass.config_entries.async_update_entry(
         setup_entry,
         options={OPT_AUTO_CONTROL: True, OPT_AUTO_EXPOSE_AREAS: [area.id]},
@@ -390,7 +390,7 @@ async def test_no_areas_key_falls_back_to_the_stored_target(
     hass, setup_entry, entity_registry, area_registry, freezer
 ) -> None:
     """A 0.1.1 entry with no areas key keeps working from its stored target."""
-    area = area_registry.async_create("Salon")
+    area = area_registry.async_create("Living Room")
     hass.config_entries.async_update_entry(
         setup_entry,
         options={OPT_READ_TARGET: {"area_id": [area.id]}, OPT_AUTO_EXPOSE: True},
@@ -409,7 +409,7 @@ async def test_the_areas_key_overrides_a_stale_target(
 ) -> None:
     """A panel-set areas list wins over a still-stored 0.1.1 target."""
     old_target_area = area_registry.async_create("Garaje")
-    new_area = area_registry.async_create("Salon")
+    new_area = area_registry.async_create("Living Room")
     hass.config_entries.async_update_entry(
         setup_entry,
         options={
@@ -437,7 +437,7 @@ async def test_an_empty_areas_key_overrides_a_stale_target(
     hass, setup_entry, entity_registry, area_registry, freezer
 ) -> None:
     """Clearing every area in the panel stops watching the old target's areas."""
-    area = area_registry.async_create("Salon")
+    area = area_registry.async_create("Living Room")
     hass.config_entries.async_update_entry(
         setup_entry,
         options={
@@ -537,7 +537,7 @@ async def test_moving_a_granted_entity_to_another_area_synchronises(
     hass, setup_entry, entity_registry, freezer, mock_sync_tools
 ) -> None:
     """The area is part of the line the model reads."""
-    area = ar.async_get(hass).async_create("Cocina")
+    area = ar.async_get(hass).async_create("Kitchen")
     granted = await _granted(hass, entity_registry, setup_entry, freezer)
 
     entity_registry.async_update_entity(granted.entity_id, area_id=area.id)
@@ -560,7 +560,7 @@ async def test_moving_the_device_of_a_granted_entity_synchronises(
     hass.config_entries.async_update_entry(
         setup_entry, options={OPT_READ_ENTITIES: [lamp.id]}
     )
-    area = ar.async_get(hass).async_create("Dormitorio")
+    area = ar.async_get(hass).async_create("Bedroom")
     await _settle(hass, freezer)
     _record_catalogue(hass, setup_entry)
     mock_sync_tools.reset_mock()
@@ -576,7 +576,7 @@ async def test_renaming_the_area_of_a_granted_entity_synchronises(
 ) -> None:
     """The owner speaks the area's new name the next day."""
     area_registry = ar.async_get(hass)
-    area = area_registry.async_create("Salon")
+    area = area_registry.async_create("Living Room")
     granted = await _granted(hass, entity_registry, setup_entry, freezer)
     entity_registry.async_update_entity(granted.entity_id, area_id=area.id)
     await _settle(hass, freezer)

@@ -20,7 +20,7 @@ from custom_components.elevenagents.sensitive import (
 ASK = Mark(confirm=True, refuse_automatic=True)
 ARGS: dict[str, Any] = {
     "entity_id": "lock.front",
-    "name": "Puerta",
+    "name": "Door",
     "action": "lock.unlock",
     "service_data": {},
 }
@@ -28,7 +28,7 @@ ARGS: dict[str, Any] = {
 
 def _history(code: str, *, user_after: bool) -> str:
     entries: list[dict[str, Any]] = [
-        {"role": "user", "message": "Abre la puerta"},
+        {"role": "user", "message": "Open the door"},
         {"role": "agent", "tool_requests": [{"tool_name": "ha_perform_action"}]},
         {
             "role": "agent",
@@ -39,10 +39,10 @@ def _history(code: str, *, user_after: bool) -> str:
                 }
             ],
         },
-        {"role": "agent", "message": "¿Seguro?"},
+        {"role": "agent", "message": "Are you sure?"},
     ]
     if user_after:
-        entries.append({"role": "user", "message": "Sí"})
+        entries.append({"role": "user", "message": "Yes"})
     return json.dumps({"x-elevenlabs-history": True, "entries": entries})
 
 
@@ -52,7 +52,7 @@ def _ask(gate: Gate, now: float = 0.0, conversation: str = "c1") -> str:
     )
     assert answer is not None
     assert answer["outcome"] == "confirmation_required"
-    assert answer["name"] == "Puerta"
+    assert answer["name"] == "Door"
     return str(answer["confirmation_code"])
 
 
@@ -282,7 +282,7 @@ LIVE_HISTORY = json.dumps(
     {
         "x-elevenlabs-history": True,
         "entries": [
-            {"role": "user", "message": "Desbloquea la cerradura Openable Lock."},
+            {"role": "user", "message": "Unlock the Openable Lock."},
             {
                 "role": "agent",
                 "tool_requests": [
@@ -306,8 +306,8 @@ LIVE_HISTORY = json.dumps(
                     }
                 ],
             },
-            {"role": "agent", "message": "Necesito que confirmes la acción."},
-            {"role": "user", "message": "Sí, confirmo, desbloquéala."},
+            {"role": "agent", "message": "I need you to confirm the action."},
+            {"role": "user", "message": "Yes, I confirm, unlock it."},
             {
                 "role": "agent",
                 "tool_requests": [
@@ -341,8 +341,8 @@ def test_heard_after_needs_the_exact_code_field(result_value: str) -> None:
     """Only a confirmation_code field equal to the code marks the question."""
     entries = [
         {"role": "agent", "tool_results": [{"result_value": result_value}]},
-        {"role": "agent", "message": "¿Seguro?"},
-        {"role": "user", "message": "Sí"},
+        {"role": "agent", "message": "Are you sure?"},
+        {"role": "user", "message": "Yes"},
     ]
     history = json.dumps({"x-elevenlabs-history": True, "entries": entries})
     assert heard_after(history, "ab12cd") is False
@@ -352,7 +352,7 @@ def test_heard_after_ignores_a_code_in_a_user_entry() -> None:
     """A code inside a user entry does not count as the question."""
     entries = [
         {"role": "user", "tool_results": [{"result_value": "ab12cd"}]},
-        {"role": "user", "message": "Sí"},
+        {"role": "user", "message": "Yes"},
     ]
     history = json.dumps({"x-elevenlabs-history": True, "entries": entries})
     assert heard_after(history, "ab12cd") is False
@@ -377,21 +377,21 @@ def _entries_after_code(*after: dict[str, Any]) -> str:
 def test_heard_after_needs_the_agent_to_ask_before_the_user_answers() -> None:
     """A user turn between the code and the agent's question does not count."""
     before_question = _entries_after_code(
-        {"role": "user", "message": "y enciende la luz"},
+        {"role": "user", "message": "and turn on the light"},
     )
     question_after = _entries_after_code(
-        {"role": "user", "message": "y enciende la luz"},
-        {"role": "agent", "message": "¿Abro la puerta?"},
+        {"role": "user", "message": "and turn on the light"},
+        {"role": "agent", "message": "Shall I open the door?"},
     )
     agent_without_text = _entries_after_code(
         {"role": "agent", "tool_requests": [{"tool_name": "ha_perform_action"}]},
         {"role": "agent", "message": "  "},
-        {"role": "user", "message": "Sí"},
+        {"role": "user", "message": "Yes"},
     )
     asked_then_answered = _entries_after_code(
-        {"role": "user", "message": "y enciende la luz"},
-        {"role": "agent", "message": "¿Abro la puerta?"},
-        {"role": "user", "message": "Sí"},
+        {"role": "user", "message": "and turn on the light"},
+        {"role": "agent", "message": "Shall I open the door?"},
+        {"role": "user", "message": "Yes"},
     )
 
     assert heard_after(before_question, "ab12cd") is False
@@ -412,7 +412,7 @@ def test_heard_after_ignores_a_user_entry_without_text() -> None:
                 }
             ],
         },
-        {"role": "agent", "message": "¿Seguro?"},
+        {"role": "agent", "message": "Are you sure?"},
         {"role": "user", "message": None},
         {"role": "user"},
     ]
