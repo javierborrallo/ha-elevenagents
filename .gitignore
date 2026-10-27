@@ -20,10 +20,14 @@ config/*
 
 # AI agent working files - local only, never committed.
 # Instructions, plans, session notes and generated design docs stay on the
-# development machine. Only project code and the user-facing README ship.
+# development machine. Only project code, the README and the docs/ files listed below ship.
 .claude/
 .superpowers/
 .agents/
-docs/
+docs/*
+!docs/prompt-block.md
+!docs/private-home-assistant.md
+!docs/permissions.md
+!docs/events.md
 AGENTS.md
 CLAUDE.md
