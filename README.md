@@ -5,8 +5,11 @@
 [![Test](https://github.com/javierborrallo/ha-elevenagents/actions/workflows/test.yml/badge.svg)](https://github.com/javierborrallo/ha-elevenagents/actions/workflows/test.yml)
 [![Validate](https://github.com/javierborrallo/ha-elevenagents/actions/workflows/validate.yml/badge.svg)](https://github.com/javierborrallo/ha-elevenagents/actions/workflows/validate.yml)
 
-Let [ElevenAgents](https://elevenlabs.io/docs/agents-platform/overview) interact with your Home
-Assistant, through tools this integration writes and keeps up to date for you.
+Talk to your home through a voice agent on
+[ElevenAgents](https://elevenlabs.io/docs/agents-platform/overview), ElevenLabs' platform for
+conversational AI: from a dashboard card, the ElevenAgents widget or a phone call. The agent reads
+and controls only the entities you select, and Home Assistant checks each of its calls against your
+rules.
 
 > [!WARNING]
 > **Beta.** A new version may break your configuration.
@@ -76,6 +79,13 @@ ElevenAgents widget.
 
 This integration may later offer its own MCP endpoint, behind the same secret and rules. This
 version does not.
+
+## How is this different from Assist?
+
+Assist runs the voice pipeline inside Home Assistant, with the speech and language models you
+choose. With this integration, the conversation happens on ElevenAgents: its voices, its
+turn-taking, its widget and its telephony. Home Assistant answers the agent's calls and sends it
+automatic events from your automations.
 
 ## Requirements
 
