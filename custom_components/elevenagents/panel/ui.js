@@ -116,6 +116,7 @@ button.danger{padding:8px 18px;border-radius:9999px;background:none;
 button[disabled]{opacity:.5;cursor:default}
 .tree{display:flex;flex-direction:column;gap:12px;height:100%;min-height:0}
 .tree-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.technical{display:flex;gap:6px;align-items:center;font-size:14px;color:var(--secondary-text-color);cursor:pointer}
 .search{flex:1;min-width:200px;padding:10px 14px;font:inherit;font-size:15px;
  border-radius:9999px;border:1px solid var(--divider-color);
  background:var(--card-background-color);color:inherit}

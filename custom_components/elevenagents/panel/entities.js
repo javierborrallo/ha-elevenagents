@@ -11,8 +11,6 @@ function areaIdOf(hass, entityId) {
   return device ? device.area_id || null : null;
 }
 
-// Group every entity by area, sorted by area name, with the entities that
-// have no area in a final group.
 // Return the entity_ids to list: all of them without an offer, else the
 // offered ones and the selected ones.
 export function offeredIds(allIds, offered, selected) {
@@ -21,11 +19,28 @@ export function offeredIds(allIds, offered, selected) {
   return allIds.filter((entityId) => keep.has(entityId));
 }
 
-function groupsOf(hass, noAreaLabel, offered, selected) {
+// Entity categories Home Assistant gives to configuration and diagnostic entities.
+const TECHNICAL = new Set(["config", "diagnostic"]);
+
+// Return the entity_ids to show: the technical ones only when asked for or
+// already selected.
+export function shownIds(ids, registry, selected, showTechnical) {
+  if (showTechnical) return ids;
+  const keep = new Set(selected);
+  return ids.filter((entityId) => {
+    const entry = registry[entityId];
+    return keep.has(entityId) || !entry || !TECHNICAL.has(entry.entity_category);
+  });
+}
+
+// Group the shown entities by area, sorted by area name, with the entities
+// that have no area in a final group.
+function groupsOf(hass, noAreaLabel, offered, selected, showTechnical) {
   const areas = hass.areas || {};
   const byArea = new Map();
+  const ids = offeredIds(Object.keys(hass.states || {}), offered, selected);
 
-  for (const entityId of offeredIds(Object.keys(hass.states || {}), offered, selected)) {
+  for (const entityId of shownIds(ids, hass.entities || {}, selected, showTechnical)) {
     const areaId = areaIdOf(hass, entityId);
     if (!byArea.has(areaId)) byArea.set(areaId, []);
     const state = hass.states[entityId];
@@ -103,6 +118,11 @@ export function entityTree(
   toolbar.appendChild(search);
   const counter = el("span", "count");
   toolbar.appendChild(counter);
+  const technicalLabel = el("label", "technical");
+  const technicalBox = document.createElement("input");
+  technicalBox.type = "checkbox";
+  technicalLabel.append(technicalBox, document.createTextNode(t.treeTechnical));
+  toolbar.appendChild(technicalLabel);
   const clear = el("button", "plain", t.treeClear);
   clear.type = "button";
   toolbar.appendChild(clear);
@@ -111,7 +131,7 @@ export function entityTree(
   const list = el("div", "tree-list");
   host.appendChild(list);
 
-  const groups = groupsOf(hass, t.treeNoArea, offered, selected);
+  let groups = groupsOf(hass, t.treeNoArea, offered, selected, false);
 
   function report() {
     onChange([...chosen].sort());
@@ -210,6 +230,10 @@ export function entityTree(
 
   search.addEventListener("input", () => {
     needle = search.value.trim().toLowerCase();
+    paint();
+  });
+  technicalBox.addEventListener("change", () => {
+    groups = groupsOf(hass, t.treeNoArea, offered, [...chosen], technicalBox.checked);
     paint();
   });
   clear.addEventListener("click", () => {

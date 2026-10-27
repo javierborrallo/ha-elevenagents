@@ -96,6 +96,7 @@ const EN = {
   treeSearch: "Search entities",
   treeSelected: "{count} selected",
   treeClear: "Clear",
+  treeTechnical: "Show technical entities",
   treeNoArea: "No area",
   treeEmpty: "Nothing matches that search.",
 
@@ -285,6 +286,7 @@ const ES = {
   treeSearch: "Buscar entidades",
   treeSelected: "{count} seleccionadas",
   treeClear: "Limpiar",
+  treeTechnical: "Mostrar entidades técnicas",
   treeNoArea: "Sin área",
   treeEmpty: "No hay nada que coincida con esa búsqueda.",
 
