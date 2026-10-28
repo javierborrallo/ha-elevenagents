@@ -48,6 +48,3 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # the repository is private
         with:
           category: integration
-          # Remove this 'ignore' key when you have added brand images for your integration
-          # https://developers.home-assistant.io/docs/creating_integration_file_structure#local-brand-images-for-custom-integrations
-          ignore: brands
